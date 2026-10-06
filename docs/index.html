@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>piShop — sua loja de jogos no SteamOS</title>
+    <meta name="description" content="Descubra lançamentos, busque nos seus indexadores, traga jogos do seu NAS e baixe tudo pelo controle — direto no Modo de Jogo do SteamOS. Instale com uma linha." />
+    <meta name="theme-color" content="#05080d" />
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+    <link rel="alternate" hreflang="pt-BR" href="https://anarqz.github.io/pishop/?lang=pt" />
+    <link rel="alternate" hreflang="en" href="https://anarqz.github.io/pishop/?lang=en" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://anarqz.github.io/pishop/" />
+    <meta property="og:title" content="piShop — sua loja de jogos no SteamOS" />
+    <meta property="og:description" content="Instale com uma linha. Feito para o controle. Steam Deck, ROG Ally e qualquer aparelho com SteamOS." />
+    <meta property="og:image" content="https://anarqz.github.io/pishop/assets/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="bg" aria-hidden="true"><div class="aurora"></div><div class="grid"></div></div>
+
+    <header class="nav" id="nav">
+      <a class="brand" href="#top" aria-label="piShop">
+        <img src="assets/icon.svg" alt="" width="30" height="30" />
+        <span>pi<b>Shop</b></span>
+      </a>
+      <nav class="links">
+        <a href="#install" data-i18n="nav.install">Instalar</a>
+        <a href="#screens" data-i18n="nav.screens">Telas</a>
+        <a href="#features" data-i18n="nav.features">Recursos</a>
+        <a href="#roadmap" data-i18n="nav.roadmap">Em estudo</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <div class="nav-right">
+        <div class="lang" role="group" aria-label="Idioma / Language">
+          <button type="button" data-lang="pt" aria-pressed="true">PT</button>
+          <button type="button" data-lang="en" aria-pressed="false">EN</button>
+        </div>
+        <a class="gh" href="https://github.com/anarqz/pishop" aria-label="GitHub">
+          <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </header>
+
+    <main id="top">
+      <!-- Hero -->
+      <section class="hero">
+        <a class="pill" href="https://github.com/anarqz/pishop/releases">
+          <span class="dot"></span><span data-i18n="hero.pill">Alpha pública</span><b class="version" id="version">v0.1.0-alpha.1</b>
+        </a>
+        <h1>
+          <span data-i18n="hero.title1">Sua loja de jogos</span>
+          <span class="grad" data-i18n="hero.title2">dentro do Modo de Jogo.</span>
+        </h1>
+        <p class="lead" data-i18n="hero.lead">Descubra lançamentos, busque nos seus indexadores, traga jogos do seu NAS e baixe tudo pelo controle — sem sair do SteamOS e sem instalar nada no sistema.</p>
+
+        <div class="cmd">
+          <span class="prompt" aria-hidden="true">$</span>
+          <code>curl -fsSL https://anarqz.github.io/pishop/install.sh | bash</code>
+          <button type="button" class="copy" data-i18n-attr="aria-label:copy.label" aria-label="Copiar comando">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 5.5V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            <span data-i18n="copy.btn">Copiar</span>
+          </button>
+        </div>
+        <p class="hint" data-i18n-html="hero.hint">No <b>Modo Desktop</b>, abra o <b>Konsole</b>, cole e pressione <kbd>Enter</kbd>.</p>
+
+        <ul class="badges">
+          <li data-i18n="hero.b1">Sem root nem senha</li>
+          <li data-i18n="hero.b2">Zero dependências</li>
+          <li data-i18n="hero.b3">100% no controle</li>
+          <li data-i18n="hero.b4">Steam Deck · ROG Ally</li>
+        </ul>
+
+        <div class="hero-art">
+          <div class="glow" aria-hidden="true"></div>
+          <figure class="device ally hero-ally">
+            <div class="grip l"><span class="stick"></span><span class="dpad"></span></div>
+            <div class="screen"><img src="assets/screens/ally/discover.webp" width="1920" height="1080" alt="piShop no ROG Ally: aba Descobrir" data-i18n-attr="alt:hero.altAlly" /></div>
+            <div class="grip r"><span class="abxy"><i></i><i></i><i></i><i></i></span><span class="stick"></span></div>
+          </figure>
+          <figure class="device deck hero-deck">
+            <div class="grip l"><span class="dpad"></span><span class="stick"></span><span class="pad"></span></div>
+            <div class="screen"><img src="assets/screens/deck/game.webp" width="1280" height="800" alt="piShop no Steam Deck: página do jogo" data-i18n-attr="alt:hero.altDeck" /></div>
+            <div class="grip r"><span class="abxy"><i></i><i></i><i></i><i></i></span><span class="stick"></span><span class="pad"></span></div>
+          </figure>
+        </div>
+      </section>
+
+      <section class="stats">
+        <div><b>1</b><span data-i18n="stats.s1">linha para instalar e atualizar</span></div>
+        <div><b>0</b><span data-i18n="stats.s2">pacotes no sistema, nada de sudo</span></div>
+        <div><b>100%</b><span data-i18n="stats.s3">jogável no controle</span></div>
+        <div><b>800p · 1080p</b><span data-i18n="stats.s4">mesma escala de interface da Steam</span></div>
+      </section>
+
+      <!-- Install -->
+      <section class="section" id="install">
+        <div class="section-head">
+          <span class="kicker" data-i18n="install.kicker">Instalação</span>
+          <h2 data-i18n="install.title">Uma linha. Como o EmuDeck.</h2>
+          <p data-i18n="install.lead">O instalador baixa a versão mais recente e o navegador embutido, e cria o atalho na Steam com capa, banner e ícone. Rodar de novo atualiza.</p>
+        </div>
+        <div class="install-grid">
+          <ol class="steps">
+            <li>
+              <span class="num">1</span>
+              <div><b data-i18n="install.s1t">Vá para o Modo Desktop</b><p data-i18n="install.s1">Botão Steam → Energia → Mudar para o Modo Desktop.</p></div>
+            </li>
+            <li>
+              <span class="num">2</span>
+              <div><b data-i18n="install.s2t">Cole o comando no Konsole</b><p data-i18n="install.s2">Copie o comando acima, cole no Konsole e pressione Enter. Se a Steam estiver aberta, o instalador pergunta antes de fechá-la.</p></div>
+            </li>
+            <li>
+              <span class="num">3</span>
+              <div><b data-i18n="install.s3t">Volte ao Modo de Jogo</b><p data-i18n="install.s3">Biblioteca → Não-Steam → piShop. Pronto para jogar.</p></div>
+            </li>
+          </ol>
+          <div class="terminal">
+            <div class="term-bar">
+              <i></i><i></i><i></i>
+              <span>Konsole — ~</span>
+              <button type="button" class="replay" id="term-replay" aria-label="Repetir animação" data-i18n-attr="aria-label:install.replay">↻</button>
+            </div>
+            <pre class="term-body" id="term" aria-hidden="true"></pre>
+          </div>
+        </div>
+        <div class="extra-cmds">
+          <div>
+            <span class="label" data-i18n="install.update">Atualizar</span>
+            <div class="cmd small"><span class="prompt" aria-hidden="true">$</span><code>curl -fsSL https://anarqz.github.io/pishop/install.sh | bash</code><button type="button" class="copy" data-i18n-attr="aria-label:copy.label" aria-label="Copiar comando"><span data-i18n="copy.btn">Copiar</span></button></div>
+          </div>
+          <div>
+            <span class="label" data-i18n="install.uninstall">Desinstalar</span>
+            <div class="cmd small"><span class="prompt" aria-hidden="true">$</span><code>curl -fsSL https://anarqz.github.io/pishop/install.sh | bash -s -- --uninstall</code><button type="button" class="copy" data-i18n-attr="aria-label:copy.label" aria-label="Copiar comando"><span data-i18n="copy.btn">Copiar</span></button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Screens -->
+      <section class="section" id="screens">
+        <div class="section-head">
+          <span class="kicker" data-i18n="screens.kicker">Telas</span>
+          <h2 data-i18n="screens.title">Parece SteamOS. Porque foi feito para ele.</h2>
+          <p data-i18n="screens.lead">Capturas reais do app na resolução de cada aparelho. A interface acompanha a escala da Steam sozinha.</p>
+        </div>
+        <div class="gallery">
+          <div class="gallery-controls">
+            <div class="seg" role="group" aria-label="Aparelho / Device">
+              <button type="button" data-device="ally" aria-pressed="true">ROG Ally <small>1920×1080</small></button>
+              <button type="button" data-device="deck" aria-pressed="false">Steam Deck <small>1280×800</small></button>
+            </div>
+            <div class="screen-tabs" id="screen-tabs"></div>
+          </div>
+          <div class="stage">
+            <button type="button" class="arrow prev" id="prev" aria-label="Anterior" data-i18n-attr="aria-label:screens.prev">
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <figure class="device ally" id="stage-device">
+              <div class="grip l"><span class="dpad"></span><span class="stick"></span><span class="pad"></span></div>
+              <button type="button" class="screen" id="stage-open" aria-label="Ampliar" data-i18n-attr="aria-label:screens.zoom"><img id="stage-img" src="assets/screens/ally/discover.webp" width="1920" height="1080" alt="" /></button>
+              <div class="grip r"><span class="abxy"><i></i><i></i><i></i><i></i></span><span class="stick"></span><span class="pad"></span></div>
+            </figure>
+            <button type="button" class="arrow next" id="next" aria-label="Próxima" data-i18n-attr="aria-label:screens.next">
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+          <div class="caption" id="stage-caption" aria-live="polite"><b></b><span></span></div>
+        </div>
+      </section>
+
+      <!-- Features -->
+      <section class="section" id="features">
+        <div class="section-head">
+          <span class="kicker" data-i18n="features.kicker">Recursos</span>
+          <h2 data-i18n="features.title">Tudo o que um portátil com SteamOS pedia.</h2>
+          <p data-i18n="features.lead">Um binário Rust estático, uma interface React e um navegador embutido — sem tocar no sistema.</p>
+        </div>
+        <div class="features" id="feature-grid"></div>
+      </section>
+
+      <!-- Roadmap -->
+      <section class="section" id="roadmap">
+        <div class="section-head">
+          <span class="kicker" data-i18n="roadmap.kicker">Em estudo</span>
+          <h2 data-i18n="roadmap.title">O que vem por aí.</h2>
+          <p data-i18n="roadmap.lead">Trabalho em andamento e ideias em pesquisa. Nada aqui tem data — mas é para onde o piShop está indo.</p>
+        </div>
+        <div class="roadmap" id="roadmap-grid"></div>
+      </section>
+
+      <!-- Tech -->
+      <section class="section tech">
+        <div class="section-head">
+          <span class="kicker" data-i18n="tech.kicker">Por dentro</span>
+          <h2 data-i18n-html="tech.title">Nativo, leve e sem dependências.</h2>
+          <p data-i18n-html="tech.lead">Tudo fica em <code>~/Applications/piShop</code> e <code>~/.local/share/piShop</code>. As atualizações do SteamOS não mexem em nada.</p>
+        </div>
+        <ul class="chips">
+          <li>Rust · axum · tokio</li>
+          <li>React · Vite · PWA</li>
+          <li>Chromium (Chrome for Testing)</li>
+          <li>librqbit · BitTorrent</li>
+          <li>smb-rs · SMB2/3</li>
+          <li>yt-dlp</li>
+          <li>Steam · SteamGridDB · TheGamesDB</li>
+          <li>Prowlarr</li>
+          <li>isitcracked</li>
+        </ul>
+      </section>
+
+      <!-- FAQ -->
+      <section class="section" id="faq">
+        <div class="section-head">
+          <span class="kicker">FAQ</span>
+          <h2 data-i18n="faq.title">Perguntas frequentes</h2>
+        </div>
+        <div class="faq" id="faq-list"></div>
+      </section>
+
+      <section class="cta">
+        <h2 data-i18n="cta.title">Pronto para jogar?</h2>
+        <div class="cmd">
+          <span class="prompt" aria-hidden="true">$</span>
+          <code>curl -fsSL https://anarqz.github.io/pishop/install.sh | bash</code>
+          <button type="button" class="copy" data-i18n-attr="aria-label:copy.label" aria-label="Copiar comando">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 5.5V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            <span data-i18n="copy.btn">Copiar</span>
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-brand">
+        <img src="assets/icon.svg" alt="" width="26" height="26" />
+        <span>pi<b>Shop</b></span>
+      </div>
+      <p class="disclaimer" data-i18n="footer.disclaimer">O piShop não hospeda, indexa nem distribui conteúdo: ele se conecta a serviços que você mesmo configura. Use apenas com conteúdo que você tem o direito de baixar. Steam, Steam Deck e SteamOS são marcas da Valve Corporation; ROG Ally é marca da ASUS. Projeto independente, sem afiliação.</p>
+      <p class="footer-links">
+        <a href="https://github.com/anarqz/pishop">GitHub</a>
+        <a href="https://github.com/anarqz/pishop/releases" data-i18n="footer.releases">Versões</a>
+        <a href="https://github.com/anarqz/pishop/issues" data-i18n="footer.issues">Reportar um problema</a>
+        <a href="install.sh" data-i18n="footer.script">Ver o script</a>
+      </p>
+    </footer>
+
+    <dialog class="lightbox" id="lightbox">
+      <img alt="" />
+    </dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

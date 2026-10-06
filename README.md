@@ -12,6 +12,10 @@
   <a href="https://github.com/anarqz/pishop/releases">Releases</a>
 </p>
 
+<p align="center">
+  <img src="docs/assets/screens/ally/discover.webp" width="860" alt="piShop — Descobrir (ROG Ally, 1920×1080)" />
+</p>
+
 ---
 
 ## Instalação · Install
