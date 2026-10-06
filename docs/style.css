@@ -1173,6 +1173,10 @@ kbd {
   border-radius: 50%;
   background: currentColor;
 }
+.status.next {
+  color: #6fdc8c;
+  background: rgba(111, 220, 140, 0.1);
+}
 .status.wip {
   color: var(--amber);
   background: rgba(255, 196, 107, 0.1);

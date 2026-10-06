@@ -88,6 +88,7 @@
       'footer.releases': 'Versões',
       'footer.issues': 'Reportar um problema',
       'footer.script': 'Ver o script',
+      'status.next': 'Próxima etapa',
       'status.wip': 'Em andamento',
       'status.research': 'Em estudo',
       'status.idea': 'Ideia',
@@ -159,6 +160,7 @@
       'footer.releases': 'Releases',
       'footer.issues': 'Report an issue',
       'footer.script': 'View the script',
+      'status.next': 'Up next',
       'status.wip': 'In progress',
       'status.research': 'Researching',
       'status.idea': 'Idea',
@@ -186,15 +188,15 @@
   const FEATURES = [
     {
       icon: 'sparkles',
-      shot: 'discover-rows',
+      shot: 'discover-grid',
       tags: ['isitcracked', 'SteamGridDB'],
       pt: [
         'Descobrir',
-        'Os lançamentos mais recentes num visual Big Picture: destaque rotativo, fileiras por data, busca e rolagem infinita — com o status e o grupo de cada crack, e capas guardadas em cache no aparelho.',
+        'Os lançamentos mais recentes num visual Big Picture: os 5 cracks mais novos em destaque (troque com L2/R2), a busca no centro e a grade “Cracks recentes”, que vai carregando até o último jogo — com o status e o grupo de cada crack, e capas guardadas em cache no aparelho.',
       ],
       en: [
         'Discover',
-        "The latest releases in a Big Picture look: rotating spotlight, rows by date, search and endless scrolling — with each crack's status and group, and covers cached on the device.",
+        "The latest releases in a Big Picture look: the 5 newest cracks in the spotlight (flip with L2/R2), search front and center and a “Recent cracks” grid that keeps loading to the very last game — with each crack's status and group, and covers cached on the device.",
       ],
     },
     {
@@ -214,24 +216,24 @@
       tags: ['yt-dlp'],
       pt: [
         'Trailer com um toque',
-        'Aperte ↑ na página do jogo e o trailer desliza para cima, como no Xbox; ↓ volta aos detalhes. O vídeo é encontrado com o yt-dlp.',
+        'Aperte ↑ na página do jogo e o trailer entra em tela cheia, sem cortes, como no Xbox — só uma barra embaixo para voltar ou silenciar. O vídeo é encontrado com o yt-dlp.',
       ],
       en: [
         'One-press trailers',
-        'Press ↑ on a game page and the trailer slides up, Xbox style; ↓ goes back to the details. The video is found with yt-dlp.',
+        'Press ↑ on a game page and the trailer takes the whole screen, uncropped, Xbox style — with just a bar at the bottom to go back or mute. The video is found with yt-dlp.',
       ],
     },
     {
       icon: 'search',
       shot: 'store',
-      tags: ['Prowlarr'],
+      tags: ['The Pirate Bay', 'Prowlarr'],
       pt: [
         'Loja',
-        'Busque nos indexadores do seu Prowlarr, em consoles ou PC. Uma lista compacta com tamanho, data, seeders e leechers, ordenação e filtro por plataforma; o jogo aparece no cabeçalho com arte e informações. As buscas ficam em cache para poupar os limites dos indexadores.',
+        'Busca nativa no The Pirate Bay e nos indexadores do seu Prowlarr, ao mesmo tempo, em consoles ou PC. Uma lista compacta com tamanho, data, seeders e leechers, ordenação e filtro por plataforma; o jogo aparece no cabeçalho com arte e informações, e os detalhes do torrent já vêm com ele. As buscas ficam em cache para poupar os limites dos indexadores.',
       ],
       en: [
         'Store',
-        "Search your Prowlarr indexers, for consoles or PC. A compact list with size, date, seeders and leechers, sorting and a platform filter; the game shows up in the header with art and details. Searches are cached to spare your indexers' limits.",
+        "Native The Pirate Bay search and your Prowlarr indexers, side by side, for consoles or PC. A compact list with size, date, seeders and leechers, sorting and a platform filter; the game shows up in the header with art and details, and the release details carry it along. Searches are cached to spare your indexers' limits.",
       ],
     },
     {
@@ -252,22 +254,24 @@
       tags: ['librqbit'],
       pt: [
         'BitTorrent nativo',
-        'Motor próprio com TCP, uTP e DHT, links magnet e retomada automática. Os downloads vão direto para <code>roms/&lt;sistema&gt;</code>, e vídeos podem ser assistidos enquanto baixam.',
+        'Motor próprio com TCP, uTP e DHT, links magnet, retomada automática e limite de velocidade em Configurações → Downloads. Os downloads vão direto para <code>roms/&lt;sistema&gt;</code>.',
       ],
       en: [
         'Native BitTorrent',
-        'A built-in engine with TCP, uTP and DHT, magnet links and automatic resume. Downloads go straight to <code>roms/&lt;system&gt;</code>, and videos can be watched while they download.',
+        'A built-in engine with TCP, uTP and DHT, magnet links, automatic resume and a speed cap in Settings → Downloads. Downloads go straight to <code>roms/&lt;system&gt;</code>.',
       ],
     },
     {
       icon: 'download',
+      shot: 'transfers',
+      tags: ['Steam', 'TheGamesDB'],
       pt: [
         'Transferências',
-        'Uma fila única para cópias da rede e downloads: velocidade, progresso, tempo restante, cancelar e repetir — com o progresso sempre à vista no topo da tela.',
+        'Cada download aparece como o jogo: capa, anel de progresso e, embaixo, velocidade e tempo restante. Os dados vêm da Steam, do TheGamesDB, do SteamGridDB e do isitcracked, nessa ordem. Pause, pare ou exclua — com ou sem os arquivos. As cópias da rede ficam na mesma tela.',
       ],
       en: [
         'Transfers',
-        'One queue for network copies and downloads: speed, progress, time left, cancel and retry — with progress always in sight at the top of the screen.',
+        'Every download shows up as the game: cover, a progress ring and, below it, speed and time left. Game data comes from Steam, TheGamesDB, SteamGridDB and isitcracked, in that order. Pause, stop or delete — with or without the files. Network copies live on the same screen.',
       ],
     },
     {
@@ -307,11 +311,11 @@
       icon: 'shield',
       pt: [
         'Suas chaves, seu aparelho',
-        'Prowlarr, TheGamesDB e isitcracked são configurados em Configurações → Serviços. Nenhuma chave vem embutida, nada passa por servidores do piShop e não há telemetria.',
+        'The Pirate Bay, Prowlarr, TheGamesDB e isitcracked são configurados em Configurações → Serviços. Nenhuma chave vem embutida, nada passa por servidores do piShop e não há telemetria.',
       ],
       en: [
         'Your keys, your device',
-        "Prowlarr, TheGamesDB and isitcracked are set up in Settings → Services. No keys are baked in, nothing goes through piShop servers and there's no telemetry.",
+        "The Pirate Bay, Prowlarr, TheGamesDB and isitcracked are set up in Settings → Services. No keys are baked in, nothing goes through piShop servers and there's no telemetry.",
       ],
     },
     {
@@ -329,12 +333,25 @@
 
   const ROADMAP = [
     {
+      status: 'next',
+      pt: [
+        'Instaladores',
+        'Do download ao jogo pronto: o piShop instala o que baixou e cria o atalho na Steam, direto de Transferências.',
+        ['Instalar a partir de “Ver detalhes” em Transferências', 'Atalho na Steam com a capa e a arte do jogo'],
+      ],
+      en: [
+        'Installers',
+        'From download to a ready-to-play game: piShop installs what it downloaded and adds the Steam shortcut, right from Transfers.',
+        ['Install from “View details” in Transfers', "A Steam shortcut with the game's cover and art"],
+      ],
+    },
+    {
       status: 'research',
       pt: [
         'Prowlarr embutido',
         'Buscar nos indexadores direto do piShop, sem precisar de um servidor Prowlarr rodando na rede.',
         [
-          'Indexadores nativos — The Pirate Bay (via apibay) já em desenvolvimento, 1337x em seguida',
+          'Indexadores nativos — o The Pirate Bay já funciona; 1337x em seguida',
           'Definições Cardigann: o mesmo formato YAML do Prowlarr e do Jackett',
           'Um Prowlarr externo continua opcional',
         ],
@@ -343,7 +360,7 @@
         'Embedded Prowlarr',
         'Search indexers straight from piShop, without a Prowlarr server running on your network.',
         [
-          'Native indexers — The Pirate Bay (via apibay) already in development, 1337x next',
+          'Native indexers — The Pirate Bay already works; 1337x next',
           'Cardigann definitions: the same YAML format Prowlarr and Jackett use',
           'An external Prowlarr stays optional',
         ],
@@ -419,7 +436,7 @@
       ],
       [
         'O que preciso configurar?',
-        'Para explorar o NAS e baixar por link magnet, só o próprio compartilhamento. A Loja usa o seu Prowlarr (endereço e chave de API); o Descobrir e os detalhes dos jogos usam as APIs do isitcracked e do TheGamesDB. Tudo fica em Configurações → Serviços. A loja da Steam e o SteamGridDB não pedem chave.',
+        'Para explorar o NAS e baixar por link magnet, só o próprio compartilhamento. A Loja busca no The Pirate Bay (só o endereço da API) e/ou no seu Prowlarr (endereço e chave de API); o Descobrir e os detalhes dos jogos usam as APIs do isitcracked e do TheGamesDB. Tudo fica em Configurações → Serviços. A loja da Steam e o SteamGridDB não pedem chave.',
       ],
       [
         'Por que o instalador baixa um navegador?',
@@ -457,7 +474,7 @@
       ],
       [
         'What do I need to set up?',
-        "To browse your NAS and download magnet links, just the share itself. The Store uses your Prowlarr (address and API key); Discover and game details use the isitcracked and TheGamesDB APIs. It all lives in Settings → Services. The Steam store and SteamGridDB don't need a key.",
+        "To browse your NAS and download magnet links, just the share itself. The Store searches The Pirate Bay (just the API address) and/or your Prowlarr (address and API key); Discover and game details use the isitcracked and TheGamesDB APIs. It all lives in Settings → Services. The Steam store and SteamGridDB don't need a key.",
       ],
       [
         'Why does the installer download a browser?',
@@ -481,13 +498,13 @@
   const SCREENS = [
     {
       id: 'discover',
-      pt: ['Descobrir', 'Lançamentos em destaque no estilo Big Picture, com fileiras, busca e rolagem infinita.'],
-      en: ['Discover', 'Featured releases in a Big Picture style, with rows, search and endless scrolling.'],
+      pt: ['Descobrir', 'Os 5 cracks mais novos em destaque no estilo Big Picture — L2/R2 trocam — e a busca no centro.'],
+      en: ['Discover', 'The 5 newest cracks in a Big Picture spotlight — L2/R2 flip through them — with search front and center.'],
     },
     {
-      id: 'discover-rows',
-      pt: ['Fileiras', 'Desça com o direcional: cracks e lançamentos recentes, com as capas em cache no aparelho.'],
-      en: ['Rows', 'Scroll down with the d-pad: recent cracks and releases, with covers cached on the device.'],
+      id: 'discover-grid',
+      pt: ['Cracks recentes', 'Uma grade só, que vai carregando enquanto você desce — até o último jogo do isitcracked.'],
+      en: ['Recent cracks', 'A single grid that keeps loading as you scroll — all the way to the last game on isitcracked.'],
     },
     {
       id: 'game',
@@ -496,13 +513,18 @@
     },
     {
       id: 'trailer',
-      pt: ['Trailer', 'Aperte ↑ e o trailer desliza para cima, como no Xbox. ↓ volta aos detalhes.'],
-      en: ['Trailer', 'Press ↑ and the trailer slides up, Xbox style. ↓ goes back to the details.'],
+      pt: ['Trailer', 'Aperte ↑ e o trailer ocupa a tela inteira, sem cortes. ↓ ou B voltam aos detalhes.'],
+      en: ['Trailer', 'Press ↑ and the trailer fills the whole screen, uncropped. ↓ or B go back to the details.'],
     },
     {
       id: 'store',
-      pt: ['Loja', 'Resultados dos indexadores do seu Prowlarr com tamanho, data, seeders e leechers — e o jogo no cabeçalho.'],
-      en: ['Store', 'Results from your Prowlarr indexers with size, date, seeders and leechers — and the game in the header.'],
+      pt: ['Loja', 'Resultados do The Pirate Bay e do seu Prowlarr com tamanho, data, seeders e leechers — e o jogo no cabeçalho.'],
+      en: ['Store', 'Results from The Pirate Bay and your Prowlarr with size, date, seeders and leechers — and the game in the header.'],
+    },
+    {
+      id: 'release',
+      pt: ['Torrent', 'Os detalhes do lançamento já trazem a arte e o crack do jogo encontrado. Um botão e ele começa a baixar.'],
+      en: ['Release', "A release's details carry the matched game's art and crack info. One button and it starts downloading."],
     },
     {
       id: 'explorer',
@@ -511,18 +533,13 @@
     },
     {
       id: 'transfers',
-      pt: ['Transferências', 'A fila de cópias e downloads, com velocidade, progresso e tempo restante.'],
-      en: ['Transfers', 'The queue of copies and downloads, with speed, progress and time left.'],
-    },
-    {
-      id: 'home',
-      pt: ['Início', 'Atalhos para as suas fontes, as transferências e o espaço livre.'],
-      en: ['Home', 'Shortcuts to your sources, transfers and free space.'],
+      pt: ['Transferências', 'Cada download com a capa do jogo, um anel de progresso, velocidade e tempo restante.'],
+      en: ['Transfers', "Every download with the game's cover, a progress ring, speed and time left."],
     },
     {
       id: 'settings',
-      pt: ['Configurações', 'Fontes de jogos, serviços (Prowlarr, TheGamesDB, isitcracked), tela e controle.'],
-      en: ['Settings', 'Game sources, services (Prowlarr, TheGamesDB, isitcracked), display and controller.'],
+      pt: ['Configurações', 'Fontes de jogos, serviços (The Pirate Bay, Prowlarr, TheGamesDB, isitcracked), limite de download, tela e controle.'],
+      en: ['Settings', 'Game sources, services (The Pirate Bay, Prowlarr, TheGamesDB, isitcracked), download speed cap, display and controller.'],
     },
   ]
   const DEVICES = { ally: { name: 'ROG Ally', w: 1920, h: 1080 }, deck: { name: 'Steam Deck', w: 1280, h: 800 } }

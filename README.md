@@ -45,8 +45,9 @@ Nada é instalado no sistema: tudo fica em `~/Applications/piShop` e `~/.local/s
 Um app nativo para SteamOS (Steam Deck, ROG Ally, Legion Go…) feito para o controle:
 
 - **Descobrir** — lançamentos e cracks recentes em visual Big Picture, página do jogo com trailer, sinopse (Steam / TheGamesDB) e arte (SteamGridDB).
-- **Loja** — busca nos indexadores do seu Prowlarr, com detalhes do torrent e download direto para `roms/<sistema>`.
-- **BitTorrent nativo** — TCP/uTP, DHT, retomada e streaming de vídeo.
+- **Loja** — busca nativa no The Pirate Bay e nos indexadores do seu Prowlarr, com detalhes do torrent e download direto para `roms/<sistema>`.
+- **Transferências** — cada download com a capa do jogo e um anel de progresso; dados da Steam, TheGamesDB, SteamGridDB e isitcracked, nessa ordem.
+- **BitTorrent nativo** — TCP/uTP, DHT, retomada e limite de velocidade.
 - **Explorar** — compartilhamentos de rede (SMB) num explorador de dois painéis, com fila de cópias para o aparelho.
 - **Interface SteamOS** — abas em L1/R1, legenda de botões, analógico direito para rolar, teclado da Steam sob demanda, escala automática (Deck / Ally / TV).
 
@@ -70,5 +71,5 @@ Releases: `git tag v0.1.0 && git push --tags` (ou *Actions → Release → Run w
 
 ## Aviso · Disclaimer
 
-O piShop não hospeda, indexa nem distribui conteúdo. Ele se conecta a serviços que **você** configura (Prowlarr, armazenamento de rede, APIs públicas). Use apenas com conteúdo que você tem o direito de baixar.
+O piShop não hospeda, indexa nem distribui conteúdo. Ele se conecta a serviços que **você** configura (The Pirate Bay, Prowlarr, armazenamento de rede, APIs públicas). Use apenas com conteúdo que você tem o direito de baixar.
 *piShop does not host, index or distribute any content. It connects to services **you** configure. Only use it with content you have the right to download.*
