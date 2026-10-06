@@ -1,0 +1,614 @@
+//! Store catalog: searches Prowlarr for console/PC game releases, matches each
+//! release to a game on SteamGridDB (cover, hero, logo — public endpoints, no
+//! key), and hands chosen releases to the embedded BitTorrent engine.
+
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::{Arc, LazyLock, Mutex};
+use std::time::Duration;
+
+use anyhow::{Context, anyhow, bail};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use tokio::sync::{OnceCell, Semaphore};
+
+use crate::titles::{self, Parsed};
+use crate::{data_dir, log, torrent};
+
+static HTTP: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(25))
+        .user_agent(concat!("piShop/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .expect("http client")
+});
+
+/// Prowlarr's download proxy answers with a redirect to the magnet link.
+static HTTP_NOREDIRECT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(25))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("http client")
+});
+
+// ---------- configuration ----------
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct Config {
+    #[serde(default)]
+    pub prowlarr_url: String,
+    #[serde(default)]
+    pub prowlarr_key: String,
+    /// TheGamesDB API key (game details). Empty disables it.
+    #[serde(default)]
+    pub tgdb_key: String,
+    /// isitcracked.com Supabase RPC endpoint, its key and the covers CDN.
+    #[serde(default)]
+    pub iic_url: String,
+    #[serde(default)]
+    pub iic_key: String,
+    #[serde(default)]
+    pub iic_cdn: String,
+}
+
+fn config_path() -> PathBuf {
+    data_dir().join("catalog.json")
+}
+
+pub fn config() -> Config {
+    std::fs::read(config_path()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+/// Partial update from Settings: only fields sent are changed, and a blank
+/// secret keeps the stored one (the UI never receives secrets back).
+#[derive(Deserialize, Default)]
+pub struct ConfigUpdate {
+    pub prowlarr_url: Option<String>,
+    pub prowlarr_key: Option<String>,
+    pub tgdb_key: Option<String>,
+    pub iic_url: Option<String>,
+    pub iic_key: Option<String>,
+    pub iic_cdn: Option<String>,
+}
+
+pub fn update_config(u: ConfigUpdate) -> anyhow::Result<Config> {
+    let mut c = config();
+    let secret = |new: Option<String>, old: String| new.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or(old);
+    if let Some(url) = u.prowlarr_url {
+        c.prowlarr_url = url;
+    }
+    if let Some(url) = u.iic_url {
+        c.iic_url = url.trim().to_string();
+    }
+    if let Some(cdn) = u.iic_cdn {
+        c.iic_cdn = cdn.trim().trim_end_matches('/').to_string();
+    }
+    c.prowlarr_key = secret(u.prowlarr_key, c.prowlarr_key);
+    c.tgdb_key = secret(u.tgdb_key, c.tgdb_key);
+    c.iic_key = secret(u.iic_key, c.iic_key);
+    save_config(c)
+}
+
+/// Public view for Settings: URLs plus "has key" flags, never the secrets.
+pub fn public_config() -> Value {
+    let c = config();
+    json!({
+        "prowlarr_url": c.prowlarr_url, "has_key": !c.prowlarr_key.is_empty(),
+        "has_tgdb_key": !c.tgdb_key.is_empty(),
+        "iic_url": c.iic_url, "iic_cdn": c.iic_cdn, "has_iic_key": !c.iic_key.is_empty(),
+    })
+}
+
+pub fn save_config(mut c: Config) -> anyhow::Result<Config> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    c.prowlarr_url = c.prowlarr_url.trim().trim_end_matches('/').to_string();
+    if !c.prowlarr_url.is_empty() && !c.prowlarr_url.starts_with("http") {
+        c.prowlarr_url = format!("http://{}", c.prowlarr_url);
+    }
+    c.prowlarr_key = c.prowlarr_key.trim().to_string();
+    let mut f = std::fs::OpenOptions::new().create(true).write(true).truncate(true).mode(0o600).open(config_path())?;
+    f.write_all(&serde_json::to_vec_pretty(&c)?)?;
+    Ok(c)
+}
+
+/// Checks the Prowlarr connection; returns its version and enabled indexers.
+pub async fn test(c: &Config) -> anyhow::Result<Value> {
+    let status: Value = prowlarr_get(c, "/api/v1/system/status", &[]).await?;
+    let indexers: Value = prowlarr_get(c, "/api/v1/indexer", &[]).await?;
+    let names: Vec<String> = indexers
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter(|i| i["enable"].as_bool().unwrap_or(false))
+                .filter_map(|i| i["name"].as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(json!({ "version": status["version"], "indexers": names }))
+}
+
+async fn prowlarr_get(c: &Config, path: &str, query: &[(&str, &str)]) -> anyhow::Result<Value> {
+    if c.prowlarr_url.is_empty() || c.prowlarr_key.is_empty() {
+        bail!("configure o Prowlarr em Configurações → Indexadores");
+    }
+    let r = HTTP
+        .get(format!("{}{}", c.prowlarr_url, path))
+        .header("X-Api-Key", &c.prowlarr_key)
+        .query(query)
+        .timeout(Duration::from_secs(90))
+        .send()
+        .await
+        .map_err(|e| anyhow!("Prowlarr não respondeu: {e}"))?;
+    match r.status().as_u16() {
+        200 => Ok(r.json().await?),
+        401 => bail!("a chave de API do Prowlarr foi recusada"),
+        s => bail!("Prowlarr respondeu {s}"),
+    }
+}
+
+// ---------- search ----------
+
+#[derive(Serialize, Clone)]
+pub struct Release {
+    pub id: String,
+    pub title: String,
+    pub parsed: Parsed,
+    pub size: u64,
+    pub seeders: u32,
+    pub leechers: u32,
+    pub grabs: Option<u32>,
+    pub files: Option<u32>,
+    pub indexer: String,
+    pub publish_date: String,
+    pub info_url: Option<String>,
+    pub info_hash: Option<String>,
+    pub categories: Vec<String>,
+    pub kind: String,
+}
+
+struct Stored {
+    release: Release,
+    guid: String,
+    magnet_url: Option<String>,
+    download_url: Option<String>,
+}
+
+static RELEASES: LazyLock<Mutex<HashMap<String, Arc<Stored>>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn short_hash(s: &str) -> String {
+    let h = s.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100_0000_01b3));
+    format!("{h:016x}")
+}
+
+/// Indexers count every query against per-day limits (1337x is set to 100/24h
+/// on this Prowlarr), so identical searches within this window are reused.
+const SEARCH_TTL: Duration = Duration::from_secs(15 * 60);
+static SEARCH_CACHE: LazyLock<Mutex<HashMap<String, (std::time::Instant, Vec<Release>)>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+pub async fn search(query: &str, kind: &str) -> anyhow::Result<Vec<Release>> {
+    let key = format!("{kind}|{}", query.trim().to_lowercase());
+    if let Some((at, hit)) = SEARCH_CACHE.lock().unwrap().get(&key) {
+        // Results also live in RELEASES, unless that map was reset meanwhile.
+        if at.elapsed() < SEARCH_TTL && hit.iter().all(|r| RELEASES.lock().unwrap().contains_key(&r.id)) {
+            return Ok(hit.clone());
+        }
+    }
+    let out = search_uncached(query, kind).await?;
+    let mut cache = SEARCH_CACHE.lock().unwrap();
+    cache.retain(|_, (at, _)| at.elapsed() < SEARCH_TTL);
+    cache.insert(key, (std::time::Instant::now(), out.clone()));
+    Ok(out)
+}
+
+async fn search_uncached(query: &str, kind: &str) -> anyhow::Result<Vec<Release>> {
+    let cats = match kind {
+        "pc" => "4050",
+        _ => "1000",
+    };
+    let raw = prowlarr_get(&config(), "/api/v1/search", &[("query", query), ("categories", cats), ("type", "search"), ("limit", "100")]).await?;
+    let items = raw.as_array().cloned().unwrap_or_default();
+    let mut out = Vec::new();
+    let mut store = RELEASES.lock().unwrap();
+    if store.len() > 5000 {
+        store.clear();
+    }
+    for it in items {
+        let Some(title) = it["title"].as_str() else { continue };
+        let guid = it["guid"].as_str().unwrap_or(title).to_string();
+        let id = short_hash(&guid);
+        let mut parsed = titles::parse(title);
+        if kind == "pc" && parsed.platform.is_none() {
+            parsed.platform = Some("pc");
+            parsed.platform_label = Some("PC");
+        }
+        let release = Release {
+            id: id.clone(),
+            title: title.to_string(),
+            parsed,
+            size: it["size"].as_u64().unwrap_or(0),
+            seeders: it["seeders"].as_u64().unwrap_or(0) as u32,
+            leechers: it["leechers"].as_u64().unwrap_or(0) as u32,
+            grabs: it["grabs"].as_u64().map(|g| g as u32),
+            files: it["files"].as_u64().map(|g| g as u32),
+            indexer: it["indexer"].as_str().unwrap_or_default().to_string(),
+            publish_date: it["publishDate"].as_str().unwrap_or_default().to_string(),
+            info_url: it["infoUrl"].as_str().map(String::from),
+            info_hash: it["infoHash"].as_str().map(String::from),
+            categories: it["categories"]
+                .as_array()
+                .map(|a| a.iter().filter_map(|c| c["name"].as_str().map(String::from)).collect())
+                .unwrap_or_default(),
+            kind: kind.to_string(),
+        };
+        store.insert(
+            id,
+            Arc::new(Stored {
+                release: release.clone(),
+                guid,
+                magnet_url: it["magnetUrl"].as_str().map(String::from),
+                download_url: it["downloadUrl"].as_str().map(String::from),
+            }),
+        );
+        out.push(release);
+    }
+    out.sort_by(|a, b| b.seeders.cmp(&a.seeders).then(b.leechers.cmp(&a.leechers)));
+    Ok(out)
+}
+
+fn stored(id: &str) -> anyhow::Result<Arc<Stored>> {
+    RELEASES.lock().unwrap().get(id).cloned().ok_or_else(|| anyhow!("resultado expirou; faça a busca de novo"))
+}
+
+// ---------- artwork (SteamGridDB public endpoints) ----------
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Art {
+    pub game_id: u64,
+    pub name: String,
+    pub year: Option<i32>,
+    pub cover: String,
+    pub cover_thumb: String,
+    pub score: f64,
+}
+
+const MIN_SCORE: f64 = 0.6;
+
+type ArtCell = Arc<OnceCell<Option<Art>>>;
+static ART_CELLS: LazyLock<Mutex<HashMap<String, ArtCell>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+static ART_DISK: LazyLock<Mutex<HashMap<String, Option<Art>>>> = LazyLock::new(|| {
+    let m = std::fs::read(data_dir().join("art-cache.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default();
+    Mutex::new(m)
+});
+static SGDB_SLOTS: Semaphore = Semaphore::const_new(4);
+
+fn art_key(name: &str) -> String {
+    name.to_lowercase().split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn persist_art() {
+    let snapshot = ART_DISK.lock().unwrap().clone();
+    if let Ok(bytes) = serde_json::to_vec(&snapshot) {
+        let path = data_dir().join("art-cache.json");
+        let tmp = path.with_extension("json.tmp");
+        if std::fs::write(&tmp, bytes).is_ok() {
+            let _ = std::fs::rename(tmp, path);
+        }
+    }
+}
+
+/// Best SteamGridDB match for a cleaned game name (cached on disk, deduped).
+pub async fn art(name: &str) -> Option<Art> {
+    let key = art_key(name);
+    if key.is_empty() {
+        return None;
+    }
+    if let Some(hit) = ART_DISK.lock().unwrap().get(&key).cloned() {
+        return hit;
+    }
+    let cell = ART_CELLS.lock().unwrap().entry(key.clone()).or_default().clone();
+    cell.get_or_init(|| async {
+        let found = match fetch_art(name).await {
+            Ok(a) => a,
+            Err(e) => {
+                // Network trouble: don't cache, a later request retries.
+                log!("sgdb: {name:?}: {e:#}");
+                ART_CELLS.lock().unwrap().remove(&key);
+                return None;
+            }
+        };
+        ART_DISK.lock().unwrap().insert(key.clone(), found.clone());
+        persist_art();
+        found
+    })
+    .await
+    .clone()
+}
+
+async fn sgdb_search(term: &str, asset_type: &str) -> anyhow::Result<Value> {
+    let _slot = SGDB_SLOTS.acquire().await?;
+    let mut filters = json!({});
+    if asset_type == "grid" {
+        filters = json!({ "dimensions": ["600x900", "660x930", "342x482"] });
+    }
+    let r = HTTP
+        .post("https://www.steamgriddb.com/api/public/search/main/games")
+        .json(&json!({ "asset_type": asset_type, "term": term, "offset": 0, "filters": filters }))
+        .send()
+        .await?;
+    if !r.status().is_success() {
+        bail!("SteamGridDB respondeu {}", r.status());
+    }
+    Ok(r.json().await?)
+}
+
+fn pick_asset(assets: &Value) -> Option<(String, String)> {
+    pick_asset_scored(assets, None, false)
+}
+
+/// Best acceptable asset by score: English (the names users search by),
+/// the preferred `style` (e.g. "official" over fan-made), and for logos a
+/// wide shape so the game's name is actually written out.
+fn pick_asset_scored(assets: &Value, style: Option<&str>, wide: bool) -> Option<(String, String)> {
+    let mut best: Option<(i32, usize, String, String)> = None;
+    for (i, a) in assets.as_array()?.iter().enumerate() {
+        let bad = a["nsfw"].as_bool().unwrap_or(false)
+            || a["humor"].as_bool().unwrap_or(false)
+            || a["epilepsy"].as_bool().unwrap_or(false)
+            || a["is_animated"].as_bool().unwrap_or(false);
+        let Some(url) = a["url"].as_str() else { continue };
+        if bad {
+            continue;
+        }
+        let mut score = 0;
+        if a["language"].as_str().is_none_or(|l| l == "en") {
+            score += 4;
+        }
+        if style.is_some() && a["style"].as_str() == style {
+            score += 2;
+        }
+        if wide {
+            let (w, h) = (a["width"].as_f64().unwrap_or(0.0), a["height"].as_f64().unwrap_or(1.0));
+            if w / h.max(1.0) >= 1.6 {
+                score += 3;
+            }
+        }
+        // Keep the site's relevance order among equals.
+        if best.as_ref().is_none_or(|b| score > b.0) {
+            let thumb = a["thumb"].as_str().filter(|t| !t.ends_with(".webm")).unwrap_or(url);
+            best = Some((score, i, url.to_string(), thumb.to_string()));
+        }
+    }
+    best.map(|(_, _, url, thumb)| (url, thumb))
+}
+
+async fn fetch_art(name: &str) -> anyhow::Result<Option<Art>> {
+    let v = sgdb_search(name, "grid").await?;
+    let games = v["data"]["games"].as_array().cloned().unwrap_or_default();
+    let mut best: Option<Art> = None;
+    for (rank, g) in games.iter().take(8).enumerate() {
+        let gname = g["game"]["name"].as_str().unwrap_or_default();
+        let Some((cover, thumb)) = pick_asset(&g["assets"]) else { continue };
+        // Relevance order breaks ties; verified games get a small boost.
+        let mut score = titles::similarity(name, gname) - rank as f64 * 0.01;
+        if g["game"]["verified"].as_bool().unwrap_or(false) {
+            score += 0.02;
+        }
+        if best.as_ref().is_none_or(|b| score > b.score) {
+            let year = g["game"]["release_date"].as_i64().map(|ts| 1970 + (ts / 31_556_952) as i32);
+            best = Some(Art {
+                game_id: g["game"]["id"].as_u64().unwrap_or(0),
+                name: gname.to_string(),
+                year,
+                cover,
+                cover_thumb: thumb,
+                score,
+            });
+        }
+    }
+    Ok(best.filter(|b| b.score >= MIN_SCORE))
+}
+
+static HEROES: LazyLock<Mutex<HashMap<u64, Option<String>>>> = LazyLock::new(|| {
+    Mutex::new(std::fs::read(data_dir().join(".cache").join("heroes.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default())
+});
+
+/// Wide background art for a matched game (cached on disk).
+pub async fn hero(game: &Art) -> Option<String> {
+    if let Some(hit) = HEROES.lock().unwrap().get(&game.game_id).cloned() {
+        return hit;
+    }
+    let found = extra_art(game).await;
+    let mut m = HEROES.lock().unwrap();
+    m.insert(game.game_id, found.clone());
+    if let Ok(bytes) = serde_json::to_vec(&*m) {
+        let path = data_dir().join(".cache").join("heroes.json");
+        let _ = std::fs::create_dir_all(path.parent().unwrap());
+        let _ = std::fs::write(path, bytes);
+    }
+    found
+}
+
+/// Hero (wide background) for the details page, for a matched game. Logos
+/// are not used: too many fan/joke variants are tagged "official".
+async fn extra_art(game: &Art) -> Option<String> {
+    let pick = |v: anyhow::Result<Value>, style: &str| -> Option<String> {
+        let v = v.ok()?;
+        let games = v["data"]["games"].as_array()?.clone();
+        let g = games.iter().find(|g| g["game"]["id"].as_u64() == Some(game.game_id))?;
+        pick_asset_scored(&g["assets"], Some(style), false).map(|(url, _)| url)
+    };
+    pick(sgdb_search(&game.name, "hero").await, "alternate")
+}
+
+// ---------- image proxy ----------
+
+/// Covers live in `<piShop folder>/.cache/covers` (kept across deploys);
+/// falls back to the data dir if the app folder is read-only.
+fn cover_cache_dir() -> PathBuf {
+    static DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+        let preferred = crate::base_dir().join(".cache").join("covers");
+        if std::fs::create_dir_all(&preferred).is_ok() {
+            return preferred;
+        }
+        let fallback = data_dir().join(".cache").join("covers");
+        let _ = std::fs::create_dir_all(&fallback);
+        fallback
+    });
+    DIR.clone()
+}
+
+/// Fetches (and caches on disk) artwork from SteamGridDB's CDN.
+pub async fn image(url: &str) -> anyhow::Result<(Vec<u8>, String)> {
+    let iic_cdn = config().iic_cdn;
+    let allowed = url.starts_with("https://cdn2.steamgriddb.com/")
+        || url.starts_with("https://shared.akamai.steamstatic.com/")
+        || url.starts_with("https://shared.fastly.steamstatic.com/")
+        || url.starts_with("https://cdn.akamai.steamstatic.com/")
+        || url.starts_with("https://store.akamai.steamstatic.com/")
+        || (!iic_cdn.is_empty() && url.starts_with(&format!("{}/", iic_cdn)));
+    if !allowed {
+        bail!("origem de imagem não permitida");
+    }
+    let path = url.split('?').next().unwrap_or(url);
+    let ext = path.rsplit('.').next().filter(|e| e.len() <= 4).unwrap_or("img").to_string();
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        _ => "application/octet-stream",
+    }
+    .to_string();
+    let dir = cover_cache_dir();
+    let path = dir.join(format!("{}.{ext}", short_hash(url)));
+    if let Ok(bytes) = tokio::fs::read(&path).await {
+        return Ok((bytes, mime));
+    }
+    let r = HTTP.get(url).send().await?.error_for_status()?;
+    let bytes = r.bytes().await?.to_vec();
+    // Write-then-rename so a half-written file is never served from cache.
+    let tmp = path.with_extension("part");
+    if tokio::fs::write(&tmp, &bytes).await.is_ok() {
+        let _ = tokio::fs::rename(&tmp, &path).await;
+    }
+    Ok((bytes, mime))
+}
+
+// ---------- details ----------
+
+static DESCRIPTIONS: LazyLock<Mutex<HashMap<String, Option<String>>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Best-effort description: The Pirate Bay exposes it through apibay.
+async fn description(r: &Release) -> Option<String> {
+    if r.indexer.to_lowercase() != "thepiratebay" {
+        return None;
+    }
+    let id = r.info_url.as_deref()?.split("id=").nth(1)?.split('&').next()?.to_string();
+    if let Some(hit) = DESCRIPTIONS.lock().unwrap().get(&id).cloned() {
+        return hit;
+    }
+    let text = async {
+        let v: Value = HTTP.get(format!("https://apibay.org/t.php?id={id}")).send().await.ok()?.json().await.ok()?;
+        v["descr"].as_str().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    }
+    .await;
+    DESCRIPTIONS.lock().unwrap().insert(id, text.clone());
+    text
+}
+
+pub async fn details(id: &str) -> anyhow::Result<Value> {
+    let s = stored(id)?;
+    let r = &s.release;
+    let game = art(&r.parsed.name).await;
+    let hero = match &game {
+        Some(g) => hero(g).await,
+        None => None,
+    };
+    let desc = description(r).await;
+    Ok(json!({ "release": r, "art": game, "hero": hero, "description": desc }))
+}
+
+// ---------- torrent source & download ----------
+
+enum Source {
+    Magnet(String),
+    TorrentFile(Vec<u8>),
+}
+
+async fn resolve_source(s: &Stored) -> anyhow::Result<Source> {
+    if s.guid.starts_with("magnet:") {
+        return Ok(Source::Magnet(s.guid.clone()));
+    }
+    let url = s.magnet_url.as_deref().or(s.download_url.as_deref()).ok_or_else(|| anyhow!("o indexador não forneceu link"))?;
+    if url.starts_with("magnet:") {
+        return Ok(Source::Magnet(url.to_string()));
+    }
+    let r = HTTP_NOREDIRECT.get(url).send().await.context("Prowlarr não respondeu ao pedir o torrent")?;
+    if r.status().is_redirection() {
+        let loc = r.headers().get("location").and_then(|l| l.to_str().ok()).unwrap_or_default().to_string();
+        if loc.starts_with("magnet:") {
+            return Ok(Source::Magnet(loc));
+        }
+        let r = HTTP.get(&loc).send().await?.error_for_status()?;
+        return Ok(Source::TorrentFile(r.bytes().await?.to_vec()));
+    }
+    let r = r.error_for_status()?;
+    let bytes = r.bytes().await?.to_vec();
+    if let Ok(text) = std::str::from_utf8(&bytes) {
+        if text.trim_start().starts_with("magnet:") {
+            return Ok(Source::Magnet(text.trim().to_string()));
+        }
+    }
+    Ok(Source::TorrentFile(bytes))
+}
+
+async fn rqbit_add(src: Source, query: &[(&str, &str)]) -> anyhow::Result<Value> {
+    let body = match src {
+        Source::Magnet(m) => m.into_bytes(),
+        Source::TorrentFile(b) => b,
+    };
+    let r = HTTP
+        .post(format!("http://127.0.0.1:{}/torrents", torrent::API_PORT))
+        .query(query)
+        .body(body)
+        .timeout(Duration::from_secs(120))
+        .send()
+        .await
+        .context("o motor de torrents não respondeu")?;
+    let status = r.status();
+    let v: Value = r.json().await.unwrap_or(Value::Null);
+    if !status.is_success() {
+        bail!("{}", v["human_readable"].as_str().or(v["error"].as_str()).unwrap_or("falha ao adicionar o torrent"));
+    }
+    Ok(v)
+}
+
+/// File list read from the swarm (magnet metadata) without downloading.
+pub async fn files(id: &str) -> anyhow::Result<Value> {
+    let s = stored(id)?;
+    let src = resolve_source(&s).await?;
+    let v = rqbit_add(src, &[("list_only", "true"), ("overwrite", "true")]).await?;
+    let files: Vec<Value> = v["details"]["files"]
+        .as_array()
+        .map(|a| a.iter().map(|f| json!({ "name": f["name"], "length": f["length"] })).collect())
+        .unwrap_or_default();
+    Ok(json!({ "name": v["details"]["name"], "files": files }))
+}
+
+pub async fn download(id: &str, dest: Option<String>) -> anyhow::Result<Value> {
+    let s = stored(id)?;
+    let src = resolve_source(&s).await?;
+    let mut q: Vec<(&str, &str)> = vec![("overwrite", "true")];
+    if let Some(d) = dest.as_deref() {
+        std::fs::create_dir_all(d).with_context(|| format!("não foi possível criar {d}"))?;
+        q.push(("output_folder", d));
+    }
+    let v = rqbit_add(src, &q).await?;
+    log!("catálogo: baixando {:?} → {:?}", s.release.title, dest);
+    Ok(json!({ "torrent_id": v["id"], "name": v["details"]["name"] }))
+}

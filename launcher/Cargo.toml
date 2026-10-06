@@ -1,0 +1,30 @@
+[package]
+name = "pishop"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "json"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "net", "signal", "process", "time", "io-util", "sync"] }
+rust-embed = "8"
+mime_guess = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"
+librqbit = { version = "9", default-features = false, features = ["rust-tls", "http-api", "tracing-subscriber-utils"] }
+anyhow = "1.0.104"
+librqbit-dualstack-sockets = "0.7"
+smb = "0.12"
+futures-util = "0.3.34"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[patch.crates-io]
+smb = { path = "vendor/smb" }
+smb-transport = { path = "vendor/smb-transport" }

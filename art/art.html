@@ -1,0 +1,27 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  html,body{margin:0;width:100vw;height:100vh;overflow:hidden;font-family:"Helvetica Neue",Arial,sans-serif}
+  body{background:radial-gradient(120% 90% at 50% 40%,#16233a 0%,#0b0d12 65%);display:grid;place-items:center;color:#e8ecf4}
+  body.clear{background:transparent}
+  .mark{display:grid;place-items:center;border-radius:22%;background:#0b0d12;box-shadow:0 0 0 .06em #7cf0c5 inset}
+  .grid{position:fixed;inset:0;background-image:linear-gradient(rgba(124,240,197,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(124,240,197,.06) 1px,transparent 1px);background-size:6vmin 6vmin;mask-image:radial-gradient(circle at 50% 45%,#000 0,transparent 70%)}
+  .lockup{position:relative;display:flex;flex-direction:column;align-items:center;gap:.25em}
+  .row{display:flex;align-items:center;gap:.35em}
+  .name{font-weight:800;letter-spacing:-.02em}
+  .name b{color:#7cf0c5}
+  .tag{font-size:.22em;letter-spacing:.35em;text-transform:uppercase;color:#8a93a8}
+  svg{display:block}
+</style></head><body>
+<div class="grid" id="grid"></div>
+<div class="lockup" id="lockup"></div>
+<script>
+const kind = new URLSearchParams(location.search).get('kind')
+const logo = s => `<svg width="${s}" height="${s}" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#0b0d12"/><circle cx="256" cy="256" r="150" fill="none" stroke="#7cf0c5" stroke-width="36"/><text x="256" y="300" font-family="Arial" font-size="150" font-weight="700" fill="#7cf0c5" text-anchor="middle">π</text></svg>`
+const L = document.getElementById('lockup')
+const vm = Math.min(innerWidth, innerHeight)
+if (kind === 'icon') { document.getElementById('grid').remove(); document.body.classList.add('clear'); L.innerHTML = logo(innerWidth) }
+else if (kind === 'logo') { document.getElementById('grid').remove(); document.body.classList.add('clear'); L.style.fontSize = innerHeight*0.55+'px'; L.innerHTML = `<div class="row">${logo(innerHeight*0.8)}<span class="name">pi<b>Shop</b></span></div>` }
+else if (kind === 'hero') { L.innerHTML = '' }
+else if (kind === 'capsule') { L.style.fontSize = innerWidth*0.2+'px'; L.innerHTML = `${logo(innerWidth*0.5)}<span class="name">pi<b>Shop</b></span><span class="tag">Steam Deck</span>` }
+else { L.style.fontSize = innerHeight*0.24+'px'; L.innerHTML = `<div class="row">${logo(innerHeight*0.42)}<span class="name">pi<b>Shop</b></span></div><span class="tag">Steam Deck</span>` }
+</script></body></html>

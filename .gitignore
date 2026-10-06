@@ -1,0 +1,9 @@
+# Build outputs and caches (Chromium zip, yt-dlp, UI test data with API keys)
+/.cache/
+/dist/
+/launcher/target/
+/web/node_modules/
+/web/dist/
+/web/tsconfig.tsbuildinfo
+*.log
+.DS_Store

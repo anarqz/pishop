@@ -1,0 +1,87 @@
+# Builds the SteamOS bundle and publishes it as a GitHub Release.
+#
+# The release ships the static launcher, yt-dlp and the Steam artwork. The
+# Chromium build (Chrome for Testing) is not redistributed: the installer
+# (docs/install.sh) downloads the pinned version straight from Google.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v0.1.0-alpha.2). A '-' makes it a pre-release."
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  ASSET: piShop-linux-x86_64.tar.gz
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build UI
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: launcher
+      - name: Install musl toolchain
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build launcher (static, musl)
+        working-directory: launcher
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+        run: cargo build --release --locked --target x86_64-unknown-linux-musl
+
+      - name: Bundle
+        run: |
+          set -euo pipefail
+          # Single source of truth for the Chromium version: scripts/build.sh
+          CHROME_VERSION=$(sed -n 's/^CHROME_VERSION="\${CHROME_VERSION:-\([0-9.]*\)}"$/\1/p' scripts/build.sh)
+          test -n "$CHROME_VERSION"
+          OUT=out/piShop
+          mkdir -p "$OUT/bin" "$OUT/art"
+          cp launcher/target/x86_64-unknown-linux-musl/release/pishop "$OUT/pishop"
+          curl -fsSL -o "$OUT/bin/yt-dlp" https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux
+          chmod +x "$OUT/pishop" "$OUT/bin/yt-dlp"
+          cp art/*.png "$OUT/art/"
+          echo "$CHROME_VERSION" > "$OUT/chromium.version"
+          echo "$TAG" > "$OUT/VERSION"
+          file "$OUT/pishop"
+          tar -C out -czf "$ASSET" piShop
+          sha256sum "$ASSET" > "$ASSET.sha256"
+          ls -la "$ASSET"
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: piShop ${{ env.TAG }}
+          prerelease: ${{ contains(env.TAG, '-') }}
+          generate_release_notes: true
+          files: |
+            ${{ env.ASSET }}
+            ${{ env.ASSET }}.sha256
