@@ -2,6 +2,7 @@
 // legend, dialogs, the top-pinned text prompt, toasts and icons.
 
 import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { tr } from './i18n'
 import { focusFirst, input, showKeyboard } from './input'
 
 // ---------- Footer legend ----------
@@ -77,7 +78,7 @@ export function Footer({ quitProgress }: { quitProgress: number }) {
         <Glyph name="VIEW" />
         <span>+</span>
         <Glyph name="MENU" />
-        <span className="footer-label">Segure para sair</span>
+        <span className="footer-label">{tr('Hold to quit')}</span>
       </div>
       <div className="footer-right">
         {hints.map(h => (
@@ -162,7 +163,7 @@ export function Dialog({
   useEffect(() => {
     requestAnimationFrame(focusFirst)
   }, [])
-  useHints(hints ?? [{ glyph: 'A', label: 'Selecionar' }, { glyph: 'B', label: 'Voltar' }])
+  useHints(hints ?? [{ glyph: 'A', label: tr('Select') }, { glyph: 'B', label: tr('Back') }])
   return (
     <div className={`dialog-backdrop ${top ? 'top' : ''}`}>
       <div className={`dialog ${wide ? 'wide' : ''}`} data-nav-scope>
@@ -178,7 +179,7 @@ export function TextPrompt({
   title,
   placeholder,
   initial = '',
-  submitLabel = 'Confirmar',
+  submitLabel = tr('Confirm'),
   validate,
   onSubmit,
   onCancel,
@@ -215,7 +216,7 @@ export function TextPrompt({
       />
       <div className="dialog-actions">
         <button data-nav className="btn" onClick={onCancel}>
-          Cancelar
+          {tr('Cancel')}
         </button>
         <button data-nav className="btn primary" disabled={!ok} onClick={() => onSubmit(value.trim())}>
           {submitLabel}
@@ -256,6 +257,7 @@ const ICONS: Record<string, string> = {
   pad: 'M7 8h10a4 4 0 0 1 4 4v1a4 4 0 0 1-7 2.6h-4A4 4 0 0 1 3 13v-1a4 4 0 0 1 4-4zM7.5 10.5v3M6 12h3M15.5 11h.01M17.5 13h.01',
   info: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 11v6M12 7.5h.01',
   display: 'M3 5h18v11H3zM8 20h8M12 16v4',
+  globe: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM3.5 9h17M3.5 15h17M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9s1.2-6.5 3.6-9z',
 }
 
 export function Icon({ name, size = 22 }: { name: keyof typeof ICONS | string; size?: number }) {

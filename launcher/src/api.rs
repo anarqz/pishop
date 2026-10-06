@@ -12,6 +12,7 @@ use serde_json::json;
 
 use crate::sources::{self, PublicSource, Source};
 use crate::{catalog, jobs, localfs, smbfs};
+use crate::tr;
 
 pub fn router() -> Router {
     Router::new()
@@ -41,6 +42,9 @@ pub fn router() -> Router {
         .route("/api/catalog/release/{id}/files", get(catalog_files))
         .route("/api/catalog/release/{id}/download", post(catalog_download))
         .route("/api/library", get(|| async { Json(crate::library::all()) }))
+        .route("/api/settings", get(|| async { Json(crate::settings::get()) }).post(save_settings))
+        .route("/api/services/export", post(services_export))
+        .route("/api/services/import", get(|| async { Json(crate::services_file::candidates()) }).post(services_import))
         .route("/api/torrent/limits", get(|| async { Json(crate::torrent::limits()) }).post(torrent_limits))
         .route(
             "/api/library/{hash}",
@@ -72,7 +76,7 @@ fn with_stored_password(mut s: Source) -> Source {
 async fn save_source(Json(s): Json<Source>) -> Response {
     let s = sources::normalize(s);
     if s.host.is_empty() || s.share.is_empty() {
-        return err(StatusCode::BAD_REQUEST, "informe o servidor e o compartilhamento");
+        return err(StatusCode::BAD_REQUEST, tr!("enter the server and the share", "informe o servidor e o compartilhamento"));
     }
     match sources::upsert(s) {
         Ok(saved) => Json(PublicSource::from(&saved)).into_response(),
@@ -83,7 +87,7 @@ async fn save_source(Json(s): Json<Source>) -> Response {
 async fn test_source(Json(s): Json<Source>) -> Response {
     let s = with_stored_password(sources::normalize(s));
     if s.host.is_empty() || s.share.is_empty() {
-        return err(StatusCode::BAD_REQUEST, "informe o servidor e o compartilhamento");
+        return err(StatusCode::BAD_REQUEST, tr!("enter the server and the share", "informe o servidor e o compartilhamento"));
     }
     match smbfs::test(&s).await {
         Ok(n) => Json(json!({ "ok": true, "entries": n })).into_response(),
@@ -105,7 +109,7 @@ struct PathQuery {
 }
 
 async fn list_remote(Path(id): Path<String>, Query(q): Query<PathQuery>) -> Response {
-    let Some(s) = sources::get(&id) else { return err(StatusCode::NOT_FOUND, "fonte não encontrada") };
+    let Some(s) = sources::get(&id) else { return err(StatusCode::NOT_FOUND, tr!("source not found", "fonte não encontrada")) };
     let started = std::time::Instant::now();
     match smbfs::list(&s, &q.path).await {
         Ok(entries) => {
@@ -119,7 +123,7 @@ async fn list_remote(Path(id): Path<String>, Query(q): Query<PathQuery>) -> Resp
 async fn list_local(Query(q): Query<PathQuery>) -> Response {
     let path = PathBuf::from(&q.path);
     if !path.is_absolute() {
-        return err(StatusCode::BAD_REQUEST, "caminho inválido");
+        return err(StatusCode::BAD_REQUEST, tr!("invalid path", "caminho inválido"));
     }
     match tokio::task::spawn_blocking(move || localfs::list(&path)).await {
         Ok(Ok(entries)) => {
@@ -145,7 +149,7 @@ struct MkdirReq {
 async fn mkdir(Json(r): Json<MkdirReq>) -> Response {
     let p = PathBuf::from(&r.path);
     if !p.is_absolute() {
-        return err(StatusCode::BAD_REQUEST, "caminho inválido");
+        return err(StatusCode::BAD_REQUEST, tr!("invalid path", "caminho inválido"));
     }
     match std::fs::create_dir_all(&p) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
@@ -162,7 +166,7 @@ struct NewJobs {
 
 async fn create_jobs(Json(r): Json<NewJobs>) -> Response {
     if r.items.is_empty() {
-        return err(StatusCode::BAD_REQUEST, "nada selecionado");
+        return err(StatusCode::BAD_REQUEST, tr!("nothing selected", "nada selecionado"));
     }
     match jobs::enqueue(&r.source_id, &r.dest, r.items) {
         Ok(ids) => Json(json!({ "ids": ids })).into_response(),
@@ -175,7 +179,7 @@ async fn job_action(Path((id, action)): Path<(u64, String)>) -> Response {
         "cancel" => jobs::cancel(id),
         "retry" => jobs::retry(id),
         "remove" => jobs::remove(Some(id)),
-        _ => return err(StatusCode::NOT_FOUND, "ação desconhecida"),
+        _ => return err(StatusCode::NOT_FOUND, tr!("unknown action", "ação desconhecida")),
     }
     StatusCode::NO_CONTENT.into_response()
 }
@@ -232,7 +236,7 @@ async fn service_test(Json(t): Json<ServiceTest>) -> Response {
             .await
             .map(|total| json!({ "total": total })),
         "tpb" => crate::tpb::search(&pick(&t.url, &c.tpb_url), "linux", "0").await.map(|hits| json!({ "total": hits.len() })),
-        _ => return err(StatusCode::NOT_FOUND, "serviço desconhecido"),
+        _ => return err(StatusCode::NOT_FOUND, tr!("unknown service", "serviço desconhecido")),
     };
     match r {
         Ok(v) => Json(v).into_response(),
@@ -340,6 +344,32 @@ async fn catalog_download(Path(id): Path<String>, Json(r): Json<DownloadReq>) ->
     match catalog::download(&id, r.dest.filter(|d| !d.trim().is_empty()), r.hint).await {
         Ok(v) => Json(v).into_response(),
         Err(e) => err(StatusCode::BAD_GATEWAY, format!("{e:#}")),
+    }
+}
+
+async fn save_settings(Json(s): Json<crate::settings::Settings>) -> Response {
+    match crate::settings::save(s) {
+        Ok(s) => Json(s).into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}")),
+    }
+}
+
+async fn services_export() -> Response {
+    match crate::services_file::export() {
+        Ok(path) => Json(json!({ "path": path })).into_response(),
+        Err(e) => err(StatusCode::BAD_REQUEST, format!("{e:#}")),
+    }
+}
+
+#[derive(Deserialize)]
+struct ImportReq {
+    path: String,
+}
+
+async fn services_import(Json(r): Json<ImportReq>) -> Response {
+    match crate::services_file::import(&r.path) {
+        Ok(names) => Json(json!({ "imported": names })).into_response(),
+        Err(e) => err(StatusCode::BAD_REQUEST, format!("{e:#}")),
     }
 }
 

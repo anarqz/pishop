@@ -6,9 +6,12 @@ use std::time::Duration;
 
 use anyhow::{anyhow, bail};
 use serde_json::Value;
+use crate::tr;
 
 /// Shown as the release's indexer.
-pub const LABEL: &str = "TPB nativo";
+pub fn label() -> String {
+    crate::tr!("TPB (native)", "TPB nativo")
+}
 
 /// Public trackers TPB itself appends to its magnet links.
 const TRACKERS: &[&str] = &[
@@ -71,12 +74,12 @@ fn client() -> anyhow::Result<reqwest::Client> {
 async fn get_json(url: &str, query: &[(&str, &str)]) -> anyhow::Result<Value> {
     let c = client()?;
     for attempt in 0..2 {
-        let r = c.get(url).query(query).send().await.map_err(|e| anyhow!("não respondeu: {e}"))?;
+        let r = c.get(url).query(query).send().await.map_err(|e| anyhow!(tr!("didn't respond: {e}", "não respondeu: {e}")))?;
         match r.status().as_u16() {
             200 => return Ok(r.json().await?),
             429 if attempt == 0 => tokio::time::sleep(Duration::from_millis(1500)).await,
-            429 => bail!("limite de requisições atingido; tente de novo em instantes"),
-            s => bail!("respondeu {s}"),
+            429 => bail!(tr!("rate limit reached; try again in a moment", "limite de requisições atingido; tente de novo em instantes")),
+            s => bail!(tr!("answered {s}", "respondeu {s}")),
         }
     }
     unreachable!()
@@ -85,7 +88,7 @@ async fn get_json(url: &str, query: &[(&str, &str)]) -> anyhow::Result<Value> {
 pub async fn search(base: &str, query: &str, cats: &str) -> anyhow::Result<Vec<Hit>> {
     let base = base.trim().trim_end_matches('/');
     let v = get_json(&format!("{base}/q.php"), &[("q", query), ("cat", cats)]).await?;
-    let rows = v.as_array().ok_or_else(|| anyhow!("resposta inesperada"))?;
+    let rows = v.as_array().ok_or_else(|| anyhow!(tr!("unexpected response", "resposta inesperada")))?;
     Ok(rows
         .iter()
         .filter_map(|r| {

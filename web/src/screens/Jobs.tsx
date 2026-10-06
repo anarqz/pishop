@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { type Job, api, formatBytes, formatEta } from '../api'
+import { tr, trn } from '../i18n'
 import { focusFirst, input, keepFocus } from '../input'
 import { type TorrentInfo, addMagnet, pause, resume } from '../torrent'
 import { Icon, Progress, TextPrompt, toast, useHints } from '../ui'
@@ -17,7 +18,7 @@ type Focus = { kind: 'job' | 'torrent'; id: number } | null
 /** X: pause/resume while downloading, stop/resume sharing once finished. */
 function toggle(t: TorrentInfo) {
   const p = t.error || t.state === 'paused' ? resume(t.id) : pause(t.id)
-  p.catch(e => toast('Ação falhou', String((e as Error).message), 'error'))
+  p.catch(e => toast(tr('Action failed'), String((e as Error).message), 'error'))
 }
 
 export default function Jobs({ jobs, refresh, downloadDir }: { jobs: Job[]; refresh: () => void; downloadDir?: string }) {
@@ -73,7 +74,7 @@ export default function Jobs({ jobs, refresh, downloadDir }: { jobs: Job[]; refr
       await api.jobAction(j.id, action)
       refresh()
     } catch (e) {
-      toast('Ação falhou', String((e as Error).message), 'error')
+      toast(tr('Action failed'), String((e as Error).message), 'error')
     }
   }
 
@@ -115,15 +116,15 @@ export default function Jobs({ jobs, refresh, downloadDir }: { jobs: Job[]; refr
       : [
           ...(focusedTorrent
             ? [
-                { glyph: 'A' as const, label: 'Ver detalhes' },
+                { glyph: 'A' as const, label: tr('View details') },
                 { glyph: 'X' as const, label: toggleLabel(focusedTorrent) },
-                { glyph: 'Y' as const, label: 'Excluir' },
+                { glyph: 'Y' as const, label: tr('Delete') },
               ]
             : []),
-          ...(focusedJob ? [{ glyph: 'X' as const, label: jobActive ? 'Cancelar' : 'Remover' }] : []),
-          ...(focusedJob && ['failed', 'canceled'].includes(focusedJob.status) ? [{ glyph: 'Y' as const, label: 'Repetir' }] : []),
-          ...(history.length ? [{ glyph: 'MENU' as const, label: 'Limpar histórico' }] : []),
-          { glyph: 'B', label: 'Voltar' },
+          ...(focusedJob ? [{ glyph: 'X' as const, label: jobActive ? tr('Cancel') : tr('Remove') }] : []),
+          ...(focusedJob && ['failed', 'canceled'].includes(focusedJob.status) ? [{ glyph: 'Y' as const, label: tr('Retry') }] : []),
+          ...(history.length ? [{ glyph: 'MENU' as const, label: tr('Clear history') }] : []),
+          { glyph: 'B', label: tr('Back') },
         ],
   )
 
@@ -143,26 +144,26 @@ export default function Jobs({ jobs, refresh, downloadDir }: { jobs: Job[]; refr
       <div className="transfers-scroll">
         <section className="dl-section">
           <div className="dl-head">
-            <h3 className="section-title">Downloads</h3>
+            <h3 className="section-title">{tr('Downloads')}</h3>
             <span className="dl-head-stats">
               {engine.online ? (
                 <>
-                  ↓ {formatBytes(engine.downloadSpeed)}/s{cap ? ` (limite ${formatBytes(cap)}/s)` : ''} · ↑{' '}
-                  {formatBytes(engine.uploadSpeed)}/s · {engine.peers} peers
+                  ↓ {formatBytes(engine.downloadSpeed)}/s{cap ? ` (${tr('limit {speed}/s', { speed: formatBytes(cap) })})` : ''} · ↑{' '}
+                  {formatBytes(engine.uploadSpeed)}/s · {trn(engine.peers, '{n} peer', '{n} peers')}
                   {downloadDir ? ` · ${downloadDir.replace(/^\/home\/[^/]+/, '~')}` : ''}
                 </>
               ) : (
-                'Iniciando o motor de torrents…'
+                tr('Starting the torrent engine…')
               )}
             </span>
             <button data-nav data-nav-default={downloads.length ? undefined : ''} className="btn small" onClick={() => setPrompt(true)}>
-              <Icon name="plus" size={18} /> Magnet link
+              <Icon name="plus" size={18} /> {tr('Magnet link')}
             </button>
           </div>
           {engine.online && !downloads.length && (
             <div className="jobs-empty">
               <Icon name="download" size={28} />
-              <span>Nenhum download. Encontre jogos em Descobrir ou na Loja.</span>
+              <span>{tr('No downloads. Find games in Discover or the Store.')}</span>
             </div>
           )}
           <div className="dl-grid">
@@ -172,17 +173,17 @@ export default function Jobs({ jobs, refresh, downloadDir }: { jobs: Job[]; refr
           </div>
         </section>
 
-        {jobs.length > 0 && <h3 className="section-title jobs-title">Cópias da rede</h3>}
+        {jobs.length > 0 && <h3 className="section-title jobs-title">{tr('Network copies')}</h3>}
         {current && <section>{row(current, true)}</section>}
         {queued.length > 0 && (
           <section>
-            <h3 className="section-title">Na fila · {queued.length}</h3>
+            <h3 className="section-title">{tr('Queued · {n}', { n: queued.length })}</h3>
             {queued.map(j => row(j))}
           </section>
         )}
         {history.length > 0 && (
           <section>
-            <h3 className="section-title">Concluídos</h3>
+            <h3 className="section-title">{tr('Completed')}</h3>
             {history.map(j => row(j))}
           </section>
         )}
@@ -194,14 +195,14 @@ export default function Jobs({ jobs, refresh, downloadDir }: { jobs: Job[]; refr
       {dialog?.kind === 'delete' && dialogT && <DeleteDialog t={dialogT} entry={lib[dialogT.infoHash]} onClose={closeDialog} />}
       {prompt && (
         <TextPrompt
-          title="Magnet link"
+          title={tr('Magnet link')}
           placeholder="magnet:?xt=urn:btih:…"
-          submitLabel="Adicionar"
+          submitLabel={tr('Add')}
           validate={v => v.startsWith('magnet:')}
           onCancel={() => setPrompt(false)}
           onSubmit={m => {
             setPrompt(false)
-            addMagnet(m).catch(e => toast('Não foi possível adicionar', String((e as Error).message), 'error'))
+            addMagnet(m).catch(e => toast(tr("Couldn't add the magnet link"), String((e as Error).message), 'error'))
           }}
         />
       )}
@@ -215,17 +216,20 @@ function JobRow({ job: j, big }: { job: Job; big: boolean }) {
   const status = (() => {
     switch (j.status) {
       case 'scanning':
-        return `Analisando… ${j.files_total} arquivos, ${formatBytes(j.total_bytes)}`
+        return trn(j.files_total, 'Scanning… {n} file, {size}', 'Scanning… {n} files, {size}', { size: formatBytes(j.total_bytes) })
       case 'running':
-        return `${formatBytes(j.done_bytes)} de ${formatBytes(j.total_bytes)}${eta ? ` · ${eta} restantes` : ''}`
+        return (
+          tr('{done} of {total}', { done: formatBytes(j.done_bytes), total: formatBytes(j.total_bytes) }) +
+          (eta ? ` · ${tr('{eta} left', { eta })}` : '')
+        )
       case 'queued':
-        return 'Na fila'
+        return tr('Queued')
       case 'done':
-        return `Concluído · ${formatBytes(j.total_bytes)} · ${j.files_total} ${j.files_total === 1 ? 'arquivo' : 'arquivos'}`
+        return `${tr('Complete')} · ${formatBytes(j.total_bytes)} · ${trn(j.files_total, '{n} file', '{n} files')}`
       case 'failed':
-        return `Falhou: ${j.error ?? 'erro desconhecido'}`
+        return tr('Failed: {error}', { error: j.error ?? tr('unknown error') })
       case 'canceled':
-        return 'Cancelado'
+        return tr('Canceled')
     }
   })()
   const dest = j.dest_dir.replace(/^\/home\/[^/]+/, '~')

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { type Job, type Place, type Source, api, formatBytes } from './api'
+import { locale, setLang, tr, useLang } from './i18n'
 import { focusFirst, input } from './input'
 import Explorer from './screens/Explorer'
 import Jobs from './screens/Jobs'
@@ -12,12 +13,13 @@ import { Footer, Glyph, Spinner, Toasts } from './ui'
 
 export type Tab = 'discover' | 'store' | 'explorer' | 'jobs' | 'settings'
 
-const TABS: Array<[Tab, string]> = [
-  ['discover', 'Descobrir'],
-  ['store', 'Loja'],
-  ['explorer', 'Explorar'],
-  ['jobs', 'Transferências'],
-  ['settings', 'Configurações'],
+// Labels are functions so they follow the current language.
+const TABS: Array<[Tab, () => string]> = [
+  ['discover', () => tr('Discover')],
+  ['store', () => tr('Store')],
+  ['explorer', () => tr('Explore')],
+  ['jobs', () => tr('Transfers')],
+  ['settings', () => tr('Settings')],
 ]
 
 interface ServerInfo {
@@ -33,7 +35,7 @@ function useClock() {
     const id = setInterval(() => setNow(new Date()), 10_000)
     return () => clearInterval(id)
   }, [])
-  return now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  return now.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
 }
 
 function useQuitProgress() {
@@ -51,6 +53,8 @@ function useQuitProgress() {
 }
 
 export default function App() {
+  // Re-renders the whole tree when the language changes.
+  useLang()
   const [tab, setTab] = useState<Tab>('discover')
   const [storeRequest, setStoreRequest] = useState<StoreRequest | null>(null)
   const [sources, setSources] = useState<Source[]>([])
@@ -64,6 +68,14 @@ export default function App() {
   const loadSources = useCallback(() => void api.sources().then(setSources).catch(() => {}), [])
   const loadPlaces = useCallback(() => void api.places().then(setPlaces).catch(() => {}), [])
   const loadJobs = useCallback(() => void api.jobs().then(setJobs).catch(() => {}), [])
+
+  // The language saved in the launcher (Settings → Language) wins over the cached one.
+  useEffect(() => {
+    api
+      .settings()
+      .then(s => setLang(s.lang))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     fetch('/api/info')
@@ -136,7 +148,7 @@ export default function App() {
           <Glyph name="L1" />
           {TABS.map(([t, label]) => (
             <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => go(t)} tabIndex={-1}>
-              {label}
+              {label()}
               {t === 'jobs' && active > 0 && <span className="badge">{active}</span>}
             </button>
           ))}
@@ -177,7 +189,7 @@ export default function App() {
       {quitting && (
         <div className="quitting">
           <Spinner />
-          <p>Saindo…</p>
+          <p>{tr('Quitting…')}</p>
         </div>
       )}
     </div>

@@ -1,13 +1,13 @@
 // Settings, laid out like SteamOS settings: categories on the left, content
-// on the right. "Fontes de jogos" manages where games are collected from.
+// on the right. "Game sources" manages where games are collected from.
 
-import { useEffect, useRef, useState } from 'react'
-import { type ServicesConfig, type Source, type SourceInput, api } from '../api'
-import { BUTTON_NAMES, type PadSnapshot, input } from '../input'
+import { useEffect, useState } from 'react'
+import { type ServicesConfig, type ServicesFile, type Source, type SourceInput, api } from '../api'
+import { type Lang, LANGS, locale, setLang, tr, trb, trn, useLang } from '../i18n'
 import { SCALE_CHOICES, type ScaleSetting, autoScale, getScaleSetting, setScaleSetting } from '../scale'
 import { Dialog, Icon, Spinner, toast, useHints } from '../ui'
 
-type Section = 'sources' | 'indexers' | 'downloads' | 'display' | 'controller' | 'about'
+type Section = 'sources' | 'indexers' | 'downloads' | 'display' | 'language' | 'about'
 
 export default function Settings({
   sources,
@@ -21,19 +21,19 @@ export default function Settings({
   const [section, setSection] = useState<Section>('sources')
   const [editing, setEditing] = useState<SourceInput | null>(null)
 
-  useHints(editing ? null : [{ glyph: 'A', label: 'Selecionar' }, { glyph: 'B', label: 'Voltar' }])
+  useHints(editing ? null : [{ glyph: 'A', label: tr('Select') }, { glyph: 'B', label: tr('Back') }])
 
   return (
     <div className="settings" data-nav-scope>
-      <nav className="settings-nav">
+      <nav className="settings-nav" data-nav-exit-right=".settings-body [data-nav]:not(:disabled)" data-nav-exit-up="none" data-nav-exit-down="none">
         {(
           [
-            ['sources', 'network', 'Fontes de jogos'],
-            ['indexers', 'search', 'Serviços'],
-            ['downloads', 'download', 'Downloads'],
-            ['display', 'display', 'Tela'],
-            ['controller', 'pad', 'Controle'],
-            ['about', 'info', 'Sobre'],
+            ['sources', 'network', tr('Game sources')],
+            ['indexers', 'search', tr('Services')],
+            ['downloads', 'download', tr('Downloads')],
+            ['display', 'display', tr('Display')],
+            ['language', 'globe', tr('Language')],
+            ['about', 'info', tr('About')],
           ] as const
         ).map(([id, icon, label]) => (
           <button
@@ -49,7 +49,8 @@ export default function Settings({
           </button>
         ))}
       </nav>
-      <div className="settings-body">
+      {/* Left goes back to the category; up/down never wander into another one. */}
+      <div className="settings-body" data-nav-exit-left=".settings-tab.active" data-nav-exit-up="none" data-nav-exit-down="none">
         {section === 'sources' && (
           <SourcesSection
             sources={sources}
@@ -73,7 +74,7 @@ export default function Settings({
         {section === 'indexers' && <IndexersSection />}
         {section === 'downloads' && <DownloadsSection />}
         {section === 'display' && <DisplaySection />}
-        {section === 'controller' && <ControllerSection />}
+        {section === 'language' && <LanguageSection />}
         {section === 'about' && <AboutSection info={info} />}
       </div>
       {editing && (
@@ -94,11 +95,9 @@ export default function Settings({
 function SourcesSection({ sources, onEdit, onAdd }: { sources: Source[]; onEdit: (s: Source) => void; onAdd: () => void }) {
   return (
     <>
-      <h2 className="settings-title">Fontes de jogos</h2>
-      <p className="settings-desc">
-        Lugares de onde o piShop coleta jogos. Navegue por eles em <b>Explorar</b> e copie para o Deck.
-      </p>
-      <h3 className="section-title">Armazenamento de rede (SMB)</h3>
+      <h2 className="settings-title">{tr('Game sources')}</h2>
+      <p className="settings-desc">{trb('Places piShop collects games from. Browse them in **Explore** and copy them to this device.')}</p>
+      <h3 className="section-title">{tr('Network storage (SMB)')}</h3>
       <div className="settings-list">
         {sources.map(s => (
           <button key={s.id} data-nav className="settings-row" onClick={() => onEdit(s)}>
@@ -107,17 +106,17 @@ function SourcesSection({ sources, onEdit, onAdd }: { sources: Source[]; onEdit:
               <b>{s.name}</b>
               <small>
                 \\{s.host}\{s.share}
-                {s.base_path ? `\\${s.base_path.replaceAll('/', '\\')}` : ''} · {s.username || 'convidado'}
+                {s.base_path ? `\\${s.base_path.replaceAll('/', '\\')}` : ''} · {s.username || tr('guest')}
               </small>
             </div>
-            <span className="settings-row-action">Editar</span>
+            <span className="settings-row-action">{tr('Edit')}</span>
           </button>
         ))}
         <button data-nav className="settings-row add" onClick={onAdd}>
           <Icon name="plus" />
           <div className="settings-row-main">
-            <b>Adicionar armazenamento de rede</b>
-            <small>Compartilhamento Windows/Samba, NAS, TrueNAS…</small>
+            <b>{tr('Add network storage')}</b>
+            <small>{tr('Windows/Samba share, NAS, TrueNAS…')}</small>
           </div>
         </button>
       </div>
@@ -146,7 +145,7 @@ function SourceForm({
     setTest({ state: 'busy' })
     try {
       const r = await api.testSource(s)
-      setTest({ state: 'ok', msg: `Conectado — ${r.entries} itens na pasta inicial` })
+      setTest({ state: 'ok', msg: trn(r.entries, 'Connected — {n} item in the start folder', 'Connected — {n} items in the start folder') })
     } catch (e) {
       setTest({ state: 'error', msg: (e as Error).message })
     }
@@ -155,85 +154,85 @@ function SourceForm({
     setSaving(true)
     try {
       const saved = await api.saveSource(s)
-      toast('Fonte salva', saved.name, 'ok')
+      toast(tr('Source saved'), saved.name, 'ok')
       onSaved()
     } catch (e) {
       setSaving(false)
-      toast('Não foi possível salvar', (e as Error).message, 'error')
+      toast(tr("Couldn't save"), (e as Error).message, 'error')
     }
   }
   const remove = async () => {
     await api.deleteSource(s.id)
-    toast('Fonte removida', s.name)
+    toast(tr('Source removed'), s.name)
     onSaved()
   }
 
   return (
     <Dialog
-      title={initial.id ? 'Editar armazenamento de rede' : 'Novo armazenamento de rede'}
+      title={initial.id ? tr('Edit network storage') : tr('New network storage')}
       onClose={onClose}
       top
       wide
       hints={[
-        { glyph: 'A', label: 'Editar / Selecionar' },
-        { glyph: 'B', label: 'Fechar' },
+        { glyph: 'A', label: tr('Edit / Select') },
+        { glyph: 'B', label: tr('Close') },
       ]}
     >
       <div className="form-grid">
         <label>
-          <span>Servidor</span>
-          <input data-nav data-nav-default className="field" placeholder="192.168.0.10 ou nas.local" value={s.host} onChange={set('host')} />
+          <span>{tr('Server')}</span>
+          <input data-nav data-nav-default className="field" placeholder={tr('192.168.0.10 or nas.local')} value={s.host} onChange={set('host')} />
         </label>
         <label>
-          <span>Compartilhamento</span>
+          <span>{tr('Share')}</span>
           <input data-nav className="field" placeholder="games" value={s.share} onChange={set('share')} />
         </label>
         <label>
-          <span>Usuário</span>
+          <span>{tr('User')}</span>
           <input data-nav className="field" placeholder="guest" value={s.username} onChange={set('username')} />
         </label>
         <label>
-          <span>Senha</span>
+          <span>{tr('Password')}</span>
           <input
             data-nav
             className="field"
             type="password"
-            placeholder={hasPassword ? '•••••• (mantida)' : ''}
+            placeholder={hasPassword ? tr('•••••• (kept)') : ''}
             value={s.password}
             onChange={set('password')}
           />
         </label>
         <label>
-          <span>Pasta inicial (opcional)</span>
+          <span>{tr('Start folder (optional)')}</span>
           <input data-nav className="field" placeholder="consoles/roms" value={s.base_path} onChange={set('base_path')} />
         </label>
         <label>
-          <span>Nome (opcional)</span>
-          <input data-nav className="field" placeholder="Meu NAS" value={s.name} onChange={set('name')} />
+          <span>{tr('Name (optional)')}</span>
+          <input data-nav className="field" placeholder={tr('My NAS')} value={s.name} onChange={set('name')} />
         </label>
       </div>
       <div className={`test-result ${test.state}`}>
         {test.state === 'busy' && (
           <>
-            <Spinner /> Conectando…
+            <Spinner /> {tr('Connecting…')}
           </>
         )}
         {test.state === 'ok' && test.msg}
         {test.state === 'error' && test.msg}
-        {test.state === 'idle' && 'Dica: “192.168.68.91:/games” no campo Servidor já preenche o compartilhamento.'}
+        {test.state === 'idle' && tr('Tip: “192.168.0.10:/games” in the Server field fills in the share too.')}
       </div>
       <div className="dialog-actions">
         {initial.id && (
           <button data-nav className="btn danger" onClick={remove}>
-            Remover
+            {tr('Remove')}
           </button>
         )}
         <span className="spacer" />
         <button data-nav className="btn" disabled={!valid || test.state === 'busy'} onClick={runTest}>
-          Testar conexão
+          {tr('Test connection')}
         </button>
         <button data-nav className="btn primary" disabled={!valid || saving} onClick={save}>
-          Salvar
+          {tr('Save')}
         </button>
       </div>
     </Dialog>
@@ -247,7 +246,7 @@ function TestLine({ state }: { state: TestState }) {
     <div className={`test-result ${state.s}`}>
       {state.s === 'busy' ? (
         <>
-          <Spinner /> Conectando…
+          <Spinner /> {tr('Connecting…')}
         </>
       ) : (
         state.msg
@@ -286,9 +285,9 @@ function IndexersSection() {
       setProwlarrKey('')
       setTgdbKey('')
       setIicKey('')
-      toast(`${label} salvo`, undefined, 'ok')
+      toast(tr('{name} saved', { name: label }), undefined, 'ok')
     } catch (e) {
-      toast('Não foi possível salvar', (e as Error).message, 'error')
+      toast(tr("Couldn't save"), (e as Error).message, 'error')
     }
   }
   const run = async (k: string, f: () => Promise<string>) => {
@@ -299,43 +298,64 @@ function IndexersSection() {
       setTest(k, { s: 'error', msg: (e as Error).message })
     }
   }
-  const kept = (has?: boolean) => (has ? '•••••• (mantida)' : '')
+  const kept = (has?: boolean) => (has ? tr('•••••• (kept)') : '')
+  const [importing, setImporting] = useState(false)
+  const exportFile = async () => {
+    try {
+      const r = await api.exportServices()
+      toast(tr('Services exported'), r.path.replace(/^\/home\/[^/]+/, '~'), 'ok')
+    } catch (e) {
+      toast(tr("Couldn't export"), (e as Error).message, 'error')
+    }
+  }
 
   return (
     <>
-      <h2 className="settings-title">Serviços</h2>
-      <p className="settings-desc">
-        Endereços e chaves das APIs usadas pela Loja e pelo Descobrir. Ficam só neste aparelho.
-      </p>
+      <h2 className="settings-title">{tr('Services')}</h2>
+      <p className="settings-desc">{tr("Addresses and keys of the APIs the Store and Discover use. They're kept on this device.")}</p>
 
-      <h3 className="section-title">The Pirate Bay · busca nativa de torrents</h3>
+      <h3 className="section-title">{tr('Share your setup')}</h3>
+      <p className="settings-desc">
+        {tr('Export saves these services, API keys included, to a file in Downloads. Import loads a file someone shared with you.')}
+      </p>
+      <div className="row">
+        <button data-nav className="btn" onClick={() => setImporting(true)}>
+          <Icon name="download" size={18} /> {tr('Import…')}
+        </button>
+        <button data-nav className="btn" onClick={() => void exportFile()}>
+          <Icon name="up" size={18} /> {tr('Export')}
+        </button>
+      </div>
+      <p className="settings-note">{tr('The file includes your API keys: share it only with people you trust.')}</p>
+
+      <h3 className="section-title">{tr('The Pirate Bay · native torrent search')}</h3>
       <div className="form-grid">
         <label>
-          <span>Endereço da API (formato apibay)</span>
-          <input data-nav className="field" placeholder="https://… (vazio desativa)" value={tpbUrl} onChange={e => setTpbUrl(e.target.value)} />
+          <span>{tr('API address (apibay format)')}</span>
+          <input data-nav className="field" placeholder={tr('https://… (empty turns it off)')} value={tpbUrl} onChange={e => setTpbUrl(e.target.value)} />
         </label>
       </div>
       <TestLine state={tests.tpb ?? { s: 'idle' }} />
       <div className="row">
         <button data-nav className="btn" disabled={!tpbUrl} onClick={() => run('tpb', async () => {
           const r = await api.testService('tpb', { url: tpbUrl })
-          return `Conectado · ${r.total ?? 0} resultados para a busca de teste`
+          return trn(r.total ?? 0, 'Connected · {n} result for the test search', 'Connected · {n} results for the test search')
         })}>
-          Testar
+          {tr('Test')}
         </button>
         <button data-nav className="btn primary" onClick={() => save({ tpb_url: tpbUrl }, 'The Pirate Bay')}>
-          Salvar
+          {tr('Save')}
         </button>
       </div>
 
-      <h3 className="section-title">Prowlarr · busca de torrents</h3>
+      <h3 className="section-title">{tr('Prowlarr · torrent search')}</h3>
       <div className="form-grid">
         <label>
-          <span>Endereço</span>
+          <span>{tr('Address')}</span>
           <input data-nav className="field" placeholder="http://192.168.0.10:9696" value={prowlarrUrl} onChange={e => setProwlarrUrl(e.target.value)} />
         </label>
         <label>
-          <span>Chave de API</span>
+          <span>{tr('API key')}</span>
           <input data-nav className="field" type="password" placeholder={kept(cfg?.has_key) || 'Settings → General → API Key'} value={prowlarrKey} onChange={e => setProwlarrKey(e.target.value)} />
         </label>
       </div>
@@ -343,63 +363,134 @@ function IndexersSection() {
       <div className="row">
         <button data-nav className="btn" disabled={!prowlarrUrl} onClick={() => run('prowlarr', async () => {
           const r = await api.testCatalog(prowlarrUrl, prowlarrKey)
-          return `Prowlarr ${r.version} · indexadores: ${r.indexers.join(', ') || 'nenhum ativo'}`
+          return tr('Prowlarr {version} · indexers: {list}', { version: r.version, list: r.indexers.join(', ') || tr('none enabled') })
         })}>
-          Testar
+          {tr('Test')}
         </button>
         <button data-nav className="btn primary" disabled={!prowlarrUrl} onClick={() => save({ prowlarr_url: prowlarrUrl, prowlarr_key: prowlarrKey }, 'Prowlarr')}>
-          Salvar
+          {tr('Save')}
         </button>
       </div>
 
-      <h3 className="section-title">TheGamesDB · sinopse e detalhes dos jogos</h3>
+      <h3 className="section-title">{tr('TheGamesDB · game synopsis and details')}</h3>
       <div className="form-grid">
         <label>
-          <span>Chave de API</span>
-          <input data-nav className="field" type="password" placeholder={kept(cfg?.has_tgdb_key) || 'chave pública ou privada'} value={tgdbKey} onChange={e => setTgdbKey(e.target.value)} />
+          <span>{tr('API key')}</span>
+          <input data-nav className="field" type="password" placeholder={kept(cfg?.has_tgdb_key) || tr('public or private key')} value={tgdbKey} onChange={e => setTgdbKey(e.target.value)} />
         </label>
       </div>
       <TestLine state={tests.tgdb ?? { s: 'idle' }} />
       <div className="row">
         <button data-nav className="btn" disabled={!tgdbKey && !cfg?.has_tgdb_key} onClick={() => run('tgdb', async () => {
           const r = await api.testService('tgdb', { key: tgdbKey })
-          return `Conectado · ${r.remaining ?? '?'} requisições restantes este mês`
+          return tr('Connected · {n} requests left this month', { n: r.remaining ?? '?' })
         })}>
-          Testar
+          {tr('Test')}
         </button>
         <button data-nav className="btn primary" disabled={!tgdbKey} onClick={() => save({ tgdb_key: tgdbKey }, 'TheGamesDB')}>
-          Salvar
+          {tr('Save')}
         </button>
       </div>
 
-      <h3 className="section-title">isitcracked · Descobrir</h3>
+      <h3 className="section-title">{tr('isitcracked · Discover')}</h3>
       <div className="form-grid">
         <label>
           <span>Endpoint (RPC)</span>
           <input data-nav className="field" placeholder="https://….supabase.co/rest/v1/rpc/list_games_paged" value={iicUrl} onChange={e => setIicUrl(e.target.value)} />
         </label>
         <label>
-          <span>Chave de API</span>
+          <span>{tr('API key')}</span>
           <input data-nav className="field" type="password" placeholder={kept(cfg?.has_iic_key) || 'apikey'} value={iicKey} onChange={e => setIicKey(e.target.value)} />
         </label>
         <label>
-          <span>CDN das capas</span>
-          <input data-nav className="field" placeholder="https://cdn.exemplo.com" value={iicCdn} onChange={e => setIicCdn(e.target.value)} />
+          <span>{tr('Covers CDN')}</span>
+          <input data-nav className="field" placeholder="https://cdn.example.com" value={iicCdn} onChange={e => setIicCdn(e.target.value)} />
         </label>
       </div>
       <TestLine state={tests.iic ?? { s: 'idle' }} />
       <div className="row">
         <button data-nav className="btn" disabled={!iicUrl} onClick={() => run('iic', async () => {
           const r = await api.testService('iic', { url: iicUrl, key: iicKey, cdn: iicCdn })
-          return `Conectado · ${r.total ?? 0} jogos crackeados`
+          return trn(r.total ?? 0, 'Connected · {n} cracked game', 'Connected · {n} cracked games')
         })}>
-          Testar
+          {tr('Test')}
         </button>
         <button data-nav className="btn primary" disabled={!iicUrl} onClick={() => save({ iic_url: iicUrl, iic_key: iicKey, iic_cdn: iicCdn }, 'isitcracked')}>
-          Salvar
+          {tr('Save')}
         </button>
       </div>
+      {importing && (
+        <ImportDialog
+          onClose={() => setImporting(false)}
+          onImported={() => {
+            setImporting(false)
+            api.catalogConfig().then(apply).catch(() => {})
+          }}
+        />
+      )}
     </>
+  )
+}
+
+/** Picks a piShop services file found on the device and applies it. */
+function ImportDialog({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
+  const [files, setFiles] = useState<ServicesFile[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    api
+      .importCandidates()
+      .then(setFiles)
+      .catch(() => setFiles([]))
+  }, [])
+  const pick = async (f: ServicesFile) => {
+    setBusy(true)
+    try {
+      const r = await api.importServices(f.path)
+      toast(tr('Services imported'), r.imported.join(', '), 'ok')
+      onImported()
+    } catch (e) {
+      setBusy(false)
+      toast(tr("Couldn't import"), (e as Error).message, 'error')
+    }
+  }
+  const when = (secs: number) =>
+    new Date(secs * 1000).toLocaleString(locale(), { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return (
+    <Dialog title={tr('Import services')} onClose={onClose} wide>
+      {files === null && (
+        <p className="muted">
+          <Spinner /> {tr('Looking for files…')}
+        </p>
+      )}
+      {files?.length === 0 && (
+        <p className="settings-desc">
+          {trb('No piShop services file found. Put **{file}** in Downloads, your home folder, or on an SD card or USB drive.', {
+            file: 'piShop-services.json',
+          })}
+        </p>
+      )}
+      {!!files?.length && (
+        <div className="settings-list">
+          {files.map((f, i) => (
+            <button key={f.path} data-nav data-nav-default={i === 0 ? '' : undefined} className="settings-row" disabled={busy} onClick={() => void pick(f)}>
+              <Icon name="file" />
+              <div className="settings-row-main">
+                <b>{f.name}</b>
+                <small>
+                  {f.path.replace(/^\/home\/[^/]+/, '~').replace(/\/[^/]+$/, '')} · {when(f.modified)}
+                </small>
+              </div>
+              <span className="settings-row-action">{f.services.join(' · ')}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="dialog-actions">
+        <button data-nav data-nav-default={files?.length ? undefined : ''} className="btn" onClick={onClose}>
+          {tr('Cancel')}
+        </button>
+      </div>
+    </Dialog>
   )
 }
 
@@ -421,17 +512,15 @@ function DownloadsSection() {
       .setTorrentLimits(mb ? mb * MIB : null)
       .then(l => {
         setLimit(l.download_bps)
-        toast('Limite de download', mb ? `${mb} MB/s` : 'Sem limite', 'ok')
+        toast(tr('Download limit'), mb ? `${mb} MB/s` : tr('No limit'), 'ok')
       })
-      .catch(e => toast('Não foi possível salvar', (e as Error).message, 'error'))
-  const perHour = (mb: number) => ((mb * 3600) / 1024).toLocaleString('pt-BR', { maximumFractionDigits: 1 })
+      .catch(e => toast(tr("Couldn't save"), (e as Error).message, 'error'))
+  const perHour = (mb: number) => ((mb * 3600) / 1024).toLocaleString(locale(), { maximumFractionDigits: 1 })
   return (
     <>
-      <h2 className="settings-title">Downloads</h2>
-      <p className="settings-desc">
-        Velocidade máxima do cliente de torrent do piShop, somando todos os downloads. Muda na hora, sem reiniciar.
-      </p>
-      <h3 className="section-title">Limite de download</h3>
+      <h2 className="settings-title">{tr('Downloads')}</h2>
+      <p className="settings-desc">{tr("Top speed for piShop's torrent client, across all downloads. It changes right away, no restart needed.")}</p>
+      <h3 className="section-title">{tr('Download limit')}</h3>
       <div className="settings-list">
         {SPEED_LIMITS.map(mb => {
           const selected = limit !== undefined && (mb ? limit === mb * MIB : !limit)
@@ -439,8 +528,8 @@ function DownloadsSection() {
             <button key={String(mb)} data-nav className={`settings-row ${selected ? 'selected' : ''}`} onClick={() => void choose(mb)}>
               <Icon name={selected ? 'check' : 'download'} />
               <div className="settings-row-main">
-                <b>{mb ? `${mb} MB/s` : 'Sem limite'}</b>
-                <small>{mb ? `Até ${perHour(mb)} GB por hora` : 'Usa toda a velocidade da conexão'}</small>
+                <b>{mb ? `${mb} MB/s` : tr('No limit')}</b>
+                <small>{mb ? tr('Up to {gb} GB per hour', { gb: perHour(mb) }) : tr('Uses your full connection speed')}</small>
               </div>
             </button>
           )
@@ -461,12 +550,14 @@ function DisplaySection() {
   const pct = (v: number) => `${Math.round(v * 100)}%`
   return (
     <>
-      <h2 className="settings-title">Tela</h2>
+      <h2 className="settings-title">{tr('Display')}</h2>
       <p className="settings-desc">
-        Tamanho da interface. No automático o piShop segue a proporção da interface da Steam para a sua tela (
-        {window.innerWidth}×{window.innerHeight}).
+        {tr("Interface size. On automatic, piShop follows the Steam interface's proportions for your screen ({w}×{h}).", {
+          w: window.innerWidth,
+          h: window.innerHeight,
+        })}
       </p>
-      <h3 className="section-title">Escala da interface</h3>
+      <h3 className="section-title">{tr('Interface scale')}</h3>
       <div className="settings-list">
         {SCALE_CHOICES.map(v => (
           <button
@@ -480,8 +571,8 @@ function DisplaySection() {
           >
             <Icon name={setting === v ? 'check' : 'display'} />
             <div className="settings-row-main">
-              <b>{v === 'auto' ? `Automático (${pct(auto)})` : pct(v)}</b>
-              <small>{v === 'auto' ? 'Recomendado — acompanha a resolução da tela' : 'Tamanho fixo'}</small>
+              <b>{v === 'auto' ? tr('Automatic ({pct})', { pct: pct(auto) }) : pct(v)}</b>
+              <small>{v === 'auto' ? tr('Recommended — follows the screen resolution') : tr('Fixed size')}</small>
             </div>
           </button>
         ))}
@@ -490,47 +581,31 @@ function DisplaySection() {
   )
 }
 
-function ControllerSection() {
-  const [pads, setPads] = useState<PadSnapshot[]>([])
-  const last = useRef('')
-  useEffect(
-    () =>
-      input.onPads(next => {
-        const key = JSON.stringify(next.map(p => [p.id, p.buttons.map(b => b.toFixed(2)), p.axes.map(a => a.toFixed(2))]))
-        if (key !== last.current) {
-          last.current = key
-          setPads(next)
-        }
-      }),
-    [],
-  )
+function LanguageSection() {
+  const lang = useLang()
+  const choose = async (l: Lang) => {
+    setLang(l)
+    try {
+      await api.saveSettings({ lang: l })
+    } catch (e) {
+      toast(tr("Couldn't save"), (e as Error).message, 'error')
+    }
+  }
   return (
     <>
-      <h2 className="settings-title">Controle</h2>
-      <p className="settings-desc">Aperte os botões para testar. Trackpads funcionam como mouse e a tela é touch.</p>
-      {pads.length === 0 && <p className="muted">Nenhum controle detectado. Aperte qualquer botão.</p>}
-      {pads.map(p => (
-        <div key={p.index} className="pad">
-          <div className="pad-id">
-            {p.id} <span className="muted">({p.mapping || 'sem mapeamento'})</span>
-          </div>
-          <div className="pad-buttons">
-            {p.buttons.map((v, i) => (
-              <span key={i} className={`pad-btn ${v > 0.1 ? 'on' : ''}`}>
-                {BUTTON_NAMES[i] ?? `B${i}`}
-              </span>
-            ))}
-          </div>
-          <div className="sticks">
-            {[0, 2].map(i => (
-              <div key={i} className="stick">
-                <div className="knob" style={{ transform: `translate(${(p.axes[i] ?? 0) * 28}px, ${(p.axes[i + 1] ?? 0) * 28}px)` }} />
-                <span>{i === 0 ? 'L' : 'R'}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
+      <h2 className="settings-title">{tr('Language')}</h2>
+      <p className="settings-desc">{tr('The language of piShop. Game descriptions from Steam follow it too.')}</p>
+      <div className="settings-list">
+        {LANGS.map(([id, name]) => (
+          <button key={id} data-nav className={`settings-row ${lang === id ? 'selected' : ''}`} onClick={() => void choose(id)}>
+            <Icon name={lang === id ? 'check' : 'globe'} />
+            <div className="settings-row-main">
+              <b>{name}</b>
+              <small>{id === 'en' ? tr('Default') : tr('Brazilian Portuguese')}</small>
+            </div>
+          </button>
+        ))}
+      </div>
     </>
   )
 }
@@ -539,12 +614,12 @@ function AboutSection({ info }: { info: { version: string; addr: string } | null
   const [quitting, setQuitting] = useState(false)
   return (
     <>
-      <h2 className="settings-title">Sobre</h2>
+      <h2 className="settings-title">{tr('About')}</h2>
       <div className="about">
         <img src="/icon.svg" alt="" />
         <div>
           <b>piShop {info?.version}</b>
-          <small>Servidor local em {info?.addr}</small>
+          <small>{tr('Local server at {addr}', { addr: info?.addr ?? '' })}</small>
         </div>
       </div>
       <button
@@ -556,7 +631,7 @@ function AboutSection({ info }: { info: { version: string; addr: string } | null
           void api.quit().catch(() => {})
         }}
       >
-        {quitting ? 'Saindo…' : 'Sair do piShop'}
+        {quitting ? tr('Quitting…') : tr('Quit piShop')}
       </button>
     </>
   )

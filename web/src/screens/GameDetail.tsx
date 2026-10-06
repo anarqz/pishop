@@ -4,19 +4,20 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { type DiscoverGame, type GameMeta, type Trailer, api, imgUrl } from '../api'
+import { locale, tr } from '../i18n'
 import { focusFirst, input } from '../input'
 import { Glyph, Icon, Spinner, useHints } from '../ui'
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return null
   const d = new Date(iso.length === 10 ? `${iso}T12:00:00` : iso)
-  return isNaN(d.getTime()) ? null : d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+  return isNaN(d.getTime()) ? null : d.toLocaleDateString(locale(), { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 export function daysAgo(iso: string | null) {
   if (!iso) return ''
   const days = Math.round((Date.now() - new Date(`${iso}T12:00:00`).getTime()) / 86_400_000)
-  return days <= 0 ? 'hoje' : days === 1 ? 'ontem' : `há ${days} dias`
+  return days <= 0 ? tr('today') : days === 1 ? tr('yesterday') : tr('{n} days ago', { n: days })
 }
 
 export default function GameDetail({
@@ -106,11 +107,11 @@ export default function GameDetail({
   }, [view])
   useHints(
     view === 'trailer'
-      ? [{ glyph: 'B', label: 'Voltar' }, { glyph: 'Y', label: muted ? 'Ativar som' : 'Silenciar' }]
+      ? [{ glyph: 'B', label: tr('Back') }, { glyph: 'Y', label: muted ? tr('Unmute') : tr('Mute') }]
       : [
-          { glyph: 'A', label: 'Selecionar' },
-          { glyph: 'DPAD', label: 'Trailer ▲' },
-          { glyph: 'B', label: 'Voltar' },
+          { glyph: 'A', label: tr('Select') },
+          { glyph: 'DPAD', label: tr('Trailer ▲') },
+          { glyph: 'B', label: tr('Back') },
         ],
   )
 
@@ -128,12 +129,12 @@ export default function GameDetail({
   const year = (t?.release_date ?? game.release_date)?.slice(0, 4)
   const byline = [year, developers[0], genres.slice(0, 3).join(' · ')].filter(Boolean).join('  ·  ')
   const facts: Array<[string, string | null | undefined]> = [
-    ['Desenvolvedora', developers.join(', ')],
-    ['Publicadora', publishers.join(', ')],
-    ['Lançamento', fmtDate(game.release_date ?? t?.release_date) ?? st?.release_date],
-    ['Gêneros', genres.join(', ')],
-    ['Jogadores', t?.players ? String(t.players) : null],
-    ['Classificação', t?.rating],
+    [tr('Developer'), developers.join(', ')],
+    [tr('Publisher'), publishers.join(', ')],
+    [tr('Release date'), fmtDate(game.release_date ?? t?.release_date) ?? st?.release_date],
+    [tr('Genres'), genres.join(', ')],
+    [tr('Players'), t?.players ? String(t.players) : null],
+    [tr('Rating'), t?.rating],
   ]
   const source = st?.overview ? 'Steam' : t ? 'TheGamesDB' : null
 
@@ -147,7 +148,7 @@ export default function GameDetail({
           <div className="gd-body">
             <div className="gd-cover">{cover ? <img src={cover} alt="" draggable={false} /> : <Icon name="pad" size={64} />}</div>
             <div className="gd-main">
-              <span className="hero-kicker">Crackeado {daysAgo(game.crack_date)}</span>
+              <span className="hero-kicker">{tr('Cracked {when}', { when: daysAgo(game.crack_date) })}</span>
               <h1>{meta?.art?.name ?? game.title}</h1>
               {byline && <div className="gd-byline">{byline}</div>}
               <div className="gd-chips">
@@ -159,7 +160,7 @@ export default function GameDetail({
                 )}
                 {game.scene_group && (
                   <span className="gd-chip">
-                    <small>Grupo</small>
+                    <small>{tr('Group')}</small>
                     {game.scene_group}
                   </span>
                 )}
@@ -172,34 +173,34 @@ export default function GameDetail({
               </div>
               <div className="row gd-actions">
                 <button data-nav data-nav-default className="btn primary big" onClick={onSearch}>
-                  <Icon name="search" /> Buscar torrents
+                  <Icon name="search" /> {tr('Search torrents')}
                 </button>
                 <button data-nav className="btn big" onClick={() => setView('trailer')}>
-                  ▲ Assistir trailer
+                  ▲ {tr('Watch trailer')}
                 </button>
                 {appid && (
                   <button data-nav className="btn big" onClick={() => void api.openSteamStore(appid).catch(() => {})}>
-                    Abrir na Steam
+                    {tr('Open in Steam')}
                   </button>
                 )}
                 <button data-nav className="btn big" onClick={onClose}>
-                  Voltar
+                  {tr('Back')}
                 </button>
               </div>
               <div className="gd-info">
                 <p className="gd-overview">
                   {meta === null ? (
                     <>
-                      <Spinner /> Carregando detalhes…
+                      <Spinner /> {tr('Loading details…')}
                     </>
                   ) : (
-                    (overview ?? 'Sem sinopse disponível para este jogo.')
+                    (overview ?? tr('No synopsis available for this game.'))
                   )}
                 </p>
                 <dl className="gd-facts">
                   {source && (
                     <div>
-                      <dt>Fonte</dt>
+                      <dt>{tr('Source')}</dt>
                       <dd className="muted">{source}</dd>
                     </div>
                   )}
@@ -237,11 +238,11 @@ export default function GameDetail({
         )}
         {trailer.state === 'loading' && (
           <div className="gd-player-msg">
-            <Spinner /> Procurando o trailer…
+            <Spinner /> {tr('Looking for the trailer…')}
           </div>
         )}
         {(trailer.state === 'none' || trailer.state === 'error') && (
-          <div className="gd-player-msg">Nenhum trailer encontrado para este jogo.</div>
+          <div className="gd-player-msg">{tr('No trailer found for this game.')}</div>
         )}
         <div className={`gd-player-bar ${barVisible ? '' : 'hidden'}`}>
           <div className="gd-player-title">
@@ -249,10 +250,10 @@ export default function GameDetail({
             <b>{trailer.t?.title ?? ''}</b>
           </div>
           <button className="gd-player-ctl" tabIndex={-1} onClick={() => setView('details')}>
-            <Glyph name="B" /> Voltar
+            <Glyph name="B" /> {tr('Back')}
           </button>
           <button className="gd-player-ctl" tabIndex={-1} onClick={toggleMute}>
-            <Glyph name="Y" /> {muted ? 'Ativar som' : 'Silenciar'}
+            <Glyph name="Y" /> {muted ? tr('Unmute') : tr('Mute')}
           </button>
         </div>
       </div>

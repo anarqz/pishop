@@ -14,6 +14,7 @@ use tokio::sync::{OnceCell, Semaphore};
 
 use crate::titles::{self, Parsed};
 use crate::{data_dir, library, log, torrent, tpb};
+use crate::tr;
 
 static HTTP: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
@@ -139,7 +140,7 @@ pub async fn test(c: &Config) -> anyhow::Result<Value> {
 
 async fn prowlarr_get(c: &Config, path: &str, query: &[(&str, &str)]) -> anyhow::Result<Value> {
     if c.prowlarr_url.is_empty() || c.prowlarr_key.is_empty() {
-        bail!("configure o Prowlarr em Configurações → Serviços");
+        bail!(tr!("set up Prowlarr in Settings → Services", "configure o Prowlarr em Configurações → Serviços"));
     }
     let r = HTTP
         .get(format!("{}{}", c.prowlarr_url, path))
@@ -148,11 +149,11 @@ async fn prowlarr_get(c: &Config, path: &str, query: &[(&str, &str)]) -> anyhow:
         .timeout(Duration::from_secs(90))
         .send()
         .await
-        .map_err(|e| anyhow!("Prowlarr não respondeu: {e}"))?;
+        .map_err(|e| anyhow!(tr!("Prowlarr didn't respond: {e}", "Prowlarr não respondeu: {e}")))?;
     match r.status().as_u16() {
         200 => Ok(r.json().await?),
-        401 => bail!("a chave de API do Prowlarr foi recusada"),
-        s => bail!("Prowlarr respondeu {s}"),
+        401 => bail!(tr!("Prowlarr refused the API key", "a chave de API do Prowlarr foi recusada")),
+        s => bail!(tr!("Prowlarr answered {s}", "Prowlarr respondeu {s}")),
     }
 }
 
@@ -292,7 +293,7 @@ async fn tpb_search(c: &Config, query: &str, kind: &str) -> anyhow::Result<Vec<S
                     leechers: h.leechers,
                     grabs: None,
                     files: h.files,
-                    indexer: tpb::LABEL.to_string(),
+                    indexer: tpb::label(),
                     publish_date: tpb::iso8601(h.added),
                     info_url: None,
                     info_hash: Some(h.info_hash.clone()),
@@ -313,7 +314,7 @@ async fn search_uncached(query: &str, kind: &str) -> anyhow::Result<SearchOutcom
     let use_prowlarr = !c.prowlarr_url.is_empty() && !c.prowlarr_key.is_empty();
     let use_tpb = !c.tpb_url.is_empty();
     if !use_prowlarr && !use_tpb {
-        bail!("configure um indexador em Configurações → Serviços (Prowlarr ou The Pirate Bay)");
+        bail!(tr!("set up an indexer in Settings → Services (Prowlarr or The Pirate Bay)", "configure um indexador em Configurações → Serviços (Prowlarr ou The Pirate Bay)"));
     }
     let (prowlarr, native) = tokio::join!(
         async { if use_prowlarr { Some(prowlarr_search(&c, query, kind).await) } else { None } },
@@ -346,9 +347,10 @@ async fn search_uncached(query: &str, kind: &str) -> anyhow::Result<SearchOutcom
         };
         match by_hash.get(&hash) {
             Some(&i) => {
-                let cur = &unique[i].release;
-                let better = s.release.seeders > cur.seeders
-                    || (s.release.seeders == cur.seeders && s.release.indexer == tpb::LABEL && cur.indexer != tpb::LABEL);
+                let native = |x: &Stored| x.guid.starts_with("tpb:");
+                let cur = &unique[i];
+                let better = s.release.seeders > cur.release.seeders
+                    || (s.release.seeders == cur.release.seeders && native(&s) && !native(cur));
                 if better {
                     unique[i] = s;
                 }
@@ -377,7 +379,7 @@ async fn search_uncached(query: &str, kind: &str) -> anyhow::Result<SearchOutcom
 }
 
 fn stored(id: &str) -> anyhow::Result<Arc<Stored>> {
-    RELEASES.lock().unwrap().get(id).cloned().ok_or_else(|| anyhow!("resultado expirou; faça a busca de novo"))
+    RELEASES.lock().unwrap().get(id).cloned().ok_or_else(|| anyhow!(tr!("this result expired; search again", "resultado expirou; faça a busca de novo")))
 }
 
 // ---------- artwork (SteamGridDB public endpoints) ----------
@@ -460,7 +462,7 @@ async fn sgdb_search(term: &str, asset_type: &str) -> anyhow::Result<Value> {
         .send()
         .await?;
     if !r.status().is_success() {
-        bail!("SteamGridDB respondeu {}", r.status());
+        bail!(tr!("SteamGridDB answered {}", "SteamGridDB respondeu {}", r.status()));
     }
     Ok(r.json().await?)
 }
@@ -592,7 +594,7 @@ pub async fn image(url: &str) -> anyhow::Result<(Vec<u8>, String)> {
         || url.starts_with("https://store.akamai.steamstatic.com/")
         || (!iic_cdn.is_empty() && url.starts_with(&format!("{}/", iic_cdn)));
     if !allowed {
-        bail!("origem de imagem não permitida");
+        bail!(tr!("image source not allowed", "origem de imagem não permitida"));
     }
     let path = url.split('?').next().unwrap_or(url);
     let ext = path.rsplit('.').next().filter(|e| e.len() <= 4).unwrap_or("img").to_string();
@@ -663,11 +665,11 @@ async fn resolve_source(s: &Stored) -> anyhow::Result<Source> {
     if s.guid.starts_with("magnet:") {
         return Ok(Source::Magnet(s.guid.clone()));
     }
-    let url = s.magnet_url.as_deref().or(s.download_url.as_deref()).ok_or_else(|| anyhow!("o indexador não forneceu link"))?;
+    let url = s.magnet_url.as_deref().or(s.download_url.as_deref()).ok_or_else(|| anyhow!(tr!("the indexer didn't provide a link", "o indexador não forneceu link")))?;
     if url.starts_with("magnet:") {
         return Ok(Source::Magnet(url.to_string()));
     }
-    let r = HTTP_NOREDIRECT.get(url).send().await.context("Prowlarr não respondeu ao pedir o torrent")?;
+    let r = HTTP_NOREDIRECT.get(url).send().await.with_context(|| tr!("Prowlarr didn't respond when asked for the torrent", "Prowlarr não respondeu ao pedir o torrent"))?;
     if r.status().is_redirection() {
         let loc = r.headers().get("location").and_then(|l| l.to_str().ok()).unwrap_or_default().to_string();
         if loc.starts_with("magnet:") {
@@ -688,7 +690,7 @@ async fn resolve_source(s: &Stored) -> anyhow::Result<Source> {
 
 async fn rqbit_add(src: Source, query: &[(&str, &str)]) -> anyhow::Result<Value> {
     if !torrent::running() {
-        bail!("o motor de torrents ainda não está pronto; tente de novo em alguns segundos");
+        bail!(tr!("the torrent engine isn't ready yet; try again in a few seconds", "o motor de torrents ainda não está pronto; tente de novo em alguns segundos"));
     }
     let body = match src {
         Source::Magnet(m) => m.into_bytes(),
@@ -701,11 +703,11 @@ async fn rqbit_add(src: Source, query: &[(&str, &str)]) -> anyhow::Result<Value>
         .timeout(Duration::from_secs(120))
         .send()
         .await
-        .context("o motor de torrents não respondeu")?;
+        .with_context(|| tr!("the torrent engine didn't respond", "o motor de torrents não respondeu"))?;
     let status = r.status();
     let v: Value = r.json().await.unwrap_or(Value::Null);
     if !status.is_success() {
-        bail!("{}", v["human_readable"].as_str().or(v["error"].as_str()).unwrap_or("falha ao adicionar o torrent"));
+        bail!(v["human_readable"].as_str().or(v["error"].as_str()).map(String::from).unwrap_or_else(|| tr!("couldn't add the torrent", "falha ao adicionar o torrent")));
     }
     Ok(v)
 }
@@ -730,7 +732,7 @@ pub async fn download(id: &str, dest: Option<String>, hint: Option<library::Hint
     let src = resolve_source(&s).await?;
     let mut q: Vec<(&str, &str)> = vec![("overwrite", "true")];
     if let Some(d) = dest.as_deref() {
-        std::fs::create_dir_all(d).with_context(|| format!("não foi possível criar {d}"))?;
+        std::fs::create_dir_all(d).with_context(|| tr!("couldn't create {d}", "não foi possível criar {d}"))?;
         q.push(("output_folder", d));
     }
     let v = rqbit_add(src, &q).await?;

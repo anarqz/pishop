@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { type DiscoverGame, type GameMeta, api, imgUrl } from '../api'
+import { tr, trn } from '../i18n'
 import { focusFirst, input, keepFocus } from '../input'
 import { Glyph, Icon, Spinner, TextPrompt, useHints } from '../ui'
 import GameDetail, { daysAgo } from './GameDetail'
@@ -162,10 +163,10 @@ export default function Discover({ onPick }: { onPick: (game: DiscoverGame) => v
     prompt || open
       ? null
       : [
-          { glyph: 'A', label: 'Ver jogo' },
-          { glyph: 'MENU', label: 'Pesquisar' },
-          ...(!search ? [{ glyph: ['L2', 'R2'] as ['L2', 'R2'], label: 'Destaques' }] : []),
-          ...(search ? [{ glyph: 'B' as const, label: 'Limpar busca' }] : [{ glyph: 'L1' as const, label: 'Abas' }]),
+          { glyph: 'A', label: tr('View game') },
+          { glyph: 'MENU', label: tr('Search') },
+          ...(!search ? [{ glyph: ['L2', 'R2'] as ['L2', 'R2'], label: tr('Spotlight') }] : []),
+          ...(search ? [{ glyph: 'B' as const, label: tr('Clear search') }] : [{ glyph: 'L1' as const, label: tr('Tabs') }]),
         ],
   )
 
@@ -187,7 +188,7 @@ export default function Discover({ onPick }: { onPick: (game: DiscoverGame) => v
             />
             <div className="dsc-hero-shade" />
             <div className="dsc-hero-content" key={`c${hero.id}`}>
-              <span className="hero-kicker">Em destaque · crackeado {daysAgo(hero.crack_date)}</span>
+              <span className="hero-kicker">{tr('Featured · cracked {when}', { when: daysAgo(hero.crack_date) })}</span>
               <h1>{heroMetaState?.art?.name ?? hero.title}</h1>
               <div className="dsc-hero-meta">
                 {[hero.scene_group, hero.drm && `DRM ${hero.drm}`, hero.release_date?.slice(0, 4)].filter(Boolean).join('  ·  ')}
@@ -201,16 +202,16 @@ export default function Discover({ onPick }: { onPick: (game: DiscoverGame) => v
                   className="btn primary big"
                   onClick={() => openGame(hero)}
                 >
-                  Ver jogo
+                  {tr('View game')}
                 </button>
                 <button data-nav data-nav-down='[data-nav-id="dsc-search"]' className="btn big" onClick={() => onPick(hero)}>
-                  <Icon name="search" /> Buscar torrents
+                  <Icon name="search" /> {tr('Search torrents')}
                 </button>
               </div>
             </div>
             {featuredGames.length > 1 && (
               <div className="dsc-carousel">
-                <button className="dsc-flip" tabIndex={-1} onClick={() => flip(-1)} aria-label="Destaque anterior">
+                <button className="dsc-flip" tabIndex={-1} onClick={() => flip(-1)} aria-label={tr('Previous featured game')}>
                   <Glyph name="L2" /> ‹
                 </button>
                 <div className="dsc-dots">
@@ -218,7 +219,7 @@ export default function Discover({ onPick }: { onPick: (game: DiscoverGame) => v
                     <span key={g.id} className={i === featured % featuredGames.length ? 'on' : ''} />
                   ))}
                 </div>
-                <button className="dsc-flip" tabIndex={-1} onClick={() => flip(1)} aria-label="Próximo destaque">
+                <button className="dsc-flip" tabIndex={-1} onClick={() => flip(1)} aria-label={tr('Next featured game')}>
                   › <Glyph name="R2" />
                 </button>
               </div>
@@ -238,10 +239,10 @@ export default function Discover({ onPick }: { onPick: (game: DiscoverGame) => v
             onClick={() => setPrompt(true)}
           >
             <Icon name="search" />
-            <span className={`searchbar-text ${search ? '' : 'placeholder'}`}>{search || 'Buscar jogos crackeados…'}</span>
+            <span className={`searchbar-text ${search ? '' : 'placeholder'}`}>{search || tr('Search cracked games…')}</span>
             {loading && (
               <span className="searchbar-busy">
-                <Spinner /> Carregando…
+                <Spinner /> {tr('Loading…')}
               </span>
             )}
           </button>
@@ -249,23 +250,23 @@ export default function Discover({ onPick }: { onPick: (game: DiscoverGame) => v
 
         {error && (
           <div className="store-msg error">
-            <b>Não foi possível carregar</b>
+            <b>{tr("Couldn't load")}</b>
             <span>{error}</span>
             <button data-nav className="btn" onClick={() => load(items.length, search)}>
-              Tentar de novo
+              {tr('Try again')}
             </button>
           </div>
         )}
 
         <section className="dsc-catalog">
           <div className="dsc-catalog-head">
-            <h3 className="dsc-row-title">{search ? `Resultados para “${search}”` : 'Cracks recentes'}</h3>
-            <span className="sort-label">{total ? `${Math.min(items.length, total)} de ${total} jogos` : ''}</span>
+            <h3 className="dsc-row-title">{search ? tr('Results for “{q}”', { q: search }) : tr('Recent cracks')}</h3>
+            <span className="sort-label">{total ? trn(total, '{shown} of {n} game', '{shown} of {n} games', { shown: Math.min(items.length, total) }) : ''}</span>
           </div>
-          {!error && !loading && items.length === 0 && <div className="store-msg">Nenhum jogo encontrado.</div>}
+          {!error && !loading && items.length === 0 && <div className="store-msg">{tr('No games found.')}</div>}
           {items.length === 0 && loading && (
             <div className="store-msg">
-              <Spinner /> Carregando…
+              <Spinner /> {tr('Loading…')}
             </div>
           )}
           <div className="grid">
@@ -286,20 +287,20 @@ export default function Discover({ onPick }: { onPick: (game: DiscoverGame) => v
           <div ref={sentinel} className="sentinel">
             {loading && items.length > 0 && (
               <>
-                <Spinner /> Carregando mais…
+                <Spinner /> {tr('Loading more…')}
               </>
             )}
-            {!hasMore && items.length > 0 && <span className="muted">Você viu todos os {total} jogos</span>}
+            {!hasMore && items.length > 0 && <span className="muted">{tr("You've seen all {total} games", { total })}</span>}
           </div>
         </section>
       </div>
 
       {prompt && (
         <TextPrompt
-          title="Pesquisar jogos crackeados"
-          placeholder="Nome do jogo"
+          title={tr('Search cracked games')}
+          placeholder={tr('Game name')}
           initial={search}
-          submitLabel="Pesquisar"
+          submitLabel={tr('Search')}
           onCancel={() => setPrompt(false)}
           onSubmit={v => {
             setPrompt(false)

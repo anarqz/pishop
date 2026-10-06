@@ -11,6 +11,8 @@ mod library;
 mod localfs;
 mod log;
 mod server;
+mod services_file;
+mod settings;
 mod smbfs;
 mod sources;
 mod steam;

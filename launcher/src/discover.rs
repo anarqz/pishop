@@ -6,6 +6,7 @@ use std::time::Duration;
 use anyhow::bail;
 use serde::Serialize;
 use serde_json::{Value, json};
+use crate::tr;
 
 /// Endpoint, key and CDN come from Settings → Serviços.
 struct Api {
@@ -17,7 +18,7 @@ struct Api {
 fn api() -> anyhow::Result<Api> {
     let c = crate::catalog::config();
     if c.iic_url.trim().is_empty() || c.iic_key.trim().is_empty() {
-        bail!("configure o isitcracked em Configurações → Serviços");
+        bail!(tr!("set up isitcracked in Settings → Services", "configure o isitcracked em Configurações → Serviços"));
     }
     Ok(Api { url: c.iic_url.trim().to_string(), key: c.iic_key.trim().to_string(), cdn: c.iic_cdn.trim().trim_end_matches('/').to_string() })
 }
@@ -75,7 +76,7 @@ async fn page_with(a: &Api, search: Option<&str>, offset: u64, limit: u64) -> an
         .send()
         .await?;
     if !r.status().is_success() {
-        bail!("isitcracked respondeu {}", r.status());
+        bail!(tr!("isitcracked answered {}", "isitcracked respondeu {}", r.status()));
     }
     let rows: Vec<Value> = r.json().await?;
     let total = rows.first().and_then(|g| g["total_count"].as_u64()).unwrap_or(0);

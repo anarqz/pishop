@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react'
 import { type LibraryEntry, api, formatEta, imgUrl } from '../api'
+import { locale, tr, trn } from '../i18n'
 import { type TorrentInfo, destroy, forget, formatBytes, useEngineState } from '../torrent'
 import { Dialog, Icon, toast } from '../ui'
 
@@ -49,9 +50,9 @@ export const seeding = (t: TorrentInfo) => t.finished && !t.error && t.state ===
 
 /** X on a download: pause while downloading, stop sharing once finished, resume otherwise. */
 export function toggleLabel(t: TorrentInfo) {
-  if (t.error) return 'Tentar de novo'
-  if (t.state === 'paused') return 'Retomar'
-  return t.finished ? 'Parar' : 'Pausar'
+  if (t.error) return tr('Try again')
+  if (t.state === 'paused') return tr('Resume')
+  return t.finished ? tr('Stop') : tr('Pause')
 }
 
 const ORDER: Record<DlState, number> = { active: 0, checking: 1, paused: 2, error: 3, done: 4 }
@@ -107,7 +108,7 @@ function Ring({ t, state }: { t: TorrentInfo; state: DlState }) {
           </>
         )}
       </span>
-      {state === 'paused' && <span className="ring-note">Pausado</span>}
+      {state === 'paused' && <span className="ring-note">{tr('Paused')}</span>}
     </div>
   )
 }
@@ -124,24 +125,28 @@ function Cover({ name, cover }: { name: string; cover?: string | null }) {
   )
 }
 
+/** "{done} of {total}" for a torrent's bytes. */
+const doneOfTotal = (t: TorrentInfo) =>
+  tr('{done} of {total}', { done: formatBytes(t.progress * t.totalBytes), total: formatBytes(t.totalBytes) })
+
 /** The two short lines under a cover. */
 function tileLines(t: TorrentInfo, state: DlState): [string, string] {
-  const done = t.progress * t.totalBytes
   switch (state) {
     case 'active': {
+      const done = t.progress * t.totalBytes
       const eta = t.downloadSpeed > 0 ? formatEta((t.totalBytes - done) / t.downloadSpeed) : ''
-      return [`↓ ${formatBytes(t.downloadSpeed)}/s${eta ? ` · ${eta}` : ''}`, `${formatBytes(done)} de ${formatBytes(t.totalBytes)}`]
+      return [`↓ ${formatBytes(t.downloadSpeed)}/s${eta ? ` · ${eta}` : ''}`, doneOfTotal(t)]
     }
     case 'checking':
-      return ['Preparando…', t.totalBytes ? formatBytes(t.totalBytes) : 'Buscando o torrent']
+      return [tr('Preparing…'), t.totalBytes ? formatBytes(t.totalBytes) : tr('Fetching the torrent')]
     case 'paused':
-      return ['Pausado', `${formatBytes(done)} de ${formatBytes(t.totalBytes)}`]
+      return [tr('Paused'), doneOfTotal(t)]
     case 'error':
-      return ['Erro no download', t.error ?? '']
+      return [tr('Download error'), t.error ?? '']
     case 'done':
       return [
-        seeding(t) ? `Concluído · ↑ ${formatBytes(t.uploadSpeed)}/s` : 'Concluído',
-        `${formatBytes(t.totalBytes)} · ${t.files.length} ${t.files.length === 1 ? 'arquivo' : 'arquivos'}`,
+        seeding(t) ? `${tr('Complete')} · ↑ ${formatBytes(t.uploadSpeed)}/s` : tr('Complete'),
+        `${formatBytes(t.totalBytes)} · ${trn(t.files.length, '{n} file', '{n} files')}`,
       ]
   }
 }
@@ -183,12 +188,20 @@ export function DownloadTile({
   )
 }
 
-const STATUS: Record<DlState, string> = {
-  active: 'Baixando',
-  checking: 'Preparando',
-  paused: 'Pausado',
-  done: 'Concluído',
-  error: 'Erro',
+/** Kicker of the panel on top (translated at render time). */
+function statusLabel(state: DlState) {
+  switch (state) {
+    case 'active':
+      return tr('Downloading')
+    case 'checking':
+      return tr('Preparing')
+    case 'paused':
+      return tr('Paused')
+    case 'done':
+      return tr('Complete')
+    case 'error':
+      return tr('Error')
+  }
 }
 
 /** Panel on top: the focused download with the game's art and details. */
@@ -201,12 +214,12 @@ export function DownloadHero({ t, entry }: { t: TorrentInfo; entry?: LibraryEntr
   const chips = [g?.year, g?.platform, ...(g?.genres ?? []).slice(0, 2), g?.scene_group, g?.drm && `DRM ${g.drm}`].filter(Boolean)
   const byline = [g?.developers?.[0], g?.publishers?.[0] !== g?.developers?.[0] ? g?.publishers?.[0] : null].filter(Boolean).join(' · ')
   const facts: Array<[string, string]> = [
-    ['Progresso', `${pctOf(t)}%`],
-    ['Baixado', `${formatBytes(done)} de ${formatBytes(t.totalBytes)}`],
-    ...(state === 'active' ? ([['Download', `${formatBytes(t.downloadSpeed)}/s`]] as Array<[string, string]>) : []),
-    ...(eta ? ([['Restante', eta]] as Array<[string, string]>) : []),
-    ...(seeding(t) || t.uploadSpeed > 0 ? ([['Envio', `${formatBytes(t.uploadSpeed)}/s`]] as Array<[string, string]>) : []),
-    ['Peers', String(t.peers)],
+    [tr('Progress'), `${pctOf(t)}%`],
+    [tr('Downloaded'), doneOfTotal(t)],
+    ...(state === 'active' ? ([[tr('Download speed'), `${formatBytes(t.downloadSpeed)}/s`]] as Array<[string, string]>) : []),
+    ...(eta ? ([[tr('Time left'), eta]] as Array<[string, string]>) : []),
+    ...(seeding(t) || t.uploadSpeed > 0 ? ([[tr('Upload speed'), `${formatBytes(t.uploadSpeed)}/s`]] as Array<[string, string]>) : []),
+    [tr('Peers'), String(t.peers)],
   ]
   return (
     <section className="dl-hero" key={t.id}>
@@ -214,8 +227,8 @@ export function DownloadHero({ t, entry }: { t: TorrentInfo; entry?: LibraryEntr
       <div className="dl-hero-shade" />
       <div className="dl-hero-content">
         <span className={`dl-kicker ${state}`}>
-          {STATUS[state]}
-          {state === 'done' ? (seeding(t) ? ' · compartilhando' : ' · parado') : ''}
+          {statusLabel(state)}
+          {state === 'done' ? ` · ${seeding(t) ? tr('sharing') : tr('stopped')}` : ''}
         </span>
         <h2>{name}</h2>
         {byline && <span className="dl-byline">{byline}</span>}
@@ -244,28 +257,28 @@ export function DownloadHero({ t, entry }: { t: TorrentInfo; entry?: LibraryEntr
 }
 
 function fmtDate(secs: number) {
-  return new Date(secs * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+  return new Date(secs * 1000).toLocaleDateString(locale(), { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-/** A: "Ver detalhes" — placeholder for the install flow that comes next. */
+/** A: "View details" — placeholder for the install flow that comes next. */
 export function DetailsDialog({ t, entry, onClose }: { t: TorrentInfo; entry?: LibraryEntry; onClose: () => void }) {
   const name = entry?.game.name ?? t.name
   const folder = (entry?.dest ?? t.outputFolder).replace(/^\/home\/[^/]+/, '~')
   const g = entry?.game
   const rows: Array<[string, string | null | undefined]> = [
-    ['Desenvolvedora', g?.developers?.join(', ')],
-    ['Publicadora', g?.publishers?.join(', ')],
-    ['Lançamento', g?.release_date],
-    ['Gêneros', g?.genres?.join(', ')],
-    ['Torrent', entry?.release ?? t.name],
-    ['Origem', entry?.indexer],
-    ['Tamanho', `${formatBytes(t.totalBytes)} · ${t.files.length} ${t.files.length === 1 ? 'arquivo' : 'arquivos'}`],
-    ['Pasta', folder],
-    ['Adicionado', entry ? fmtDate(entry.added) : null],
-    ['Dados do jogo', g?.sources?.length ? g.sources.join(' → ') : null],
+    [tr('Developer'), g?.developers?.join(', ')],
+    [tr('Publisher'), g?.publishers?.join(', ')],
+    [tr('Release date'), g?.release_date],
+    [tr('Genres'), g?.genres?.join(', ')],
+    [tr('Torrent'), entry?.release ?? t.name],
+    [tr('Found on'), entry?.indexer],
+    [tr('Size'), `${formatBytes(t.totalBytes)} · ${trn(t.files.length, '{n} file', '{n} files')}`],
+    [tr('Folder'), folder],
+    [tr('Added'), entry ? fmtDate(entry.added) : null],
+    [tr('Game data'), g?.sources?.length ? g.sources.join(' → ') : null],
   ]
   return (
-    <Dialog title={name} onClose={onClose} wide hints={[{ glyph: 'B', label: 'Voltar' }]}>
+    <Dialog title={name} onClose={onClose} wide hints={[{ glyph: 'B', label: tr('Back') }]}>
       <div className="dl-details">
         <div className="dl-cover small" style={{ ['--h' as string]: hue(name) }}>
           <Cover name={name} cover={entry?.game.cover} />
@@ -285,11 +298,11 @@ export function DetailsDialog({ t, entry, onClose }: { t: TorrentInfo; entry?: L
         </div>
       </div>
       <p className="dl-soon">
-        <Icon name="info" size={18} /> Em breve: instalar o jogo e criar o atalho na Steam direto daqui.
+        <Icon name="info" size={18} /> {tr('Coming soon: install the game and add it to Steam right from here.')}
       </p>
       <div className="dialog-actions">
         <button data-nav data-nav-default className="btn" onClick={onClose}>
-          Fechar
+          {tr('Close')}
         </button>
       </div>
     </Dialog>
@@ -303,25 +316,25 @@ export function DeleteDialog({ t, entry, onClose }: { t: TorrentInfo; entry?: Li
     onClose()
     p.then(() => api.forgetLibrary(t.infoHash).catch(() => {}))
       .then(() => toast(done, name, 'ok'))
-      .catch(e => toast('Não foi possível excluir', String((e as Error).message), 'error'))
+      .catch(e => toast(tr("Couldn't delete the transfer"), String((e as Error).message), 'error'))
   }
   return (
-    <Dialog title={`Excluir ${name}?`} onClose={onClose}>
+    <Dialog title={tr('Delete {name}?', { name })} onClose={onClose}>
       <div className="menu-list">
-        <button data-nav data-nav-default className="menu-item" onClick={() => run(forget(t.id), 'Transferência excluída')}>
-          Excluir a transferência
+        <button data-nav data-nav-default className="menu-item" onClick={() => run(forget(t.id), tr('Transfer deleted'))}>
+          {tr('Delete the transfer')}
           <small>
             {t.finished
-              ? 'Tira da lista; os arquivos baixados ficam no aparelho'
-              : 'Para o download e tira da lista; o que já baixou fica no aparelho'}
+              ? tr('Removes it from the list; the downloaded files stay on the device')
+              : tr('Stops the download and removes it from the list; what was downloaded stays on the device')}
           </small>
         </button>
-        <button data-nav className="menu-item danger" onClick={() => run(destroy(t.id), 'Transferência e dados excluídos')}>
-          Excluir também os dados
-          <small>Apaga os {formatBytes(t.progress * t.totalBytes)} já baixados</small>
+        <button data-nav className="menu-item danger" onClick={() => run(destroy(t.id), tr('Transfer and data deleted'))}>
+          {tr('Also delete the data')}
+          <small>{tr('Erases the {size} already downloaded', { size: formatBytes(t.progress * t.totalBytes) })}</small>
         </button>
         <button data-nav className="menu-item" onClick={onClose}>
-          Cancelar
+          {tr('Cancel')}
         </button>
       </div>
     </Dialog>

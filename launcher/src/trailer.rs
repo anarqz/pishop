@@ -10,6 +10,7 @@ use anyhow::{anyhow, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::{data_dir, log};
+use crate::tr;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Trailer {
@@ -55,10 +56,10 @@ pub async fn find(name: &str) -> anyhow::Result<Option<Trailer>> {
             .output(),
     )
     .await
-    .map_err(|_| anyhow!("yt-dlp demorou demais"))?
-    .map_err(|e| anyhow!("yt-dlp indisponível: {e}"))?;
+    .map_err(|_| anyhow!(tr!("yt-dlp took too long", "yt-dlp demorou demais")))?
+    .map_err(|e| anyhow!(tr!("yt-dlp unavailable: {e}", "yt-dlp indisponível: {e}")))?;
     if !out.status.success() {
-        bail!("yt-dlp falhou: {}", String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or(""));
+        bail!(tr!("yt-dlp failed: {}", "yt-dlp falhou: {}", String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or("")));
     }
     let text = String::from_utf8_lossy(&out.stdout);
     let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty());

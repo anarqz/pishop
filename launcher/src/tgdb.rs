@@ -13,6 +13,7 @@ use serde_json::Value;
 use tokio::sync::Mutex as AsyncMutex;
 
 use crate::{data_dir, log, titles};
+use crate::tr;
 
 const API: &str = "https://api.thegamesdb.net";
 const PC_PLATFORM: i64 = 1;
@@ -89,7 +90,7 @@ fn cached(key: &str) -> Option<Option<GameInfo>> {
 static INFLIGHT: AsyncMutex<()> = AsyncMutex::const_new(());
 
 async fn get(path: &str, query: &[(&str, &str)]) -> anyhow::Result<Value> {
-    get_with(&key().ok_or_else(|| anyhow::anyhow!("TheGamesDB não configurado"))?, path, query).await
+    get_with(&key().ok_or_else(|| anyhow::anyhow!(tr!("TheGamesDB isn't set up", "TheGamesDB não configurado")))?, path, query).await
 }
 
 async fn get_with(k: &str, path: &str, query: &[(&str, &str)]) -> anyhow::Result<Value> {

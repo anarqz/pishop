@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
+use crate::tr;
 
 #[derive(Serialize, Clone, Debug)]
 pub struct Entry {
@@ -83,19 +84,19 @@ pub fn places() -> Vec<Place> {
     }
     for (i, dir) in rom_dirs.into_iter().filter(|d| d.is_dir()).enumerate() {
         let on_sd = !dir.starts_with(&home);
-        let label = if on_sd { "ROMs (cartão SD)" } else { "ROMs (EmuDeck)" };
-        list.push((format!("roms{i}"), label.into(), dir, "roms"));
+        let label = if on_sd { tr!("ROMs (SD card)", "ROMs (cartão SD)") } else { "ROMs (EmuDeck)".into() };
+        list.push((format!("roms{i}"), label, dir, "roms"));
     }
     for sd in sd_cards() {
         let name = sd.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        list.push((format!("sd:{name}"), format!("Cartão SD ({name})"), sd, "sd"));
+        list.push((format!("sd:{name}"), tr!("SD card ({name})", "Cartão SD ({name})"), sd, "sd"));
     }
     let emus = home.join("Emulation");
     if emus.is_dir() {
         list.push(("emulation".into(), "Emulation".into(), emus, "folder"));
     }
     list.push(("downloads".into(), "Downloads".into(), home.join("Downloads"), "download"));
-    list.push(("home".into(), "Pasta pessoal".into(), home.clone(), "home"));
+    list.push(("home".into(), tr!("Home folder", "Pasta pessoal"), home.clone(), "home"));
 
     list.into_iter()
         .map(|(id, label, path, icon)| {

@@ -15,6 +15,7 @@ use smb::ReadAt;
 use tokio::sync::Notify;
 
 use crate::{localfs, log, smbfs, sources};
+use crate::tr;
 
 const CHUNK: u64 = 1 << 20;
 const READERS: usize = 8;
@@ -112,9 +113,9 @@ pub fn list() -> Vec<Job> {
 }
 
 pub fn enqueue(source_id: &str, dest_dir: &str, items: Vec<NewItem>) -> anyhow::Result<Vec<u64>> {
-    let src = sources::get(source_id).ok_or_else(|| anyhow!("fonte não encontrada"))?;
+    let src = sources::get(source_id).ok_or_else(|| anyhow!(tr!("source not found", "fonte não encontrada")))?;
     if !Path::new(dest_dir).is_dir() {
-        bail!("a pasta de destino não existe");
+        bail!(tr!("the destination folder doesn't exist", "a pasta de destino não existe"));
     }
     let mut st = STATE.lock().unwrap();
     let mut ids = Vec::new();
@@ -247,7 +248,7 @@ struct FileTask {
 }
 
 async fn run(job: &Job, cancel: &Arc<AtomicBool>) -> anyhow::Result<()> {
-    let src = sources::get(&job.source_id).ok_or_else(|| anyhow!("a fonte \"{}\" foi removida", job.source_name))?;
+    let src = sources::get(&job.source_id).ok_or_else(|| anyhow!(tr!("the source \"{}\" was removed", "a fonte \"{}\" foi removida", job.source_name)))?;
     let root = Path::new(&job.dest_dir).join(&job.name);
     update(job.id, |j| {
         j.status = Status::Scanning;
@@ -272,7 +273,7 @@ async fn run(job: &Job, cancel: &Arc<AtomicBool>) -> anyhow::Result<()> {
                 inflight.abort_all();
                 return Ok(());
             }
-            let (listing, remote, local) = done.map_err(|e| anyhow!("varredura falhou: {e}"))?;
+            let (listing, remote, local) = done.map_err(|e| anyhow!(tr!("scan failed: {e}", "varredura falhou: {e}")))?;
             for e in listing? {
                 let r = format!("{remote}/{}", e.name);
                 let l = local.join(&e.name);
@@ -310,11 +311,7 @@ async fn run(job: &Job, cancel: &Arc<AtomicBool>) -> anyhow::Result<()> {
     let needed = total - done_bytes;
     if let Some((free, _)) = localfs::disk_space(Path::new(&job.dest_dir)) {
         if needed > free {
-            bail!(
-                "espaço insuficiente: precisa de {}, livre {}",
-                human(needed),
-                human(free)
-            );
+            bail!(tr!("not enough space: needs {}, {} free", "espaço insuficiente: precisa de {}, livre {}", human(needed), human(free)));
         }
     }
     let (n, t) = (files.len() as u64 + done_files, total);
@@ -379,7 +376,7 @@ async fn copy_all(
                         return Ok(());
                     }
                     if attempt >= FILE_ATTEMPTS {
-                        return Err(e.context(format!("ao copiar \"{}\"", f.remote)));
+                        return Err(e.context(tr!("copying \"{}\"", "ao copiar \"{}\"", f.remote)));
                     }
                     log!("job {}: tentativa {attempt} falhou ({e:#}), repetindo", job.id);
                     tokio::time::sleep(Duration::from_secs(attempt as u64)).await;
@@ -430,7 +427,7 @@ async fn copy_file(
                 while got < want {
                     let n = remote.read_at(&mut buf[got..want], off + got as u64).await?;
                     if n == 0 {
-                        return Err(anyhow!("o arquivo terminou antes do esperado"));
+                        return Err(anyhow!(tr!("the file ended earlier than expected", "o arquivo terminou antes do esperado")));
                     }
                     got += n;
                 }
@@ -444,7 +441,7 @@ async fn copy_file(
         match r.await {
             Ok(Ok(())) => {}
             Ok(Err(e)) => result = Err(e),
-            Err(e) => result = Err(anyhow!("leitor falhou: {e}")),
+            Err(e) => result = Err(anyhow!(tr!("reader failed: {e}", "leitor falhou: {e}"))),
         }
     }
     let _ = remote.close().await;

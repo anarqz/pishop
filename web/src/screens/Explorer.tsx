@@ -6,6 +6,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { type Entry, type Place, type Source, api, formatBytes, joinPath, parentPath } from '../api'
 import { type Action, focusFirst, input } from '../input'
 import { guessSystem } from '../systems'
+import { tr, trn } from '../i18n'
 import { Dialog, type Hint, Icon, Spinner, TextPrompt, toast, useHints } from '../ui'
 
 const ROW_H = 46
@@ -307,22 +308,22 @@ export default function Explorer({ sources, places, onGoSettings }: {
 
   const hints: Hint[] = head[active]
     ? [
-        { glyph: 'DPAD', label: active === 0 ? 'Trocar fonte' : 'Trocar local' },
-        { glyph: 'B', label: 'Lista' },
+        { glyph: 'DPAD', label: active === 0 ? tr('Switch source') : tr('Switch location') },
+        { glyph: 'B', label: tr('List') },
       ]
     : active === 0
       ? [
-          { glyph: 'A', label: 'Abrir' },
-          { glyph: 'X', label: 'Marcar' },
-          { glyph: 'Y', label: marked.size ? `Copiar ${marked.size}` : 'Copiar' },
-          { glyph: 'MENU', label: 'Buscar' },
-          { glyph: 'B', label: 'Voltar' },
+          { glyph: 'A', label: tr('Open') },
+          { glyph: 'X', label: tr('Mark') },
+          { glyph: 'Y', label: marked.size ? tr('Copy {n}', { n: marked.size }) : tr('Copy') },
+          { glyph: 'MENU', label: tr('Search') },
+          { glyph: 'B', label: tr('Back') },
         ]
       : [
-          { glyph: 'A', label: 'Abrir' },
-          { glyph: 'Y', label: 'Nova pasta' },
-          { glyph: 'MENU', label: 'Buscar' },
-          { glyph: 'B', label: 'Voltar' },
+          { glyph: 'A', label: tr('Open') },
+          { glyph: 'Y', label: tr('New folder') },
+          { glyph: 'MENU', label: tr('Search') },
+          { glyph: 'B', label: tr('Back') },
         ]
   useHints(dialog ? null : hints)
 
@@ -330,10 +331,10 @@ export default function Explorer({ sources, places, onGoSettings }: {
     return (
       <div className="empty-state" data-nav-scope>
         <Icon name="network" size={56} />
-        <h2>Nenhuma fonte configurada</h2>
-        <p>Adicione um armazenamento de rede (SMB) para navegar pelos seus jogos.</p>
+        <h2>{tr('No sources set up')}</h2>
+        <p>{tr('Add a network storage (SMB) to browse your games.')}</p>
         <button data-nav data-nav-default className="btn primary" onClick={onGoSettings}>
-          Adicionar armazenamento de rede
+          {tr('Add network storage')}
         </button>
       </div>
     )
@@ -347,7 +348,7 @@ export default function Explorer({ sources, places, onGoSettings }: {
         side={0}
         active={active === 0}
         headFocused={head[0]}
-        kind="ORIGEM"
+        kind={tr('FROM')}
         title={source?.name ?? ''}
         subtitle={`\\\\${source?.host}\\${source?.share}`}
         icon="network"
@@ -374,9 +375,9 @@ export default function Explorer({ sources, places, onGoSettings }: {
         side={1}
         active={active === 1}
         headFocused={head[1]}
-        kind="DESTINO"
+        kind={tr('TO')}
         title={place?.label ?? ''}
-        subtitle={place ? `${formatBytes(freeRight)} livres` : ''}
+        subtitle={place ? tr('{size} free', { size: formatBytes(freeRight) }) : ''}
         icon={place?.icon ?? 'folder'}
         canCycle={places.length > 1}
         path={right.path}
@@ -410,16 +411,16 @@ export default function Explorer({ sources, places, onGoSettings }: {
           onQueued={n => {
             setDialog(null)
             setMarked(new Set())
-            toast(`${n} ${n === 1 ? 'item adicionado' : 'itens adicionados'} à fila`, 'Acompanhe em Transferências (R1)', 'ok')
+            toast(trn(n, '{n} item added to the queue', '{n} items added to the queue'), tr('Track it in Transfers (R1)'), 'ok')
           }}
         />
       )}
       {dialog === 'filter' && (
         <TextPrompt
-          title={active === 0 ? 'Buscar na origem' : 'Buscar no destino'}
-          placeholder="Parte do nome…"
+          title={active === 0 ? tr('Search the source') : tr('Search the destination')}
+          placeholder={tr('Part of the name…')}
           initial={filters[active]}
-          submitLabel="Filtrar"
+          submitLabel={tr('Filter')}
           onCancel={() => setDialog(null)}
           onSubmit={v => {
             setFilters(f => (active === 0 ? [v, f[1]] : [f[0], v]))
@@ -431,9 +432,9 @@ export default function Explorer({ sources, places, onGoSettings }: {
       )}
       {dialog === 'mkdir' && (
         <TextPrompt
-          title={`Nova pasta em ${right.path}`}
-          placeholder="Nome da pasta"
-          submitLabel="Criar"
+          title={tr('New folder in {path}', { path: right.path })}
+          placeholder={tr('Folder name')}
+          submitLabel={tr('Create')}
           validate={v => v.length > 0 && !v.includes('/')}
           onCancel={() => setDialog(null)}
           onSubmit={async v => {
@@ -441,9 +442,9 @@ export default function Explorer({ sources, places, onGoSettings }: {
             try {
               await api.mkdir(joinPath(right.path, v))
               local.reload()
-              toast('Pasta criada', v, 'ok')
+              toast(tr('Folder created'), v, 'ok')
             } catch (e) {
-              toast('Não foi possível criar a pasta', String((e as Error).message), 'error')
+              toast(tr("Couldn't create the folder"), String((e as Error).message), 'error')
             }
           }}
         />
@@ -464,11 +465,11 @@ function statusLine(entries: Entry[] | undefined, marked: Set<string>, filter: s
   if (!entries) return ''
   const dirs = entries.filter(e => e.dir).length
   const files = entries.length - dirs
-  const parts = [`${dirs} pastas`, `${files} arquivos`]
-  if (filter) parts.push(`filtro “${filter}”`)
+  const parts = [trn(dirs, '{n} folder', '{n} folders'), trn(files, '{n} file', '{n} files')]
+  if (filter) parts.push(tr('filter “{filter}”', { filter }))
   if (marked.size) {
     const size = entries.filter(e => marked.has(e.name)).reduce((s, e) => s + e.size, 0)
-    parts.push(`${marked.size} marcados${size ? ` (${formatBytes(size)}+)` : ''}`)
+    parts.push(trn(marked.size, '{n} item marked', '{n} items marked') + (size ? ` (${formatBytes(size)}+)` : ''))
   }
   return parts.join(' · ')
 }
@@ -552,20 +553,20 @@ function Pane(props: {
       <div className="pane-list" ref={listRef}>
         {props.loading && (
           <div className="pane-msg">
-            <Spinner /> Carregando…
+            <Spinner /> {tr('Loading…')}
           </div>
         )}
         {props.error && !props.loading && (
           <div className="pane-msg error">
-            <b>Não foi possível listar</b>
+            <b>{tr("Couldn't list this folder")}</b>
             <span>{props.error}</span>
             <button className="btn small" onClick={props.onRetry}>
-              Tentar de novo
+              {tr('Try again')}
             </button>
           </div>
         )}
         {!props.loading && !props.error && rows.length === 0 && (
-          <div className="pane-msg">{props.filter ? 'Nada encontrado com esse filtro' : 'Pasta vazia'}</div>
+          <div className="pane-msg">{props.filter ? tr('Nothing matches this filter') : tr('Empty folder')}</div>
         )}
         <div className="rows" style={{ height: rows.length * ROW_H, transform: `translateY(${-top * ROW_H}px)` }}>
           {slice.map((row, k) => {
@@ -584,7 +585,7 @@ function Pane(props: {
                   <>
                     <Icon name="up" />
                     <span className="frow-name">..</span>
-                    <span className="frow-meta">Voltar</span>
+                    <span className="frow-meta">{tr('Back')}</span>
                   </>
                 ) : (
                   <>
@@ -666,47 +667,51 @@ function CopyDialog({
         onQueued(items.length)
       } catch (e) {
         setBusy(false)
-        toast('Não foi possível adicionar à fila', String((e as Error).message), 'error')
+        toast(tr("Couldn't add to the queue"), String((e as Error).message), 'error')
       }
     },
     [items, onQueued, remotePath, source.id],
   )
 
   return (
-    <Dialog title={items.length === 1 ? `Copiar “${items[0].name}”` : `Copiar ${items.length} itens`} onClose={onClose} wide>
+    <Dialog
+      title={items.length === 1 ? tr('Copy “{name}”', { name: items[0].name }) : tr('Copy {n} items', { n: items.length })}
+      onClose={onClose}
+      wide
+    >
       <div className="copy-summary">
         <ul className="copy-items">
           {items.slice(0, 5).map(e => (
             <li key={e.name}>
               <Icon name={e.dir ? 'folder' : 'file'} size={18} />
               <span>{e.name}</span>
-              <small>{e.dir ? 'pasta' : formatBytes(e.size)}</small>
+              <small>{e.dir ? tr('folder') : formatBytes(e.size)}</small>
             </li>
           ))}
-          {items.length > 5 && <li className="muted">+ {items.length - 5} itens</li>}
+          {items.length > 5 && <li className="muted">{tr('+ {n} more', { n: items.length - 5 })}</li>}
         </ul>
         <div className="copy-facts">
           <span>
-            Tamanho: <b>{knownSize ? formatBytes(knownSize) : '—'}</b>
-            {hasDirs && ' + conteúdo das pastas'}
+            {tr('Size:')} <b>{knownSize ? formatBytes(knownSize) : '—'}</b>
+            {hasDirs && ` ${tr('+ folder contents')}`}
           </span>
           <span>
-            Livre no destino: <b>{formatBytes(destFree)}</b>
+            {tr('Free at destination:')} <b>{formatBytes(destFree)}</b>
           </span>
         </div>
       </div>
       <div className="dest-options">
         {!ready && (
           <div className="muted">
-            <Spinner /> Procurando a pasta do emulador…
+            <Spinner /> {tr('Looking for the emulator folder…')}
           </div>
         )}
         {ready && suggested && (
           <button data-nav data-nav-default className="dest-option suggested" disabled={busy} onClick={() => queue(suggested)}>
             <Icon name="roms" size={26} />
             <div>
-              <b>Copiar para roms/{system}</b>
-              <small>Sugerido — pasta do emulador detectada</small>
+              <b>{tr('Copy to roms/{system}', { system: system ?? '' })}</b>
+              <small>{tr('Suggested — emulator folder detected')}</small>
             </div>
           </button>
         )}
@@ -720,7 +725,7 @@ function CopyDialog({
         >
           <Icon name="folder" size={26} />
           <div>
-            <b>Copiar para a pasta aberta no destino</b>
+            <b>{tr('Copy to the folder open on the destination')}</b>
             <small>{destPath}</small>
           </div>
         </button>
@@ -728,7 +733,7 @@ function CopyDialog({
       </div>
       <div className="dialog-actions">
         <button data-nav className="btn" onClick={onClose}>
-          Cancelar
+          {tr('Cancel')}
         </button>
       </div>
     </Dialog>

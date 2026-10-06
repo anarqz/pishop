@@ -39,7 +39,6 @@ pub fn launch(url: &str, data: &Path) -> std::io::Result<Child> {
             "--ignore-gpu-blocklist",
             "--enable-gpu-rasterization",
             "--enable-zero-copy",
-            "--lang=pt-BR",
             "--disable-features=Translate,TranslateUI,MediaRouter,HardwareMediaKeyHandling,GlobalMediaControls,\
 DialMediaRouteProvider,DownloadBubble,DownloadBubbleV2,PrivacySandboxSettings4,PrivacySandboxAdsAPIs,\
 AutofillServerCommunication,OptimizationHints,InterestFeedContentSuggestions,SidePanelPinning",
@@ -62,7 +61,8 @@ AutofillServerCommunication,OptimizationHints,InterestFeedContentSuggestions,Sid
         // Steam injects its overlay via LD_PRELOAD; inside Chromium it
         // deadlocks the zygote before any window shows up. gamescope still
         // maps the window to the game through our SteamGameId env.
-        .env("LANGUAGE", "pt_BR:pt:en")
+        .arg(format!("--lang={}", crate::settings::lang().bcp47()))
+        .env("LANGUAGE", if crate::settings::is_pt() { "pt_BR:pt:en" } else { "en_US:en" })
         // Steam exports its own GTK/Qt input-method module to games; inside
         // Chromium it pops the on-screen keyboard on every text-field event,
         // even focus leaving the field. The UI opens the keyboard explicitly
@@ -146,7 +146,11 @@ fn seed_preferences(profile: &Path) -> std::io::Result<()> {
     let overrides = json!({
         "translate": { "enabled": false },
         "translate_blocked_languages": ["pt", "pt-BR", "en"],
-        "intl": { "accept_languages": "pt-BR,pt,en-US,en", "selected_languages": "pt-BR,pt,en-US,en" },
+        "intl": if crate::settings::is_pt() {
+            json!({ "accept_languages": "pt-BR,pt,en-US,en", "selected_languages": "pt-BR,pt,en-US,en" })
+        } else {
+            json!({ "accept_languages": "en-US,en", "selected_languages": "en-US,en" })
+        },
         "credentials_enable_service": false,
         "credentials_enable_autosignin": false,
         "autofill": { "profile_enabled": false, "credit_card_enabled": false },

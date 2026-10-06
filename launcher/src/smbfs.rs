@@ -17,6 +17,7 @@ use tokio::sync::Mutex;
 
 use crate::localfs::{Entry, sort_entries};
 use crate::sources::Source;
+use crate::tr;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
 const OP_TIMEOUT: Duration = Duration::from_secs(30);
@@ -41,13 +42,13 @@ async fn conn(s: &Source) -> anyhow::Result<Arc<Conn>> {
         return Ok(c.clone());
     }
     pool.retain(|k, _| !k.starts_with(&format!("{}|", s.id)));
-    let share = UncPath::from_str(&format!(r"\\{}\{}", s.host, s.share)).map_err(|e| anyhow!("endereço inválido: {e}"))?;
+    let share = UncPath::from_str(&format!(r"\\{}\{}", s.host, s.share)).map_err(|e| anyhow!(tr!("invalid address: {e}", "endereço inválido: {e}")))?;
     let client = Client::new(ClientConfig::default());
     let user = if s.username.is_empty() { "guest" } else { s.username.as_str() };
     tokio::time::timeout(CONNECT_TIMEOUT, client.share_connect(&share, user, s.password.clone()))
         .await
-        .map_err(|_| anyhow!("o servidor {} não respondeu", s.host))?
-        .map_err(|e| anyhow!("falha ao conectar em \\\\{}\\{}: {e}", s.host, s.share))?;
+        .map_err(|_| anyhow!(tr!("the server {} didn't respond", "o servidor {} não respondeu", s.host)))?
+        .map_err(|e| anyhow!(tr!("couldn't connect to \\\\{}\\{}: {e}", "falha ao conectar em \\\\{}\\{}: {e}", s.host, s.share)))?;
     let c = Arc::new(Conn { client, share });
     pool.insert(key(s), c.clone());
     Ok(c)
@@ -74,7 +75,7 @@ where
     }
     forget(s).await;
     let c = conn(s).await?;
-    tokio::time::timeout(OP_TIMEOUT, op(c)).await.map_err(|_| anyhow!("o servidor demorou demais para responder"))?
+    tokio::time::timeout(OP_TIMEOUT, op(c)).await.map_err(|_| anyhow!(tr!("the server took too long to respond", "o servidor demorou demais para responder")))?
 }
 
 /// UI paths use "/" relative to the share root.
@@ -93,7 +94,7 @@ pub async fn list(s: &Source, path: &str) -> anyhow::Result<Vec<Entry>> {
                 c.client
                     .create_file(&target, &args)
                     .await
-                    .with_context(|| format!("não foi possível abrir \"{}\"", if rel.is_empty() { "/" } else { &rel }))?
+                    .with_context(|| tr!("couldn't open \"{}\"", "não foi possível abrir \"{}\"", if rel.is_empty() { "/" } else { &rel }))?
                     .unwrap_dir(),
             );
             let mut out = Vec::new();
@@ -129,7 +130,7 @@ pub async fn open_read(s: &Source, path: &str) -> anyhow::Result<(Arc<File>, u64
                 .client
                 .create_file(&c.share.clone().with_path(&rel), &args)
                 .await
-                .with_context(|| format!("não foi possível abrir \"{rel}\""))?
+                .with_context(|| tr!("couldn't open \"{rel}\"", "não foi possível abrir \"{rel}\""))?
                 .unwrap_file();
             let len = file.get_len().await?;
             Ok((Arc::new(file), len))

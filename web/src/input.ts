@@ -17,21 +17,7 @@ export type Action =
 
 export type Handler = (a: Action) => boolean | 'nav'
 
-export interface PadSnapshot {
-  index: number
-  id: string
-  mapping: string
-  buttons: number[]
-  axes: number[]
-}
-
 type Listener<T> = (value: T) => void
-
-// Standard mapping indices.
-export const BUTTON_NAMES = [
-  'A', 'B', 'X', 'Y', 'L1', 'R1', 'L2', 'R2', 'View', 'Menu', 'L3', 'R3',
-  'D-Up', 'D-Down', 'D-Left', 'D-Right', 'Steam',
-]
 
 const REPEAT_DELAY = 320
 const REPEAT_RATE = 70
@@ -69,7 +55,6 @@ function pressed(p: Gamepad, i: number) {
 
 class InputManager {
   private actionListeners = new Set<Listener<Action>>()
-  private padListeners = new Set<Listener<PadSnapshot[]>>()
   private handlers: Handler[] = []
   private scrollHooks: Array<(dy: number) => boolean> = []
   private lastPoll = 0
@@ -95,11 +80,6 @@ class InputManager {
   onAction(fn: Listener<Action>) {
     this.actionListeners.add(fn)
     return () => void this.actionListeners.delete(fn)
-  }
-
-  onPads(fn: Listener<PadSnapshot[]>) {
-    this.padListeners.add(fn)
-    return () => void this.padListeners.delete(fn)
   }
 
   pushHandler(fn: Handler) {
@@ -199,17 +179,6 @@ class InputManager {
     if (Math.abs(stick) > SCROLL_DEADZONE && dt > 0) {
       const mag = (Math.abs(stick) - SCROLL_DEADZONE) / (1 - SCROLL_DEADZONE)
       this.scroll(Math.sign(stick) * mag * mag * SCROLL_MAX_SPEED * dt)
-    }
-
-    if (this.padListeners.size) {
-      const snapshots: PadSnapshot[] = pads.map(p => ({
-        index: p.index,
-        id: p.id,
-        mapping: p.mapping,
-        buttons: p.buttons.map(b => b.value),
-        axes: [...p.axes],
-      }))
-      this.padListeners.forEach(fn => fn(snapshots))
     }
 
     let quitHeld = false
@@ -406,6 +375,30 @@ export function ensureVisible(el: HTMLElement) {
 }
 
 /** Returns true when focus moved (or was placed for the first time). */
+/** The closest element in a direction: distance along it, sideways offset weighs double. */
+function nearest(current: HTMLElement, dir: 'up' | 'down' | 'left' | 'right', els: HTMLElement[]): HTMLElement | null {
+  const r = current.getBoundingClientRect()
+  const cx = r.left + r.width / 2
+  const cy = r.top + r.height / 2
+  let best: HTMLElement | null = null
+  let bestScore = Infinity
+  for (const el of els) {
+    if (el === current) continue
+    const o = el.getBoundingClientRect()
+    const dx = o.left + o.width / 2 - cx
+    const dy = o.top + o.height / 2 - cy
+    const primary = dir === 'left' ? -dx : dir === 'right' ? dx : dir === 'up' ? -dy : dy
+    const secondary = dir === 'left' || dir === 'right' ? Math.abs(dy) : Math.abs(dx)
+    if (primary <= 1) continue
+    const score = primary + secondary * 2
+    if (score < bestScore) {
+      bestScore = score
+      best = el
+    }
+  }
+  return best
+}
+
 function moveFocus(dir: 'up' | 'down' | 'left' | 'right'): boolean {
   const els = focusables()
   if (!els.length) return false
@@ -441,27 +434,24 @@ function moveFocus(dir: 'up' | 'down' | 'left' | 'right'): boolean {
       return true
     }
   }
-  const r = current.getBoundingClientRect()
-  const cx = r.left + r.width / 2
-  const cy = r.top + r.height / 2
-  let best: HTMLElement | null = null
-  let bestScore = Infinity
-  for (const el of els) {
-    if (el === current) continue
-    const o = el.getBoundingClientRect()
-    const ox = o.left + o.width / 2
-    const oy = o.top + o.height / 2
-    const dx = ox - cx
-    const dy = oy - cy
-    const primary = dir === 'left' ? -dx : dir === 'right' ? dx : dir === 'up' ? -dy : dy
-    const secondary = dir === 'left' || dir === 'right' ? Math.abs(dy) : Math.abs(dx)
-    if (primary <= 1) continue
-    const score = primary + secondary * 2
-    if (score < bestScore) {
-      bestScore = score
-      best = el
+  // A container can route a direction that leaves it:
+  // data-nav-exit-left=".settings-tab.active" (or "none" to stay inside).
+  const box = current.parentElement?.closest<HTMLElement>(`[data-nav-exit-${dir}]`)
+  if (box) {
+    let target = nearest(current, dir, els.filter(e => box.contains(e)))
+    if (!target) {
+      const exit = box.getAttribute(`data-nav-exit-${dir}`)!
+      if (exit === 'none') return true
+      const t = document.querySelector<HTMLElement>(exit)
+      target = t && els.includes(t) ? t : null
+    }
+    if (target) {
+      target.focus({ preventScroll: true })
+      ensureVisible(target)
+      return true
     }
   }
+  const best = nearest(current, dir, els)
   if (best) {
     best.focus({ preventScroll: true })
     ensureVisible(best)

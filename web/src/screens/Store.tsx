@@ -1,21 +1,32 @@
-// Store: searches Prowlarr (consoles / PC games), shows releases as a cover
+// Store: searches The Pirate Bay (native) and Prowlarr (consoles / PC games), shows releases as a cover
 // grid matched against SteamGridDB, with a full details page and download.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { type Art, type DiscoverGame, type GameHint, type LibraryGame, type Place, type Release, type ReleaseDetails, api, formatBytes, imgUrl } from '../api'
+import { locale, tr, trn } from '../i18n'
 import { ensureVisible, focusFirst, input } from '../input'
 import { Dialog, type Hint, Icon, Spinner, TextPrompt, toast, useHints } from '../ui'
 
 export type Kind = 'console' | 'pc'
 type Sort = 'relevance' | 'seeders' | 'size' | 'recent'
 
-const SORT_LABEL: Record<Sort, string> = {
-  relevance: 'Mais relevantes',
-  seeders: 'Mais seeders',
-  size: 'Maior tamanho',
-  recent: 'Mais recentes',
+/** Label of a sort order, in the UI language. */
+function sortLabel(s: Sort) {
+  switch (s) {
+    case 'relevance':
+      return tr('Most relevant')
+    case 'seeders':
+      return tr('Most seeders')
+    case 'size':
+      return tr('Largest')
+    case 'recent':
+      return tr('Newest')
+  }
 }
 const SORT_ORDER: Sort[] = ['relevance', 'seeders', 'size', 'recent']
+/** Platform filter key for releases with no recognized platform. */
+const OTHER_PLATFORM = 'other'
+const platformName = (p: string) => (p === OTHER_PLATFORM ? tr('Other') : p)
 
 /** Token overlap (Dice) between a release's game name and the query. */
 function relevance(r: Release, query: string) {
@@ -167,7 +178,7 @@ export default function Store({
       const r = await api.search(q, k)
       setResults(r.results)
       // One indexer down doesn't hide the others' results: just say so.
-      for (const w of r.warnings) toast('Um indexador não respondeu', w, 'error')
+      for (const w of r.warnings) toast(tr("An indexer didn't respond"), w, 'error')
       pushHistory(q)
       requestAnimationFrame(focusFirst)
     } catch (e) {
@@ -193,14 +204,14 @@ export default function Store({
   const platforms = useMemo(() => {
     const m = new Map<string, number>()
     for (const r of results ?? []) {
-      const p = r.parsed.platform_label ?? 'Outros'
+      const p = r.parsed.platform_label ?? OTHER_PLATFORM
       m.set(p, (m.get(p) ?? 0) + 1)
     }
     return [...m.entries()].sort((a, b) => b[1] - a[1])
   }, [results])
 
   const shown = useMemo(() => {
-    const list = (results ?? []).filter(r => !platform || (r.parsed.platform_label ?? 'Outros') === platform)
+    const list = (results ?? []).filter(r => !platform || (r.parsed.platform_label ?? OTHER_PLATFORM) === platform)
     const sorted = [...list]
     if (sort === 'relevance') {
       const score = new Map(sorted.map(r => [r.id, Math.round(relevance(r, query) * 10)]))
@@ -252,11 +263,11 @@ export default function Store({
   }, [prompt, details])
 
   const hints: Hint[] = [
-    { glyph: 'A', label: results?.length ? 'Abrir torrent' : 'Selecionar' },
-    { glyph: 'MENU', label: 'Buscar' },
-    { glyph: 'Y', label: kind === 'console' ? 'Ver PC' : 'Ver consoles' },
-    ...(results?.length ? [{ glyph: 'X' as const, label: 'Ordenar' }, { glyph: 'R2' as const, label: 'Plataforma' }] : []),
-    { glyph: 'B', label: 'Voltar' },
+    { glyph: 'A', label: results?.length ? tr('Open torrent') : tr('Select') },
+    { glyph: 'MENU', label: tr('Search') },
+    { glyph: 'Y', label: kind === 'console' ? tr('Show PC') : tr('Show consoles') },
+    ...(results?.length ? [{ glyph: 'X' as const, label: tr('Sort') }, { glyph: 'R2' as const, label: tr('Platform') }] : []),
+    { glyph: 'B', label: tr('Back') },
   ]
   useHints(prompt || details ? null : hints)
 
@@ -264,10 +275,10 @@ export default function Store({
     return (
       <div className="empty-state" data-nav-scope>
         <Icon name="search" size={56} />
-        <h2>Configure um indexador</h2>
-        <p>A loja busca jogos no The Pirate Bay (nativo) e/ou nos indexadores do seu Prowlarr.</p>
+        <h2>{tr('Set up an indexer')}</h2>
+        <p>{tr('The Store searches The Pirate Bay (native) and/or your Prowlarr indexers.')}</p>
         <button data-nav data-nav-default className="btn primary" onClick={onGoSettings}>
-          Configurar indexadores
+          {tr('Set up indexers')}
         </button>
       </div>
     )
@@ -280,10 +291,10 @@ export default function Store({
       <div className="store-head">
         <button data-nav data-nav-default={!results?.length ? '' : undefined} className="searchbar" onClick={() => setPrompt(true)}>
           <Icon name="search" />
-          <span className={`searchbar-text ${query ? '' : 'placeholder'}`}>{query || 'Buscar jogos…'}</span>
+          <span className={`searchbar-text ${query ? '' : 'placeholder'}`}>{query || tr('Search games…')}</span>
           {loading && (
             <span className="searchbar-busy">
-              <Spinner /> Buscando…
+              <Spinner /> {tr('Searching…')}
             </span>
           )}
         </button>
@@ -301,15 +312,15 @@ export default function Store({
         <div className="store-filters">
           <div className="chips">
             <button data-nav className={`chip ${platform === null ? 'on' : ''}`} onClick={() => setPlatform(null)}>
-              Todas <small>{results.length}</small>
+              {tr('All')} <small>{results.length}</small>
             </button>
             {platforms.map(([p, n]) => (
               <button key={p} data-nav className={`chip ${platform === p ? 'on' : ''}`} onClick={() => setPlatform(p)}>
-                {p} <small>{n}</small>
+                {platformName(p)} <small>{n}</small>
               </button>
             ))}
           </div>
-          <span className="sort-label">{SORT_LABEL[sort]}</span>
+          <span className="sort-label">{sortLabel(sort)}</span>
         </div>
       )}
 
@@ -317,22 +328,22 @@ export default function Store({
         {ctx && query && <ContextHeader ctx={ctx} query={query} count={results?.length ?? null} loading={loading} />}
         {error && (
           <div className="store-msg error">
-            <b>A busca falhou</b>
+            <b>{tr('Search failed')}</b>
             <span>{error}</span>
           </div>
         )}
         {loading && !results && (
           <div className="store-msg">
-            <Spinner /> Buscando nos indexadores…
+            <Spinner /> {tr('Searching the indexers…')}
           </div>
         )}
         {!loading && !error && !results && (
           <div className="store-start">
-            <h2>{kind === 'console' ? 'Jogos de console' : 'Jogos de PC'}</h2>
-            <p className="muted">Pesquise pelo nome. Os resultados vêm dos indexadores do seu Prowlarr.</p>
+            <h2>{kind === 'console' ? tr('Console games') : tr('PC games')}</h2>
+            <p className="muted">{tr('Search by name. Results come from The Pirate Bay and your Prowlarr indexers.')}</p>
             {history.length > 0 && (
               <>
-                <h3 className="section-title">Buscas recentes</h3>
+                <h3 className="section-title">{tr('Recent searches')}</h3>
                 <div className="chips wrap">
                   {history.map(h => (
                     <button key={h} data-nav className="chip" onClick={() => runSearch(h, kind)}>
@@ -342,7 +353,7 @@ export default function Store({
                 </div>
               </>
             )}
-            <h3 className="section-title">Sugestões</h3>
+            <h3 className="section-title">{tr('Suggestions')}</h3>
             <div className="chips wrap">
               {SUGGESTIONS.map(s => (
                 <button key={s} data-nav className="chip" onClick={() => runSearch(s, kind)}>
@@ -353,15 +364,15 @@ export default function Store({
           </div>
         )}
         {results && results.length === 0 && !loading && (
-          <div className="store-msg">Nada encontrado para “{query}”.</div>
+          <div className="store-msg">{tr('Nothing found for “{query}”.', { query })}</div>
         )}
         {shown.length > 0 && (
           <div className={`release-list ${loading ? 'dim' : ''}`}>
             <div className="release-cols">
-              <span>Plataforma</span>
+              <span>{tr('Platform')}</span>
               <span>Torrent</span>
-              <span>Tamanho</span>
-              <span>Data</span>
+              <span>{tr('Size')}</span>
+              <span>{tr('Date')}</span>
               <span>Seeders</span>
               <span>Leechers</span>
             </div>
@@ -379,10 +390,10 @@ export default function Store({
 
       {prompt && (
         <TextPrompt
-          title={kind === 'console' ? 'Buscar jogos de console' : 'Buscar jogos de PC'}
-          placeholder="Nome do jogo"
+          title={kind === 'console' ? tr('Search console games') : tr('Search PC games')}
+          placeholder={tr('Game name')}
           initial={query}
-          submitLabel="Buscar"
+          submitLabel={tr('Search')}
           validate={v => v.length > 1}
           onCancel={() => setPrompt(false)}
           onSubmit={v => {
@@ -445,7 +456,7 @@ function GameCover({ game }: { game: LibraryGame }) {
 function shortDate(iso: string) {
   if (!iso) return '—'
   const d = new Date(iso.length === 10 ? `${iso}T12:00:00` : iso)
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return d.toLocaleDateString(locale(), { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 function ReleaseRow({ r, first, onOpen }: { r: Release; first: boolean; onOpen: () => void }) {
@@ -468,7 +479,7 @@ function ReleaseRow({ r, first, onOpen }: { r: Release; first: boolean; onOpen: 
 function daysAgo(iso: string | null) {
   if (!iso) return ''
   const days = Math.round((Date.now() - new Date(`${iso}T12:00:00`).getTime()) / 86_400_000)
-  return days <= 0 ? 'hoje' : days === 1 ? 'ontem' : `há ${days} dias`
+  return days <= 0 ? tr('today') : days === 1 ? tr('yesterday') : tr('{n} days ago', { n: days })
 }
 
 /** Header for any search: the game (SteamGridDB) and its crack (isitcracked). */
@@ -490,7 +501,7 @@ function ContextHeader({ ctx, query, count, loading }: { ctx: SearchContext; que
       )}
       <div className="origin-info">
         <span className="hero-kicker">
-          {ctx.art ? `SteamGridDB${ctx.art.year ? ` · ${ctx.art.year}` : ''}` : 'Busca'}
+          {ctx.art ? `SteamGridDB${ctx.art.year ? ` · ${ctx.art.year}` : ''}` : tr('Your search')}
           {g ? ' · isitcracked' : ''}
         </span>
         <h2>{title}</h2>
@@ -498,7 +509,7 @@ function ContextHeader({ ctx, query, count, loading }: { ctx: SearchContext; que
           <div className="origin-facts">
             {g.crack_date && (
               <span>
-                <small>Crackeado</small>
+                <small>{tr('Cracked')}</small>
                 <b className="ok">
                   {shortDate(g.crack_date)} · {daysAgo(g.crack_date)}
                 </b>
@@ -506,7 +517,7 @@ function ContextHeader({ ctx, query, count, loading }: { ctx: SearchContext; que
             )}
             {g.scene_group && (
               <span>
-                <small>Grupo</small>
+                <small>{tr('Group')}</small>
                 <b>{g.scene_group}</b>
               </span>
             )}
@@ -518,7 +529,7 @@ function ContextHeader({ ctx, query, count, loading }: { ctx: SearchContext; que
             )}
             {g.release_date && (
               <span>
-                <small>Lançamento</small>
+                <small>{tr('Release date')}</small>
                 <b>{shortDate(g.release_date)}</b>
               </span>
             )}
@@ -527,12 +538,12 @@ function ContextHeader({ ctx, query, count, loading }: { ctx: SearchContext; que
           <div className="origin-facts">
             <span>
               <small>isitcracked</small>
-              <b className="muted">Sem registro de crack</b>
+              <b className="muted">{tr('No crack on record')}</b>
             </span>
           </div>
         )}
         <span className="origin-count">
-          {loading ? 'Buscando torrents no Prowlarr…' : count === null ? '' : `${count} ${count === 1 ? 'torrent encontrado' : 'torrents encontrados'}`}
+          {loading ? tr('Searching for torrents…') : count === null ? '' : trn(count, '{n} torrent found', '{n} torrents found')}
         </span>
       </div>
     </div>
@@ -581,7 +592,7 @@ function Details({
   useEffect(() => {
     if (d) requestAnimationFrame(focusFirst)
   }, [d])
-  useHints(choose ? null : [{ glyph: 'A', label: 'Selecionar' }, { glyph: 'B', label: 'Voltar' }])
+  useHints(choose ? null : [{ glyph: 'A', label: tr('Select') }, { glyph: 'B', label: tr('Back') }])
 
   const loadFiles = async () => {
     setFiles({ state: 'busy' })
@@ -595,7 +606,7 @@ function Details({
 
   const r = d?.release ?? siblings.find(s => s.id === id)
   const others = r ? siblings.filter(s => s.id !== id && s.parsed.name.toLowerCase() === r.parsed.name.toLowerCase()).slice(0, 8) : []
-  const date = r?.publish_date ? new Date(r.publish_date).toLocaleDateString('pt-BR') : '—'
+  const date = r?.publish_date ? new Date(r.publish_date).toLocaleDateString(locale()) : '—'
   const matched = r ? matchFor(r, match) : null
   const game = r ? libraryGame(r, matched) : null
 
@@ -605,12 +616,12 @@ function Details({
       <div className="details-shade" />
       {!r && !error && (
         <div className="store-msg">
-          <Spinner /> Carregando…
+          <Spinner /> {tr('Loading…')}
         </div>
       )}
       {error && (
         <div className="store-msg error">
-          <b>Não foi possível abrir</b>
+          <b>{tr("Couldn't open")}</b>
           <span>{error}</span>
         </div>
       )}
@@ -645,34 +656,34 @@ function Details({
               </div>
               <div className="stat">
                 <b>{formatBytes(r.size)}</b>
-                <span>Tamanho</span>
+                <span>{tr('Size')}</span>
               </div>
               <div className="stat">
                 <b>{r.files ?? (files.list ? files.list.length : '—')}</b>
-                <span>Arquivos</span>
+                <span>{tr('Files')}</span>
               </div>
               <div className="stat">
                 <b>{date}</b>
-                <span>Publicado</span>
+                <span>{tr('Published')}</span>
               </div>
             </div>
 
             <div className="row details-actions">
               <button data-nav data-nav-default className="btn primary big" onClick={() => setChoose(true)}>
-                <Icon name="download" /> Baixar
+                <Icon name="download" /> {tr('Download')}
               </button>
               <button data-nav className="btn big" disabled={files.state === 'busy' || files.state === 'ok'} onClick={loadFiles}>
-                {files.state === 'busy' ? 'Lendo do enxame…' : 'Ver arquivos'}
+                {files.state === 'busy' ? tr('Reading from the swarm…') : tr('View files')}
               </button>
               <button data-nav className="btn big" onClick={onClose}>
-                Voltar
+                {tr('Back')}
               </button>
             </div>
 
             <div className="details-sections">
               {(files.state === 'ok' || files.state === 'error') && (
                 <section>
-                  <h3 className="section-title">Arquivos</h3>
+                  <h3 className="section-title">{tr('Files')}</h3>
                   {files.state === 'error' && <p className="error">{files.msg}</p>}
                   <ul className="file-list">
                     {files.list?.map(f => (
@@ -686,18 +697,18 @@ function Details({
                 </section>
               )}
               <section>
-                <h3 className="section-title">Descrição</h3>
+                <h3 className="section-title">{tr('Description')}</h3>
                 {d ? (
-                  <p className="description">{d.description ?? 'O indexador não forneceu descrição para este lançamento.'}</p>
+                  <p className="description">{d.description ?? tr("The indexer didn't provide a description for this release.")}</p>
                 ) : (
                   <p className="muted">
-                    <Spinner /> Carregando…
+                    <Spinner /> {tr('Loading…')}
                   </p>
                 )}
               </section>
               {others.length > 0 && (
                 <section>
-                  <h3 className="section-title">Outras versões deste jogo</h3>
+                  <h3 className="section-title">{tr('Other versions of this game')}</h3>
                   <div className="others">
                     {others.map(o => (
                       <button key={o.id} data-nav className="other" onClick={() => onOpen(o.id)}>
@@ -756,16 +767,16 @@ function DownloadDialog({
     setBusy(true)
     try {
       await api.download(r.id, dest, hint)
-      toast('Download iniciado', `${game.name} · acompanhe em Transferências`, 'ok')
+      toast(tr('Download started'), tr('{name} · follow it in Transfers', { name: game.name }), 'ok')
       onClose()
     } catch (e) {
       setBusy(false)
-      toast('Não foi possível baixar', (e as Error).message, 'error')
+      toast(tr("Couldn't download"), (e as Error).message, 'error')
     }
   }
 
   return (
-    <Dialog title="Baixar" onClose={onClose} wide>
+    <Dialog title={tr('Download')} onClose={onClose} wide>
       <div className="copy-facts">
         <span>
           <b>{r.title}</b>
@@ -773,7 +784,7 @@ function DownloadDialog({
       </div>
       <div className="copy-facts">
         <span>
-          Tamanho: <b>{formatBytes(r.size)}</b>
+          {tr('Size')}: <b>{formatBytes(r.size)}</b>
         </span>
         <span>
           Seeders: <b>{r.seeders}</b>
@@ -782,15 +793,15 @@ function DownloadDialog({
       <div className="dest-options">
         {!romsDirs && (
           <div className="muted">
-            <Spinner /> Procurando a pasta do emulador…
+            <Spinner /> {tr("Looking for the emulator's folder…")}
           </div>
         )}
         {romsDirs && romsTarget && (
           <button data-nav data-nav-default className="dest-option suggested" disabled={busy} onClick={() => go(romsTarget)}>
             <Icon name="roms" size={26} />
             <div>
-              <b>Baixar direto em roms/{sys}</b>
-              <small>Sugerido — os arquivos vão para a pasta do emulador</small>
+              <b>{tr('Download straight into roms/{sys}', { sys: sys ?? '' })}</b>
+              <small>{tr("Suggested — the files go to the emulator's folder")}</small>
             </div>
           </button>
         )}
@@ -798,15 +809,15 @@ function DownloadDialog({
           <button data-nav data-nav-default={romsTarget ? undefined : ''} className="dest-option" disabled={busy} onClick={() => go()}>
             <Icon name="download" size={26} />
             <div>
-              <b>Baixar em Downloads</b>
-              <small>~/Downloads/piShop/&lt;nome do torrent&gt;</small>
+              <b>{tr('Save to Downloads')}</b>
+              <small>~/Downloads/piShop/&lt;{tr('torrent name')}&gt;</small>
             </div>
           </button>
         )}
       </div>
       <div className="dialog-actions">
         <button data-nav className="btn" onClick={onClose}>
-          Cancelar
+          {tr('Cancel')}
         </button>
       </div>
     </Dialog>

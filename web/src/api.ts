@@ -96,6 +96,21 @@ export interface Art {
   score: number
 }
 
+/** Launcher-wide preferences (Settings). */
+export interface AppSettings {
+  lang: 'en' | 'pt'
+}
+
+/** A services file found on the device, ready to import. */
+export interface ServicesFile {
+  path: string
+  name: string
+  /** Unix seconds. */
+  modified: number
+  /** Which services it sets (e.g. ["Prowlarr", "TheGamesDB"]). */
+  services: string[]
+}
+
 /** The game a Store download belongs to, as Transfers shows it. */
 export interface LibraryGame {
   name: string
@@ -284,6 +299,12 @@ export const api = {
       dest: dest ?? null,
       hint: hint ?? null,
     }),
+  settings: () => call<AppSettings>('/api/settings'),
+  saveSettings: (s: Partial<AppSettings>) => post<AppSettings>('/api/settings', s),
+  /** Settings → Services: share the services setup (API keys included) as a file. */
+  exportServices: () => post<{ path: string }>('/api/services/export'),
+  importCandidates: () => call<ServicesFile[]>('/api/services/import'),
+  importServices: (path: string) => post<{ imported: string[] }>('/api/services/import', { path }),
   /** Settings → Downloads: overall torrent speed cap (bytes/s, null = none). */
   torrentLimits: () => call<{ download_bps: number | null }>('/api/torrent/limits'),
   setTorrentLimits: (download_bps: number | null) => post<{ download_bps: number | null }>('/api/torrent/limits', { download_bps }),

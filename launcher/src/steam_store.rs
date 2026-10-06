@@ -83,7 +83,7 @@ pub async fn find_appid(name: &str) -> Option<String> {
     }
     let v: Value = client()?
         .get("https://store.steampowered.com/api/storesearch/")
-        .query(&[("term", name.trim()), ("cc", "br"), ("l", "brazilian")])
+        .query(&[("term", name.trim()), ("cc", "br"), ("l", "english")])
         .send()
         .await
         .ok()?
@@ -109,13 +109,16 @@ pub async fn details(appid: &str) -> Option<StoreInfo> {
     if appid.is_empty() || !appid.chars().all(|c| c.is_ascii_digit()) {
         return None;
     }
-    if let Some(hit) = DETAILS.lock().unwrap().get(appid).cloned() {
+    // Descriptions come in the UI language; cached per language.
+    let lang = crate::settings::lang().steam();
+    let key = format!("{appid}:{lang}");
+    if let Some(hit) = DETAILS.lock().unwrap().get(&key).cloned() {
         return hit;
     }
     let found = async {
         let v: Value = client()?
             .get("https://store.steampowered.com/api/appdetails")
-            .query(&[("appids", appid), ("l", "brazilian"), ("cc", "br")])
+            .query(&[("appids", appid), ("l", lang), ("cc", "br")])
             .send()
             .await
             .ok()?
@@ -151,7 +154,7 @@ pub async fn details(appid: &str) -> Option<StoreInfo> {
         return None; // network trouble: not cached
     };
     let mut m = DETAILS.lock().unwrap();
-    m.insert(appid.to_string(), found.clone());
+    m.insert(key, found.clone());
     store("steam-store.json", &*m);
     found
 }
@@ -164,11 +167,14 @@ pub async fn library_art(appid: &str) -> Option<LibraryArt> {
     if appid.is_empty() || !appid.chars().all(|c| c.is_ascii_digit()) {
         return None;
     }
-    if let Some(hit) = ART.lock().unwrap().get(appid).cloned() {
+    // Some games localize their capsules; cached per language.
+    let lang = crate::settings::lang().steam();
+    let key = format!("{appid}:{lang}");
+    if let Some(hit) = ART.lock().unwrap().get(&key).cloned() {
         return hit;
     }
     let input = format!(
-        r#"{{"ids":[{{"appid":{appid}}}],"context":{{"language":"brazilian","country_code":"BR"}},"data_request":{{"include_assets":true}}}}"#
+        r#"{{"ids":[{{"appid":{appid}}}],"context":{{"language":"{lang}","country_code":"BR"}},"data_request":{{"include_assets":true}}}}"#
     );
     let v: Value = async {
         client()?
@@ -195,14 +201,14 @@ pub async fn library_art(appid: &str) -> Option<LibraryArt> {
     let found = Some(LibraryArt { cover: url("library_capsule"), hero: url("library_hero") })
         .filter(|a| a.cover.is_some() || a.hero.is_some());
     let mut m = ART.lock().unwrap();
-    m.insert(appid.to_string(), found.clone());
+    m.insert(key, found.clone());
     store("steam-art.json", &*m);
     found
 }
 
 pub fn open_store_page(appid: &str) -> std::io::Result<()> {
     if appid.is_empty() || !appid.chars().all(|c| c.is_ascii_digit()) {
-        return Err(std::io::Error::other("appid inválido"));
+        return Err(std::io::Error::other(crate::tr!("invalid appid", "appid inválido")));
     }
     let mut child = std::process::Command::new("steam")
         .arg(format!("steam://store/{appid}"))
