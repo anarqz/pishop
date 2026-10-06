@@ -7,7 +7,8 @@ import { focusFirst, input, showKeyboard } from './input'
 // ---------- Footer legend ----------
 
 export interface Hint {
-  glyph: GlyphName
+  /** Two glyphs for a pair of buttons with one meaning (e.g. L2/R2). */
+  glyph: GlyphName | [GlyphName, GlyphName]
   label: string
 }
 
@@ -80,8 +81,10 @@ export function Footer({ quitProgress }: { quitProgress: number }) {
       </div>
       <div className="footer-right">
         {hints.map(h => (
-          <span key={h.glyph + h.label} className="hint">
-            <Glyph name={h.glyph} />
+          <span key={String(h.glyph) + h.label} className="hint">
+            {(Array.isArray(h.glyph) ? h.glyph : [h.glyph]).map(g => (
+              <Glyph key={g} name={g} />
+            ))}
             <span className="footer-label">{h.label}</span>
           </span>
         ))}

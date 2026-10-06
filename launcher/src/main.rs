@@ -7,6 +7,7 @@ mod browser;
 mod catalog;
 mod discover;
 mod jobs;
+mod library;
 mod localfs;
 mod log;
 mod server;
@@ -17,6 +18,7 @@ mod steam_store;
 mod titles;
 mod tgdb;
 mod torrent;
+mod tpb;
 mod trailer;
 mod vdf;
 
@@ -32,7 +34,7 @@ pub const PORT: u16 = 47800;
 
 /// UI port; `PISHOP_PORT` overrides it for development only (the PWA origin,
 /// and with it the browser storage, is tied to the port).
-fn port() -> u16 {
+pub fn port() -> u16 {
     std::env::var("PISHOP_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(PORT)
 }
 

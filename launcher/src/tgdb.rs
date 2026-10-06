@@ -30,6 +30,9 @@ pub struct GameInfo {
     pub publishers: Vec<String>,
     pub platform: Option<String>,
     pub youtube: Option<String>,
+    /// Front box art (large); absent in entries cached before it was fetched.
+    #[serde(default)]
+    pub boxart: Option<String>,
 }
 
 /// The API key comes from Settings → Serviços; without it TGDB is skipped.
@@ -166,7 +169,7 @@ pub async fn details(name: &str) -> Option<GameInfo> {
 async fn lookup(name: &str) -> anyhow::Result<Option<GameInfo>> {
     let v = get(
         "/v1.1/Games/ByGameName",
-        &[("name", name), ("fields", "players,publishers,genres,overview,rating,platform,youtube"), ("include", "platform")],
+        &[("name", name), ("fields", "players,publishers,genres,overview,rating,platform,youtube"), ("include", "boxart,platform")],
     )
     .await?;
     let games = v["data"]["games"].as_array().cloned().unwrap_or_default();
@@ -198,6 +201,16 @@ async fn lookup(name: &str) -> anyhow::Result<Option<GameInfo>> {
     let platform_id = g["platform"].as_i64().unwrap_or(0).to_string();
     let platform = platforms["data"][platform_id.as_str()]["name"].as_str().map(String::from);
     let youtube = g["youtube"].as_str().filter(|s| !s.is_empty()).map(String::from);
+    let boxart = {
+        let b = &v["include"]["boxart"];
+        let id = g["id"].as_i64().unwrap_or(0).to_string();
+        let front = b["data"][id.as_str()]
+            .as_array()
+            .and_then(|imgs| imgs.iter().find(|i| i["type"] == "boxart" && i["side"] == "front"))
+            .and_then(|i| i["filename"].as_str());
+        let base = b["base_url"]["large"].as_str().or(b["base_url"]["original"].as_str());
+        front.zip(base).map(|(f, base)| format!("{base}{f}"))
+    };
     Ok(Some(GameInfo {
         id: g["id"].as_i64().unwrap_or(0),
         title: g["game_title"].as_str().unwrap_or(name).to_string(),
@@ -210,6 +223,7 @@ async fn lookup(name: &str) -> anyhow::Result<Option<GameInfo>> {
         publishers: resolve(ids(&g["publishers"]), &publishers),
         platform,
         youtube,
+        boxart,
     }))
 }
 

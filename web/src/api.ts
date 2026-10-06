@@ -96,6 +96,49 @@ export interface Art {
   score: number
 }
 
+/** The game a Store download belongs to, as Transfers shows it. */
+export interface LibraryGame {
+  name: string
+  cover?: string | null
+  hero?: string | null
+  year?: number | null
+  platform?: string | null
+  crack_date?: string | null
+  scene_group?: string | null
+  drm?: string | null
+  steam_appid?: string | null
+  overview?: string | null
+  genres?: string[]
+  developers?: string[]
+  publishers?: string[]
+  release_date?: string | null
+  /** Services the data came from, in priority order. */
+  sources?: string[]
+}
+
+/**
+ * What the Store showed for the search, sent with a download; the launcher
+ * adds Steam and TheGamesDB on top (Steam → TGDB → SteamGridDB → isitcracked).
+ */
+export interface GameHint {
+  name: string
+  sgdb: { name: string; cover: string; hero: string | null; year: number | null } | null
+  crack: DiscoverGame | null
+}
+
+export interface LibraryEntry {
+  info_hash: string
+  game: LibraryGame
+  release: string
+  indexer: string
+  size: number
+  dest: string | null
+  /** Unix seconds. */
+  added: number
+  /** False while Steam/TheGamesDB are still being asked. */
+  resolved: boolean
+}
+
 export interface ReleaseDetails {
   release: Release
   art: Art | null
@@ -149,6 +192,7 @@ export interface ServicesConfig {
   iic_url: string
   iic_cdn: string
   has_iic_key: boolean
+  tpb_url: string
 }
 
 export interface DiscoverGame {
@@ -209,9 +253,11 @@ export const api = {
     ),
   catalogConfig: () => call<ServicesConfig>('/api/catalog/config'),
   /** Partial update: only the fields given change; blank secrets keep the stored ones. */
-  saveServices: (u: Partial<Record<'prowlarr_url' | 'prowlarr_key' | 'tgdb_key' | 'iic_url' | 'iic_key' | 'iic_cdn', string>>) =>
+  saveServices: (
+    u: Partial<Record<'prowlarr_url' | 'prowlarr_key' | 'tgdb_key' | 'iic_url' | 'iic_key' | 'iic_cdn' | 'tpb_url', string>>,
+  ) =>
     post<ServicesConfig>('/api/catalog/config', u),
-  testService: (service: 'tgdb' | 'iic', u: { url?: string; key?: string; cdn?: string }) =>
+  testService: (service: 'tgdb' | 'iic' | 'tpb', u: { url?: string; key?: string; cdn?: string }) =>
     post<{ remaining?: number; total?: number }>('/api/services/test', { service, ...u }),
   gameInfo: (name: string, full = false, appid?: string | null) =>
     call<GameMeta>(
@@ -225,14 +271,25 @@ export const api = {
     ),
   testCatalog: (prowlarr_url: string, prowlarr_key: string) =>
     post<{ version: string; indexers: string[] }>('/api/catalog/config/test', { prowlarr_url, prowlarr_key }),
+  /** Results from every indexer that answered, plus a note per one that failed. */
   search: (q: string, kind: 'console' | 'pc') =>
-    call<Release[]>(`/api/catalog/search?q=${encodeURIComponent(q)}&kind=${kind}`),
+    call<{ results: Release[]; warnings: string[] }>(`/api/catalog/search?q=${encodeURIComponent(q)}&kind=${kind}`),
   art: (name: string) => call<Art | null>(`/api/catalog/art?name=${encodeURIComponent(name)}`),
-  release: (id: string) => call<ReleaseDetails>(`/api/catalog/release/${id}`),
+  /** `art: false`: the caller already has the matched game (skip the lookup). */
+  release: (id: string, art = true) => call<ReleaseDetails>(`/api/catalog/release/${id}${art ? '' : '?art=false'}`),
   releaseFiles: (id: string) =>
     call<{ name: string; files: { name: string; length: number }[] }>(`/api/catalog/release/${id}/files`),
-  download: (id: string, dest?: string) =>
-    post<{ torrent_id: number; name: string }>(`/api/catalog/release/${id}/download`, { dest: dest ?? null }),
+  download: (id: string, dest?: string, hint?: GameHint) =>
+    post<{ torrent_id: number; name: string; info_hash: string }>(`/api/catalog/release/${id}/download`, {
+      dest: dest ?? null,
+      hint: hint ?? null,
+    }),
+  /** Settings → Downloads: overall torrent speed cap (bytes/s, null = none). */
+  torrentLimits: () => call<{ download_bps: number | null }>('/api/torrent/limits'),
+  setTorrentLimits: (download_bps: number | null) => post<{ download_bps: number | null }>('/api/torrent/limits', { download_bps }),
+  /** Game metadata of Store downloads, by info hash. */
+  library: () => call<Record<string, LibraryEntry>>('/api/library'),
+  forgetLibrary: (infoHash: string) => call<void>(`/api/library/${infoHash}`, { method: 'DELETE' }),
 }
 
 export function formatBytes(n: number) {

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { type Job, type Place, type Source, api, formatBytes } from './api'
 import { focusFirst, input } from './input'
 import Explorer from './screens/Explorer'
-import Home, { type Tab } from './screens/Home'
 import Jobs from './screens/Jobs'
 import Settings from './screens/Settings'
 import Discover from './screens/Discover'
@@ -11,9 +10,10 @@ import { useEngineState } from './screens/Torrents'
 import { setTorrentApi } from './torrent'
 import { Footer, Glyph, Spinner, Toasts } from './ui'
 
+export type Tab = 'discover' | 'store' | 'explorer' | 'jobs' | 'settings'
+
 const TABS: Array<[Tab, string]> = [
   ['discover', 'Descobrir'],
-  ['home', 'Início'],
   ['store', 'Loja'],
   ['explorer', 'Explorar'],
   ['jobs', 'Transferências'],
@@ -97,7 +97,7 @@ export default function App() {
   const go = useCallback(
     (t: Tab) => {
       setTab(t)
-      if (t === 'home' || t === 'explorer' || t === 'store') loadPlaces()
+      if (t === 'explorer' || t === 'store') loadPlaces()
     },
     [loadPlaces],
   )
@@ -165,7 +165,6 @@ export default function App() {
             }}
           />
         )}
-        {tab === 'home' && <Home sources={sources} places={places} jobs={jobs} go={go} />}
         {tab === 'store' && <Store places={places} request={storeRequest} onGoSettings={() => go('settings')} />}
         {tab === 'explorer' && <Explorer sources={sources} places={places} onGoSettings={() => go('settings')} />}
         {tab === 'jobs' && <Jobs jobs={jobs} refresh={loadJobs} downloadDir={info?.download_dir} />}

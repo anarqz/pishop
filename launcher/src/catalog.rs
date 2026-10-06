@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use tokio::sync::{OnceCell, Semaphore};
 
 use crate::titles::{self, Parsed};
-use crate::{data_dir, log, torrent};
+use crate::{data_dir, library, log, torrent, tpb};
 
 static HTTP: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
@@ -50,6 +50,9 @@ pub struct Config {
     pub iic_key: String,
     #[serde(default)]
     pub iic_cdn: String,
+    /// The Pirate Bay JSON API (apibay format) for native search. Empty disables it.
+    #[serde(default)]
+    pub tpb_url: String,
 }
 
 fn config_path() -> PathBuf {
@@ -70,6 +73,7 @@ pub struct ConfigUpdate {
     pub iic_url: Option<String>,
     pub iic_key: Option<String>,
     pub iic_cdn: Option<String>,
+    pub tpb_url: Option<String>,
 }
 
 pub fn update_config(u: ConfigUpdate) -> anyhow::Result<Config> {
@@ -84,6 +88,9 @@ pub fn update_config(u: ConfigUpdate) -> anyhow::Result<Config> {
     if let Some(cdn) = u.iic_cdn {
         c.iic_cdn = cdn.trim().trim_end_matches('/').to_string();
     }
+    if let Some(url) = u.tpb_url {
+        c.tpb_url = url.trim().trim_end_matches('/').to_string();
+    }
     c.prowlarr_key = secret(u.prowlarr_key, c.prowlarr_key);
     c.tgdb_key = secret(u.tgdb_key, c.tgdb_key);
     c.iic_key = secret(u.iic_key, c.iic_key);
@@ -97,6 +104,7 @@ pub fn public_config() -> Value {
         "prowlarr_url": c.prowlarr_url, "has_key": !c.prowlarr_key.is_empty(),
         "has_tgdb_key": !c.tgdb_key.is_empty(),
         "iic_url": c.iic_url, "iic_cdn": c.iic_cdn, "has_iic_key": !c.iic_key.is_empty(),
+        "tpb_url": c.tpb_url,
     })
 }
 
@@ -131,7 +139,7 @@ pub async fn test(c: &Config) -> anyhow::Result<Value> {
 
 async fn prowlarr_get(c: &Config, path: &str, query: &[(&str, &str)]) -> anyhow::Result<Value> {
     if c.prowlarr_url.is_empty() || c.prowlarr_key.is_empty() {
-        bail!("configure o Prowlarr em Configurações → Indexadores");
+        bail!("configure o Prowlarr em Configurações → Serviços");
     }
     let r = HTTP
         .get(format!("{}{}", c.prowlarr_url, path))
@@ -173,6 +181,16 @@ struct Stored {
     guid: String,
     magnet_url: Option<String>,
     download_url: Option<String>,
+    /// The Pirate Bay torrent id (native results, or Prowlarr's TPB ones).
+    tpb_id: Option<String>,
+}
+
+/// Search answer: results from every source that worked, plus a note for
+/// each one that didn't (the others still show).
+#[derive(Serialize, Clone)]
+pub struct SearchOutcome {
+    pub results: Vec<Release>,
+    pub warnings: Vec<String>,
 }
 
 static RELEASES: LazyLock<Mutex<HashMap<String, Arc<Stored>>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -188,74 +206,174 @@ const SEARCH_TTL: Duration = Duration::from_secs(15 * 60);
 static SEARCH_CACHE: LazyLock<Mutex<HashMap<String, (std::time::Instant, Vec<Release>)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-pub async fn search(query: &str, kind: &str) -> anyhow::Result<Vec<Release>> {
+pub async fn search(query: &str, kind: &str) -> anyhow::Result<SearchOutcome> {
     let key = format!("{kind}|{}", query.trim().to_lowercase());
     if let Some((at, hit)) = SEARCH_CACHE.lock().unwrap().get(&key) {
         // Results also live in RELEASES, unless that map was reset meanwhile.
         if at.elapsed() < SEARCH_TTL && hit.iter().all(|r| RELEASES.lock().unwrap().contains_key(&r.id)) {
-            return Ok(hit.clone());
+            return Ok(SearchOutcome { results: hit.clone(), warnings: vec![] });
         }
     }
     let out = search_uncached(query, kind).await?;
-    let mut cache = SEARCH_CACHE.lock().unwrap();
-    cache.retain(|_, (at, _)| at.elapsed() < SEARCH_TTL);
-    cache.insert(key, (std::time::Instant::now(), out.clone()));
+    // A partial answer (some source failed) is not cached: retry next time.
+    if out.warnings.is_empty() {
+        let mut cache = SEARCH_CACHE.lock().unwrap();
+        cache.retain(|_, (at, _)| at.elapsed() < SEARCH_TTL);
+        cache.insert(key, (std::time::Instant::now(), out.results.clone()));
+    }
     Ok(out)
 }
 
-async fn search_uncached(query: &str, kind: &str) -> anyhow::Result<Vec<Release>> {
+fn pc_default(mut parsed: Parsed, kind: &str) -> Parsed {
+    if kind == "pc" && parsed.platform.is_none() {
+        parsed.platform = Some("pc");
+        parsed.platform_label = Some("PC");
+    }
+    parsed
+}
+
+async fn prowlarr_search(c: &Config, query: &str, kind: &str) -> anyhow::Result<Vec<Stored>> {
     let cats = match kind {
         "pc" => "4050",
         _ => "1000",
     };
-    let raw = prowlarr_get(&config(), "/api/v1/search", &[("query", query), ("categories", cats), ("type", "search"), ("limit", "100")]).await?;
-    let items = raw.as_array().cloned().unwrap_or_default();
+    let raw = prowlarr_get(c, "/api/v1/search", &[("query", query), ("categories", cats), ("type", "search"), ("limit", "100")]).await?;
     let mut out = Vec::new();
+    for it in raw.as_array().cloned().unwrap_or_default() {
+        let Some(title) = it["title"].as_str() else { continue };
+        let guid = it["guid"].as_str().unwrap_or(title).to_string();
+        let indexer = it["indexer"].as_str().unwrap_or_default().to_string();
+        let info_url = it["infoUrl"].as_str().map(String::from);
+        let tpb_id = (indexer.eq_ignore_ascii_case("thepiratebay"))
+            .then(|| info_url.as_deref()?.split("id=").nth(1)?.split('&').next().map(String::from))
+            .flatten();
+        out.push(Stored {
+            release: Release {
+                id: short_hash(&guid),
+                title: title.to_string(),
+                parsed: pc_default(titles::parse(title), kind),
+                size: it["size"].as_u64().unwrap_or(0),
+                seeders: it["seeders"].as_u64().unwrap_or(0) as u32,
+                leechers: it["leechers"].as_u64().unwrap_or(0) as u32,
+                grabs: it["grabs"].as_u64().map(|g| g as u32),
+                files: it["files"].as_u64().map(|g| g as u32),
+                indexer,
+                publish_date: it["publishDate"].as_str().unwrap_or_default().to_string(),
+                info_url,
+                info_hash: it["infoHash"].as_str().map(|h| h.to_lowercase()),
+                categories: it["categories"]
+                    .as_array()
+                    .map(|a| a.iter().filter_map(|c| c["name"].as_str().map(String::from)).collect())
+                    .unwrap_or_default(),
+                kind: kind.to_string(),
+            },
+            guid,
+            magnet_url: it["magnetUrl"].as_str().map(String::from),
+            download_url: it["downloadUrl"].as_str().map(String::from),
+            tpb_id,
+        });
+    }
+    Ok(out)
+}
+
+async fn tpb_search(c: &Config, query: &str, kind: &str) -> anyhow::Result<Vec<Stored>> {
+    let hits = tpb::search(&c.tpb_url, query, tpb::categories(kind)).await?;
+    Ok(hits
+        .into_iter()
+        .map(|h| {
+            let guid = format!("tpb:{}", h.id);
+            Stored {
+                release: Release {
+                    id: short_hash(&guid),
+                    title: h.name.clone(),
+                    parsed: pc_default(titles::parse(&h.name), kind),
+                    size: h.size,
+                    seeders: h.seeders,
+                    leechers: h.leechers,
+                    grabs: None,
+                    files: h.files,
+                    indexer: tpb::LABEL.to_string(),
+                    publish_date: tpb::iso8601(h.added),
+                    info_url: None,
+                    info_hash: Some(h.info_hash.clone()),
+                    categories: vec![tpb::category_name(h.category).to_string()],
+                    kind: kind.to_string(),
+                },
+                guid,
+                magnet_url: Some(tpb::magnet(&h.info_hash, &h.name)),
+                download_url: None,
+                tpb_id: Some(h.id),
+            }
+        })
+        .collect())
+}
+
+async fn search_uncached(query: &str, kind: &str) -> anyhow::Result<SearchOutcome> {
+    let c = config();
+    let use_prowlarr = !c.prowlarr_url.is_empty() && !c.prowlarr_key.is_empty();
+    let use_tpb = !c.tpb_url.is_empty();
+    if !use_prowlarr && !use_tpb {
+        bail!("configure um indexador em Configurações → Serviços (Prowlarr ou The Pirate Bay)");
+    }
+    let (prowlarr, native) = tokio::join!(
+        async { if use_prowlarr { Some(prowlarr_search(&c, query, kind).await) } else { None } },
+        async { if use_tpb { Some(tpb_search(&c, query, kind).await) } else { None } },
+    );
+
+    let mut found: Vec<Stored> = Vec::new();
+    let mut warnings = Vec::new();
+    let mut sources = 0;
+    for (name, r) in [("Prowlarr", prowlarr), ("The Pirate Bay", native)] {
+        let Some(r) = r else { continue };
+        sources += 1;
+        match r {
+            Ok(v) => found.extend(v),
+            Err(e) => warnings.push(format!("{name}: {e:#}")),
+        }
+    }
+    if warnings.len() == sources {
+        bail!("{}", warnings.join(" · "));
+    }
+
+    // The same torrent can come from several sources: keep one per info hash,
+    // the best-seeded, preferring the native result (direct magnet) on ties.
+    let mut by_hash: HashMap<String, usize> = HashMap::new();
+    let mut unique: Vec<Stored> = Vec::new();
+    for s in found {
+        let Some(hash) = s.release.info_hash.clone().filter(|h| !h.is_empty()) else {
+            unique.push(s);
+            continue;
+        };
+        match by_hash.get(&hash) {
+            Some(&i) => {
+                let cur = &unique[i].release;
+                let better = s.release.seeders > cur.seeders
+                    || (s.release.seeders == cur.seeders && s.release.indexer == tpb::LABEL && cur.indexer != tpb::LABEL);
+                if better {
+                    unique[i] = s;
+                }
+            }
+            None => {
+                by_hash.insert(hash, unique.len());
+                unique.push(s);
+            }
+        }
+    }
+
     let mut store = RELEASES.lock().unwrap();
     if store.len() > 5000 {
         store.clear();
     }
-    for it in items {
-        let Some(title) = it["title"].as_str() else { continue };
-        let guid = it["guid"].as_str().unwrap_or(title).to_string();
-        let id = short_hash(&guid);
-        let mut parsed = titles::parse(title);
-        if kind == "pc" && parsed.platform.is_none() {
-            parsed.platform = Some("pc");
-            parsed.platform_label = Some("PC");
-        }
-        let release = Release {
-            id: id.clone(),
-            title: title.to_string(),
-            parsed,
-            size: it["size"].as_u64().unwrap_or(0),
-            seeders: it["seeders"].as_u64().unwrap_or(0) as u32,
-            leechers: it["leechers"].as_u64().unwrap_or(0) as u32,
-            grabs: it["grabs"].as_u64().map(|g| g as u32),
-            files: it["files"].as_u64().map(|g| g as u32),
-            indexer: it["indexer"].as_str().unwrap_or_default().to_string(),
-            publish_date: it["publishDate"].as_str().unwrap_or_default().to_string(),
-            info_url: it["infoUrl"].as_str().map(String::from),
-            info_hash: it["infoHash"].as_str().map(String::from),
-            categories: it["categories"]
-                .as_array()
-                .map(|a| a.iter().filter_map(|c| c["name"].as_str().map(String::from)).collect())
-                .unwrap_or_default(),
-            kind: kind.to_string(),
-        };
-        store.insert(
-            id,
-            Arc::new(Stored {
-                release: release.clone(),
-                guid,
-                magnet_url: it["magnetUrl"].as_str().map(String::from),
-                download_url: it["downloadUrl"].as_str().map(String::from),
-            }),
-        );
-        out.push(release);
-    }
-    out.sort_by(|a, b| b.seeders.cmp(&a.seeders).then(b.leechers.cmp(&a.leechers)));
-    Ok(out)
+    let mut results: Vec<Release> = unique
+        .into_iter()
+        .map(|s| {
+            let r = s.release.clone();
+            store.insert(r.id.clone(), Arc::new(s));
+            r
+        })
+        .collect();
+    results.sort_by(|a, b| b.seeders.cmp(&a.seeders).then(b.leechers.cmp(&a.leechers)));
+    Ok(SearchOutcome { results, warnings })
 }
 
 fn stored(id: &str) -> anyhow::Result<Arc<Stored>> {
@@ -467,6 +585,7 @@ fn cover_cache_dir() -> PathBuf {
 pub async fn image(url: &str) -> anyhow::Result<(Vec<u8>, String)> {
     let iic_cdn = config().iic_cdn;
     let allowed = url.starts_with("https://cdn2.steamgriddb.com/")
+        || url.starts_with("https://cdn.thegamesdb.net/")
         || url.starts_with("https://shared.akamai.steamstatic.com/")
         || url.starts_with("https://shared.fastly.steamstatic.com/")
         || url.starts_with("https://cdn.akamai.steamstatic.com/")
@@ -503,33 +622,33 @@ pub async fn image(url: &str) -> anyhow::Result<(Vec<u8>, String)> {
 
 static DESCRIPTIONS: LazyLock<Mutex<HashMap<String, Option<String>>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
-/// Best-effort description: The Pirate Bay exposes it through apibay.
-async fn description(r: &Release) -> Option<String> {
-    if r.indexer.to_lowercase() != "thepiratebay" {
+/// Best-effort description: The Pirate Bay's API has one per torrent (only
+/// when its endpoint is configured).
+async fn description(s: &Stored) -> Option<String> {
+    let id = s.tpb_id.as_deref()?;
+    let base = config().tpb_url;
+    if base.is_empty() {
         return None;
     }
-    let id = r.info_url.as_deref()?.split("id=").nth(1)?.split('&').next()?.to_string();
-    if let Some(hit) = DESCRIPTIONS.lock().unwrap().get(&id).cloned() {
+    if let Some(hit) = DESCRIPTIONS.lock().unwrap().get(id).cloned() {
         return hit;
     }
-    let text = async {
-        let v: Value = HTTP.get(format!("https://apibay.org/t.php?id={id}")).send().await.ok()?.json().await.ok()?;
-        v["descr"].as_str().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
-    }
-    .await;
-    DESCRIPTIONS.lock().unwrap().insert(id, text.clone());
+    let text = tpb::description(&base, id).await;
+    DESCRIPTIONS.lock().unwrap().insert(id.to_string(), text.clone());
     text
 }
 
-pub async fn details(id: &str) -> anyhow::Result<Value> {
+/// `with_art: false` skips the SteamGridDB lookup by torrent name: the Store
+/// already matched the game for the search and passes that along instead.
+pub async fn details(id: &str, with_art: bool) -> anyhow::Result<Value> {
     let s = stored(id)?;
     let r = &s.release;
-    let game = art(&r.parsed.name).await;
+    let game = if with_art { art(&r.parsed.name).await } else { None };
     let hero = match &game {
         Some(g) => hero(g).await,
         None => None,
     };
-    let desc = description(r).await;
+    let desc = description(&s).await;
     Ok(json!({ "release": r, "art": game, "hero": hero, "description": desc }))
 }
 
@@ -568,12 +687,15 @@ async fn resolve_source(s: &Stored) -> anyhow::Result<Source> {
 }
 
 async fn rqbit_add(src: Source, query: &[(&str, &str)]) -> anyhow::Result<Value> {
+    if !torrent::running() {
+        bail!("o motor de torrents ainda não está pronto; tente de novo em alguns segundos");
+    }
     let body = match src {
         Source::Magnet(m) => m.into_bytes(),
         Source::TorrentFile(b) => b,
     };
     let r = HTTP
-        .post(format!("http://127.0.0.1:{}/torrents", torrent::API_PORT))
+        .post(format!("http://127.0.0.1:{}/torrents", torrent::api_port()))
         .query(query)
         .body(body)
         .timeout(Duration::from_secs(120))
@@ -600,7 +722,10 @@ pub async fn files(id: &str) -> anyhow::Result<Value> {
     Ok(json!({ "name": v["details"]["name"], "files": files }))
 }
 
-pub async fn download(id: &str, dest: Option<String>) -> anyhow::Result<Value> {
+/// `hint`: what the Store showed for the search (SteamGridDB + isitcracked).
+/// Transfers gets that right away; Steam and TheGamesDB are asked in the
+/// background and take precedence (see `library`).
+pub async fn download(id: &str, dest: Option<String>, hint: Option<library::Hint>) -> anyhow::Result<Value> {
     let s = stored(id)?;
     let src = resolve_source(&s).await?;
     let mut q: Vec<(&str, &str)> = vec![("overwrite", "true")];
@@ -610,5 +735,28 @@ pub async fn download(id: &str, dest: Option<String>) -> anyhow::Result<Value> {
     }
     let v = rqbit_add(src, &q).await?;
     log!("catálogo: baixando {:?} → {:?}", s.release.title, dest);
-    Ok(json!({ "torrent_id": v["id"], "name": v["details"]["name"] }))
+    let info_hash = v["details"]["info_hash"].as_str().unwrap_or_default().to_lowercase();
+    let r = &s.release;
+    let hint = hint.unwrap_or_default();
+    let fallback = r.parsed.name.clone();
+    let platform = r.parsed.platform_label.map(String::from);
+    // Steam is searched by name for PC releases only (unknown counts as PC).
+    let pc = r.parsed.platform_label.is_none_or(|p| p == "PC");
+    library::add(library::Entry {
+        info_hash: info_hash.clone(),
+        game: library::quick(&hint, &fallback, platform.clone()),
+        release: r.title.clone(),
+        indexer: r.indexer.clone(),
+        size: r.size,
+        dest,
+        added: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0),
+        resolved: false,
+    });
+    let hash = info_hash.clone();
+    tokio::spawn(async move {
+        let game = library::resolve(&hint, &fallback, platform, pc).await;
+        log!("biblioteca: {:?} ← {}", game.name, game.sources.join(" → "));
+        library::update_game(&hash, game);
+    });
+    Ok(json!({ "torrent_id": v["id"], "name": v["details"]["name"], "info_hash": info_hash }))
 }

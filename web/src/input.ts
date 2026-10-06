@@ -128,13 +128,17 @@ class InputManager {
     if (target) target.scrollTop += dy
   }
 
-  /** Modal layer: B runs `onBack`, everything else is plain spatial navigation. */
-  pushModal(onBack: () => void) {
+  /**
+   * Modal layer: B runs `onBack`, everything else is plain spatial navigation.
+   * Full-screen pages pass `tabs` so L1/R1 still switch tabs from them.
+   */
+  pushModal(onBack: () => void, opts: { tabs?: boolean } = {}) {
     return this.pushHandler(a => {
       if (a === 'back') {
         onBack()
         return true
       }
+      if (opts.tabs && (a === 'lb' || a === 'rb')) return false
       return 'nav'
     })
   }
@@ -295,6 +299,21 @@ function focusables(): HTMLElement[] {
   )
 }
 
+/**
+ * Remembers what has focus now; the returned function puts focus back there
+ * (e.g. on the card that opened an overlay), or on the default if it's gone.
+ */
+export function keepFocus(): () => void {
+  const el = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  return () =>
+    requestAnimationFrame(() => {
+      if (el?.isConnected && el.matches('[data-nav]')) {
+        el.focus({ preventScroll: true })
+        ensureVisible(el)
+      } else focusFirst()
+    })
+}
+
 export function focusFirst() {
   const els = focusables()
   const preferred = els.find(el => el.dataset.navDefault !== undefined) ?? els[0]
@@ -406,6 +425,19 @@ function moveFocus(dir: 'up' | 'down' | 'left' | 'right'): boolean {
     if (visible[0]) {
       visible[0].focus({ preventScroll: true })
       ensureVisible(visible[0])
+      return true
+    }
+  }
+  // Explicit links win over geometry (data-nav-up/down/left/right="selector"),
+  // e.g. a centered search bar between left-aligned buttons and a grid.
+  // "none" keeps focus where it is.
+  const link = current.dataset[`nav${dir[0].toUpperCase()}${dir.slice(1)}`]
+  if (link === 'none') return true
+  if (link) {
+    const target = document.querySelector<HTMLElement>(link)
+    if (target && els.includes(target)) {
+      target.focus({ preventScroll: true })
+      ensureVisible(target)
       return true
     }
   }

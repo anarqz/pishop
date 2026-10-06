@@ -1,10 +1,11 @@
-// Game page between Discover and the Store, Xbox-style: details below, the
-// trailer above. Up slides to the trailer (it starts playing), Down returns.
+// Game page between Discover and the Store, Xbox-style: details, with the
+// trailer "above" — Up slides a full-screen player down over everything (it
+// starts playing), Down/B slides it back up.
 
 import { useEffect, useRef, useState } from 'react'
 import { type DiscoverGame, type GameMeta, type Trailer, api, imgUrl } from '../api'
 import { focusFirst, input } from '../input'
-import { Icon, Spinner, useHints } from '../ui'
+import { Glyph, Icon, Spinner, useHints } from '../ui'
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return null
@@ -43,14 +44,42 @@ export default function GameDetail({
     }
   }, [game.title])
 
-  const ctl = useRef({ view, setView, onClose })
-  ctl.current = { view, setView, onClose }
+  // Full-screen player: muted state and the auto-hiding control bar.
+  const [muted, setMuted] = useState(false)
+  const [barVisible, setBarVisible] = useState(true)
+  const barTimer = useRef(0)
+  const frame = useRef<HTMLIFrameElement>(null)
+  const pokeBar = () => {
+    setBarVisible(true)
+    clearTimeout(barTimer.current)
+    barTimer.current = window.setTimeout(() => setBarVisible(false), 3000)
+  }
+  // YouTube's iframe API (enablejsapi=1) takes commands over postMessage.
+  const toggleMute = () => {
+    setMuted(m => {
+      frame.current?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: m ? 'unMute' : 'mute', args: [] }), '*')
+      return !m
+    })
+    pokeBar()
+  }
+  useEffect(() => {
+    if (view === 'trailer') {
+      setMuted(false)
+      pokeBar()
+    }
+    return () => clearTimeout(barTimer.current)
+  }, [view])
+
+  const ctl = useRef({ view, setView, onClose, toggleMute, pokeBar })
+  ctl.current = { view, setView, onClose, toggleMute, pokeBar }
   useEffect(
     () =>
       input.pushHandler(a => {
         const c = ctl.current
         if (c.view === 'trailer') {
           if (a === 'down' || a === 'back') c.setView('details')
+          else if (a === 'y') c.toggleMute()
+          else c.pokeBar()
           // Everything else is swallowed while the trailer plays.
           return a !== 'quit'
         }
@@ -58,6 +87,8 @@ export default function GameDetail({
           c.onClose()
           return true
         }
+        // L1/R1 still switch tabs from the game page.
+        if (a === 'lb' || a === 'rb') return false
         if (a === 'up') {
           // From the top row of the details, Up slides to the trailer.
           const el = document.activeElement as HTMLElement | null
@@ -75,7 +106,7 @@ export default function GameDetail({
   }, [view])
   useHints(
     view === 'trailer'
-      ? [{ glyph: 'DPAD', label: 'Detalhes ▼' }, { glyph: 'B', label: 'Voltar' }]
+      ? [{ glyph: 'B', label: 'Voltar' }, { glyph: 'Y', label: muted ? 'Ativar som' : 'Silenciar' }]
       : [
           { glyph: 'A', label: 'Selecionar' },
           { glyph: 'DPAD', label: 'Trailer ▲' },
@@ -109,38 +140,7 @@ export default function GameDetail({
   return (
     <div className="gd" data-nav-scope>
       <div className="gd-bg" style={bg ? { backgroundImage: `url(${bg})` } : undefined} />
-      <div className={`gd-track gd-show-${view}`}>
-        {/* Trailer (above) */}
-        <section className="gd-page gd-trailer">
-          <div className="gd-trailer-head">
-            <span className="hero-kicker">Trailer</span>
-            <b>{trailer.t?.title ?? game.title}</b>
-          </div>
-          <div className="gd-video">
-            {view === 'trailer' && trailer.state === 'ok' && (
-              <iframe
-                // Not focusable: the controller keeps driving the page.
-                tabIndex={-1}
-                src={`https://www.youtube-nocookie.com/embed/${trailer.t!.video_id}?autoplay=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3`}
-                title={trailer.t!.title}
-                allow="autoplay; encrypted-media"
-                referrerPolicy="strict-origin-when-cross-origin"
-              />
-            )}
-            {trailer.state === 'loading' && (
-              <div className="gd-video-msg">
-                <Spinner /> Procurando o trailer…
-              </div>
-            )}
-            {(trailer.state === 'none' || trailer.state === 'error') && (
-              <div className="gd-video-msg">Nenhum trailer encontrado para este jogo.</div>
-            )}
-          </div>
-          <div className="gd-chevron">▼ Detalhes</div>
-        </section>
-
-        {/* Details (below) */}
-        <section className="gd-page gd-details">
+        <section className="gd-details">
           <button className="gd-chevron up" tabIndex={-1} onClick={() => setView('trailer')}>
             ▲ Trailer
           </button>
@@ -216,6 +216,45 @@ export default function GameDetail({
             </div>
           </div>
         </section>
+
+      {/* Trailer: full screen, slides down from the top over everything. */}
+      <div className={`gd-player ${view === 'trailer' ? 'open' : ''}`} aria-hidden={view !== 'trailer'}>
+        {view === 'trailer' && trailer.state === 'ok' && (
+          <iframe
+            ref={frame}
+            // Not focusable: the controller keeps driving the page.
+            tabIndex={-1}
+            src={`https://www.youtube-nocookie.com/embed/${trailer.t!.video_id}?autoplay=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&fs=0&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`}
+            title={trailer.t!.title}
+            allow="autoplay; encrypted-media"
+            referrerPolicy="strict-origin-when-cross-origin"
+            // Belt and braces for autoplay: ask the player to start once loaded.
+            onLoad={e => {
+              const w = e.currentTarget.contentWindow
+              window.setTimeout(() => w?.postMessage(JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'), 700)
+            }}
+          />
+        )}
+        {trailer.state === 'loading' && (
+          <div className="gd-player-msg">
+            <Spinner /> Procurando o trailer…
+          </div>
+        )}
+        {(trailer.state === 'none' || trailer.state === 'error') && (
+          <div className="gd-player-msg">Nenhum trailer encontrado para este jogo.</div>
+        )}
+        <div className={`gd-player-bar ${barVisible ? '' : 'hidden'}`}>
+          <div className="gd-player-title">
+            <span className="hero-kicker">Trailer · {meta?.art?.name ?? game.title}</span>
+            <b>{trailer.t?.title ?? ''}</b>
+          </div>
+          <button className="gd-player-ctl" tabIndex={-1} onClick={() => setView('details')}>
+            <Glyph name="B" /> Voltar
+          </button>
+          <button className="gd-player-ctl" tabIndex={-1} onClick={toggleMute}>
+            <Glyph name="Y" /> {muted ? 'Ativar som' : 'Silenciar'}
+          </button>
+        </div>
       </div>
     </div>
   )

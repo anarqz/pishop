@@ -42,7 +42,15 @@ fn store<T: Serialize>(name: &str, v: &T) {
     }
 }
 
+/// Official library art: the 600×900 capsule (cover) and the wide hero.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct LibraryArt {
+    pub cover: Option<String>,
+    pub hero: Option<String>,
+}
+
 static DETAILS: LazyLock<Mutex<HashMap<String, Option<StoreInfo>>>> = LazyLock::new(|| Mutex::new(load("steam-store.json")));
+static ART: LazyLock<Mutex<HashMap<String, Option<LibraryArt>>>> = LazyLock::new(|| Mutex::new(load("steam-art.json")));
 static APPIDS: LazyLock<Mutex<HashMap<String, Option<String>>>> = LazyLock::new(|| Mutex::new(load("steam-appids.json")));
 
 fn client() -> Option<reqwest::Client> {
@@ -149,6 +157,49 @@ pub async fn details(appid: &str) -> Option<StoreInfo> {
 }
 
 /// Opens the game's page in the Steam client (Game Mode shows it on top).
+/// Library capsule + hero of an app. Newer apps keep these under hashed file
+/// names, so the store's item API says where they are (no key needed).
+pub async fn library_art(appid: &str) -> Option<LibraryArt> {
+    let appid = appid.trim();
+    if appid.is_empty() || !appid.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    if let Some(hit) = ART.lock().unwrap().get(appid).cloned() {
+        return hit;
+    }
+    let input = format!(
+        r#"{{"ids":[{{"appid":{appid}}}],"context":{{"language":"brazilian","country_code":"BR"}},"data_request":{{"include_assets":true}}}}"#
+    );
+    let v: Value = async {
+        client()?
+            .get("https://api.steampowered.com/IStoreBrowseService/GetItems/v1/")
+            .query(&[("input_json", input.as_str())])
+            .send()
+            .await
+            .ok()?
+            .json()
+            .await
+            .ok()
+    }
+    .await
+    .or_else(|| {
+        log!("steam: assets {appid} indisponíveis");
+        None
+    })?;
+    let a = &v["response"]["store_items"][0]["assets"];
+    let url = |key: &str| -> Option<String> {
+        let file = a[key].as_str()?;
+        let fmt = a["asset_url_format"].as_str()?;
+        Some(format!("https://shared.akamai.steamstatic.com/store_item_assets/{}", fmt.replace("${FILENAME}", file)))
+    };
+    let found = Some(LibraryArt { cover: url("library_capsule"), hero: url("library_hero") })
+        .filter(|a| a.cover.is_some() || a.hero.is_some());
+    let mut m = ART.lock().unwrap();
+    m.insert(appid.to_string(), found.clone());
+    store("steam-art.json", &*m);
+    found
+}
+
 pub fn open_store_page(appid: &str) -> std::io::Result<()> {
     if appid.is_empty() || !appid.chars().all(|c| c.is_ascii_digit()) {
         return Err(std::io::Error::other("appid inválido"));

@@ -96,7 +96,7 @@ async fn info(State(s): State<AppState>) -> impl IntoResponse {
         "addr": s.addr.to_string(),
         "uptime_secs": s.started.elapsed().as_secs(),
         "pid": std::process::id(),
-        "torrent_api": format!("http://127.0.0.1:{}", crate::torrent::API_PORT),
+        "torrent_api": format!("http://127.0.0.1:{}", crate::torrent::api_port()),
         "download_dir": crate::torrent::download_dir(),
     }))
 }

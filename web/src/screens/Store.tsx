@@ -2,8 +2,8 @@
 // grid matched against SteamGridDB, with a full details page and download.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { type Art, type DiscoverGame, type Place, type Release, type ReleaseDetails, api, formatBytes, imgUrl } from '../api'
-import { focusFirst, input } from '../input'
+import { type Art, type DiscoverGame, type GameHint, type LibraryGame, type Place, type Release, type ReleaseDetails, api, formatBytes, imgUrl } from '../api'
+import { ensureVisible, focusFirst, input } from '../input'
 import { Dialog, type Hint, Icon, Spinner, TextPrompt, toast, useHints } from '../ui'
 
 export type Kind = 'console' | 'pc'
@@ -44,9 +44,11 @@ const memory: {
   platform: string | null
   origin: DiscoverGame | null
   ctx: SearchContext | null
+  /** Release whose details are open (reopened when coming back to the tab). */
+  details: string | null
   /** Last Discover request already searched (so returning doesn't redo it). */
   handled: number
-} = { kind: 'console', sort: 'seeders', query: '', results: null, platform: null, origin: null, ctx: null, handled: 0 }
+} = { kind: 'console', sort: 'seeders', query: '', results: null, platform: null, origin: null, ctx: null, details: null, handled: 0 }
 
 /** Header data for a search: SteamGridDB art + isitcracked status. */
 interface SearchContext {
@@ -54,6 +56,40 @@ interface SearchContext {
   art: Art | null
   hero: string | null
   crack: DiscoverGame | null
+}
+
+/**
+ * The search's matched game, if this release is plausibly that game: results
+ * sharing no word with it (another game entirely) don't inherit its art.
+ */
+function matchFor(r: Release, ctx: SearchContext | null): SearchContext | null {
+  if (!ctx || (!ctx.art && !ctx.crack)) return null
+  return relevance(r, ctx.art?.name ?? ctx.crack?.title ?? ctx.q) > 0 ? ctx : null
+}
+
+/** How the details show a release: the search's matched game, or the release's own name. */
+function libraryGame(r: Release, m: SearchContext | null): LibraryGame {
+  const c = m?.crack ?? null
+  return {
+    name: m?.art?.name ?? c?.title ?? r.parsed.name,
+    cover: c?.cover ?? m?.art?.cover ?? null,
+    hero: m?.hero ?? c?.header ?? null,
+    year: m?.art?.year ?? (c?.release_date ? Number(c.release_date.slice(0, 4)) || null : null),
+    platform: r.parsed.platform_label ?? null,
+    crack_date: c?.crack_date ?? null,
+    scene_group: c?.scene_group ?? null,
+    drm: c?.drm ?? null,
+    steam_appid: c?.steam_appid != null ? String(c.steam_appid) : null,
+  }
+}
+
+/** Sent with a download: the matched game's sources, kept apart for the launcher to rank. */
+function gameHint(r: Release, m: SearchContext | null): GameHint {
+  return {
+    name: m?.art?.name ?? m?.crack?.title ?? r.parsed.name,
+    sgdb: m?.art ? { name: m.art.name, cover: m.art.cover, hero: m.hero, year: m.art.year } : null,
+    crack: m?.crack ?? null,
+  }
 }
 
 function readHistory(): string[] {
@@ -70,10 +106,6 @@ function pushHistory(q: string) {
   } catch {
     // storage unavailable
   }
-}
-
-function displayName(r: Release, art?: Art | null) {
-  return art?.name ?? r.parsed.name
 }
 
 // ---------- screen ----------
@@ -105,19 +137,19 @@ export default function Store({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [prompt, setPrompt] = useState(false)
-  const [details, setDetails] = useState<string | null>(null)
+  const [details, setDetails] = useState<string | null>(memory.details)
   const [configured, setConfigured] = useState<boolean | null>(null)
 
   useEffect(() => {
     api
       .catalogConfig()
-      .then(c => setConfigured(!!c.prowlarr_url && c.has_key))
+      .then(c => setConfigured((!!c.prowlarr_url && c.has_key) || !!c.tpb_url))
       .catch(() => setConfigured(false))
   }, [])
 
   useEffect(() => {
-    Object.assign(memory, { kind, sort, query, results, platform, origin, ctx })
-  }, [kind, sort, query, results, platform, origin, ctx])
+    Object.assign(memory, { kind, sort, query, results, platform, origin, ctx, details })
+  }, [kind, sort, query, results, platform, origin, ctx, details])
 
   const runSearch = useCallback(async (q: string, k: Kind, from?: DiscoverGame | null) => {
     if (!q.trim()) return
@@ -133,7 +165,9 @@ export default function Store({
     setPlatform(null)
     try {
       const r = await api.search(q, k)
-      setResults(r)
+      setResults(r.results)
+      // One indexer down doesn't hide the others' results: just say so.
+      for (const w of r.warnings) toast('Um indexador não respondeu', w, 'error')
       pushHistory(q)
       requestAnimationFrame(focusFirst)
     } catch (e) {
@@ -230,8 +264,8 @@ export default function Store({
     return (
       <div className="empty-state" data-nav-scope>
         <Icon name="search" size={56} />
-        <h2>Conecte o Prowlarr</h2>
-        <p>A loja busca jogos nos indexadores do seu Prowlarr. Configure o endereço e a chave de API.</p>
+        <h2>Configure um indexador</h2>
+        <p>A loja busca jogos no The Pirate Bay (nativo) e/ou nos indexadores do seu Prowlarr.</p>
         <button data-nav data-nav-default className="btn primary" onClick={onGoSettings}>
           Configurar indexadores
         </button>
@@ -332,7 +366,12 @@ export default function Store({
               <span>Leechers</span>
             </div>
             {shown.map((r, i) => (
-              <ReleaseRow key={r.id} r={r} first={i === 0} onOpen={() => setDetails(r.id)} />
+              <ReleaseRow
+                key={r.id}
+                r={r}
+                first={i === 0}
+                onOpen={() => setDetails(r.id)}
+              />
             ))}
           </div>
         )}
@@ -357,10 +396,21 @@ export default function Store({
       {details && (
         <Details
           id={details}
+          match={ctx}
           siblings={results ?? []}
           places={places}
           onOpen={setDetails}
-          onClose={() => setDetails(null)}
+          onClose={() => {
+            // Back on the row of the release that was open (also after a tab switch).
+            const id = details
+            setDetails(null)
+            requestAnimationFrame(() => {
+              const row = document.querySelector<HTMLElement>(`[data-release-id="${CSS.escape(id)}"]`)
+              if (!row) return focusFirst()
+              row.focus({ preventScroll: true })
+              ensureVisible(row)
+            })
+          }}
         />
       )}
     </div>
@@ -375,20 +425,19 @@ function hue(s: string) {
   return h
 }
 
-function Cover({ r, art, big }: { r: Release; art: Art | null | undefined; big?: boolean }) {
-  const [loaded, setLoaded] = useState(false)
-  const src = art ? imgUrl(big ? art.cover : art.cover_thumb) : null
-  const h = hue(r.parsed.name)
+/** Cover of the matched game (already loaded by the header): no lookup here. */
+function GameCover({ game }: { game: LibraryGame }) {
   return (
-    <div className="cover" style={{ ['--h' as string]: h }}>
-      {!src && (
+    <div className="cover" style={{ ['--h' as string]: hue(game.name) }}>
+      {game.cover ? (
+        <img src={imgUrl(game.cover)} alt="" className="in" draggable={false} />
+      ) : (
         <div className="cover-placeholder">
-          {art === undefined ? <Spinner /> : <Icon name="pad" size={big ? 64 : 40} />}
-          <b>{r.parsed.name}</b>
+          <Icon name="pad" size={64} />
+          <b>{game.name}</b>
         </div>
       )}
-      {src && <img src={src} alt="" className={loaded ? 'in' : ''} onLoad={() => setLoaded(true)} draggable={false} />}
-      {r.parsed.platform_label && <span className="plat">{r.parsed.platform_label}</span>}
+      {game.platform && <span className="plat">{game.platform}</span>}
     </div>
   )
 }
@@ -402,7 +451,7 @@ function shortDate(iso: string) {
 function ReleaseRow({ r, first, onOpen }: { r: Release; first: boolean; onOpen: () => void }) {
   const extra = [r.parsed.region, r.parsed.version, r.parsed.group, r.indexer].filter(Boolean).join(' · ')
   return (
-    <button data-nav data-nav-default={first ? '' : undefined} className="release-row" onClick={onOpen}>
+    <button data-nav data-nav-default={first ? '' : undefined} data-release-id={r.id} className="release-row" onClick={onOpen}>
       <span className={`plat-badge ${r.parsed.platform_label ? '' : 'none'}`}>{r.parsed.platform_label ?? '—'}</span>
       <span className="release-name">
         <b>{r.title}</b>
@@ -494,12 +543,15 @@ function ContextHeader({ ctx, query, count, loading }: { ctx: SearchContext; que
 
 function Details({
   id,
+  match,
   siblings,
   places,
   onOpen,
   onClose,
 }: {
   id: string
+  /** The game the search matched (header): its art and crack info carry over. */
+  match: SearchContext | null
   siblings: Release[]
   places: Place[]
   onOpen: (id: string) => void
@@ -517,14 +569,14 @@ function Details({
     setError(null)
     setFiles({ state: 'idle' })
     api
-      .release(id)
+      .release(id, false)
       .then(setD)
       .catch(e => setError((e as Error).message))
   }, [id])
 
   useEffect(() => {
     if (choose) return
-    return input.pushModal(() => close.current())
+    return input.pushModal(() => close.current(), { tabs: true })
   }, [choose])
   useEffect(() => {
     if (d) requestAnimationFrame(focusFirst)
@@ -544,14 +596,12 @@ function Details({
   const r = d?.release ?? siblings.find(s => s.id === id)
   const others = r ? siblings.filter(s => s.id !== id && s.parsed.name.toLowerCase() === r.parsed.name.toLowerCase()).slice(0, 8) : []
   const date = r?.publish_date ? new Date(r.publish_date).toLocaleDateString('pt-BR') : '—'
-  const name = r ? displayName(r, d?.art) : ''
+  const matched = r ? matchFor(r, match) : null
+  const game = r ? libraryGame(r, matched) : null
 
   return (
     <div className="details" data-nav-scope>
-      <div
-        className="details-bg"
-        style={{ backgroundImage: d?.hero ? `url(${imgUrl(d.hero)})` : d?.art ? `url(${imgUrl(d.art.cover)})` : undefined }}
-      />
+      <div className="details-bg" style={game?.hero ? { backgroundImage: `url(${imgUrl(game.hero)})` } : undefined} />
       <div className="details-shade" />
       {!r && !error && (
         <div className="store-msg">
@@ -567,13 +617,16 @@ function Details({
       {r && (
         <div className="details-content">
           <div className="details-left">
-            <Cover r={r} art={d ? d.art : undefined} big />
+            <GameCover game={game!} />
           </div>
           <div className="details-main">
-            <h1 className="details-title">{name}</h1>
+            <h1 className="details-title">{game!.name}</h1>
             <div className="details-tags">
               {r.parsed.platform_label && <span className="tag strong">{r.parsed.platform_label}</span>}
-              {d?.art?.year && <span className="tag">{d.art.year}</span>}
+              {game!.year && <span className="tag">{game!.year}</span>}
+              {game!.crack_date && <span className="tag ok">Crack {shortDate(game!.crack_date)}</span>}
+              {game!.scene_group && <span className="tag">{game!.scene_group}</span>}
+              {game!.drm && <span className="tag">DRM {game!.drm}</span>}
               {r.parsed.region && <span className="tag">{r.parsed.region}</span>}
               {r.parsed.version && <span className="tag">{r.parsed.version}</span>}
               {r.parsed.group && <span className="tag">{r.parsed.group}</span>}
@@ -661,12 +714,26 @@ function Details({
           </div>
         </div>
       )}
-      {choose && r && <DownloadDialog r={r} places={places} onClose={() => setChoose(false)} />}
+      {choose && r && game && (
+        <DownloadDialog r={r} game={game} hint={gameHint(r, matched)} places={places} onClose={() => setChoose(false)} />
+      )}
     </div>
   )
 }
 
-function DownloadDialog({ r, places, onClose }: { r: Release; places: Place[]; onClose: () => void }) {
+function DownloadDialog({
+  r,
+  game,
+  hint,
+  places,
+  onClose,
+}: {
+  r: Release
+  game: LibraryGame
+  hint: GameHint
+  places: Place[]
+  onClose: () => void
+}) {
   const [busy, setBusy] = useState(false)
   const [romsDirs, setRomsDirs] = useState<string[] | null>(null)
   const romsRoot = places.find(p => p.icon === 'roms')?.path
@@ -688,8 +755,8 @@ function DownloadDialog({ r, places, onClose }: { r: Release; places: Place[]; o
   const go = async (dest?: string) => {
     setBusy(true)
     try {
-      const res = await api.download(r.id, dest)
-      toast('Download iniciado', `${res.name ?? r.title} · acompanhe em Torrents`, 'ok')
+      await api.download(r.id, dest, hint)
+      toast('Download iniciado', `${game.name} · acompanhe em Transferências`, 'ok')
       onClose()
     } catch (e) {
       setBusy(false)

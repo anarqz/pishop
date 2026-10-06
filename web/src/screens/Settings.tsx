@@ -7,7 +7,7 @@ import { BUTTON_NAMES, type PadSnapshot, input } from '../input'
 import { SCALE_CHOICES, type ScaleSetting, autoScale, getScaleSetting, setScaleSetting } from '../scale'
 import { Dialog, Icon, Spinner, toast, useHints } from '../ui'
 
-type Section = 'sources' | 'indexers' | 'display' | 'controller' | 'about'
+type Section = 'sources' | 'indexers' | 'downloads' | 'display' | 'controller' | 'about'
 
 export default function Settings({
   sources,
@@ -30,6 +30,7 @@ export default function Settings({
           [
             ['sources', 'network', 'Fontes de jogos'],
             ['indexers', 'search', 'Serviços'],
+            ['downloads', 'download', 'Downloads'],
             ['display', 'display', 'Tela'],
             ['controller', 'pad', 'Controle'],
             ['about', 'info', 'Sobre'],
@@ -70,6 +71,7 @@ export default function Settings({
           />
         )}
         {section === 'indexers' && <IndexersSection />}
+        {section === 'downloads' && <DownloadsSection />}
         {section === 'display' && <DisplaySection />}
         {section === 'controller' && <ControllerSection />}
         {section === 'about' && <AboutSection info={info} />}
@@ -263,6 +265,7 @@ function IndexersSection() {
   const [iicUrl, setIicUrl] = useState('')
   const [iicKey, setIicKey] = useState('')
   const [iicCdn, setIicCdn] = useState('')
+  const [tpbUrl, setTpbUrl] = useState('')
   const [tests, setTests] = useState<Record<string, TestState>>({})
   const setTest = (k: string, v: TestState) => setTests(t => ({ ...t, [k]: v }))
 
@@ -271,6 +274,7 @@ function IndexersSection() {
     setProwlarrUrl(c.prowlarr_url)
     setIicUrl(c.iic_url)
     setIicCdn(c.iic_cdn)
+    setTpbUrl(c.tpb_url ?? '')
   }
   useEffect(() => {
     api.catalogConfig().then(apply).catch(() => {})
@@ -303,6 +307,26 @@ function IndexersSection() {
       <p className="settings-desc">
         Endereços e chaves das APIs usadas pela Loja e pelo Descobrir. Ficam só neste aparelho.
       </p>
+
+      <h3 className="section-title">The Pirate Bay · busca nativa de torrents</h3>
+      <div className="form-grid">
+        <label>
+          <span>Endereço da API (formato apibay)</span>
+          <input data-nav className="field" placeholder="https://… (vazio desativa)" value={tpbUrl} onChange={e => setTpbUrl(e.target.value)} />
+        </label>
+      </div>
+      <TestLine state={tests.tpb ?? { s: 'idle' }} />
+      <div className="row">
+        <button data-nav className="btn" disabled={!tpbUrl} onClick={() => run('tpb', async () => {
+          const r = await api.testService('tpb', { url: tpbUrl })
+          return `Conectado · ${r.total ?? 0} resultados para a busca de teste`
+        })}>
+          Testar
+        </button>
+        <button data-nav className="btn primary" onClick={() => save({ tpb_url: tpbUrl }, 'The Pirate Bay')}>
+          Salvar
+        </button>
+      </div>
 
       <h3 className="section-title">Prowlarr · busca de torrents</h3>
       <div className="form-grid">
@@ -374,6 +398,53 @@ function IndexersSection() {
         <button data-nav className="btn primary" disabled={!iicUrl} onClick={() => save({ iic_url: iicUrl, iic_key: iicKey, iic_cdn: iicCdn }, 'isitcracked')}>
           Salvar
         </button>
+      </div>
+    </>
+  )
+}
+
+const MIB = 1024 * 1024
+/** Download caps offered, in MB/s (null = unlimited). */
+const SPEED_LIMITS = [null, 1, 2, 5, 10, 20, 50] as const
+
+function DownloadsSection() {
+  // bytes/s; undefined while loading.
+  const [limit, setLimit] = useState<number | null | undefined>(undefined)
+  useEffect(() => {
+    api
+      .torrentLimits()
+      .then(l => setLimit(l.download_bps))
+      .catch(() => setLimit(null))
+  }, [])
+  const choose = (mb: number | null) =>
+    api
+      .setTorrentLimits(mb ? mb * MIB : null)
+      .then(l => {
+        setLimit(l.download_bps)
+        toast('Limite de download', mb ? `${mb} MB/s` : 'Sem limite', 'ok')
+      })
+      .catch(e => toast('Não foi possível salvar', (e as Error).message, 'error'))
+  const perHour = (mb: number) => ((mb * 3600) / 1024).toLocaleString('pt-BR', { maximumFractionDigits: 1 })
+  return (
+    <>
+      <h2 className="settings-title">Downloads</h2>
+      <p className="settings-desc">
+        Velocidade máxima do cliente de torrent do piShop, somando todos os downloads. Muda na hora, sem reiniciar.
+      </p>
+      <h3 className="section-title">Limite de download</h3>
+      <div className="settings-list">
+        {SPEED_LIMITS.map(mb => {
+          const selected = limit !== undefined && (mb ? limit === mb * MIB : !limit)
+          return (
+            <button key={String(mb)} data-nav className={`settings-row ${selected ? 'selected' : ''}`} onClick={() => void choose(mb)}>
+              <Icon name={selected ? 'check' : 'download'} />
+              <div className="settings-row-main">
+                <b>{mb ? `${mb} MB/s` : 'Sem limite'}</b>
+                <small>{mb ? `Até ${perHour(mb)} GB por hora` : 'Usa toda a velocidade da conexão'}</small>
+              </div>
+            </button>
+          )
+        })}
       </div>
     </>
   )

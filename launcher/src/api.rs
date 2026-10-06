@@ -40,6 +40,15 @@ pub fn router() -> Router {
         .route("/api/catalog/release/{id}", get(catalog_details))
         .route("/api/catalog/release/{id}/files", get(catalog_files))
         .route("/api/catalog/release/{id}/download", post(catalog_download))
+        .route("/api/library", get(|| async { Json(crate::library::all()) }))
+        .route("/api/torrent/limits", get(|| async { Json(crate::torrent::limits()) }).post(torrent_limits))
+        .route(
+            "/api/library/{hash}",
+            delete(|Path(hash): Path<String>| async move {
+                crate::library::remove(&hash);
+                StatusCode::NO_CONTENT
+            }),
+        )
 }
 
 fn err(status: StatusCode, msg: impl std::fmt::Display) -> Response {
@@ -222,6 +231,7 @@ async fn service_test(Json(t): Json<ServiceTest>) -> Response {
         "iic" => crate::discover::test(&pick(&t.url, &c.iic_url), &pick(&t.key, &c.iic_key), &pick(&t.cdn, &c.iic_cdn))
             .await
             .map(|total| json!({ "total": total })),
+        "tpb" => crate::tpb::search(&pick(&t.url, &c.tpb_url), "linux", "0").await.map(|hits| json!({ "total": hits.len() })),
         _ => return err(StatusCode::NOT_FOUND, "serviço desconhecido"),
     };
     match r {
@@ -255,9 +265,16 @@ struct SearchQuery {
 async fn catalog_search(Query(q): Query<SearchQuery>) -> Response {
     let started = std::time::Instant::now();
     match catalog::search(q.q.trim(), &q.kind).await {
-        Ok(list) => {
-            crate::log!("catálogo: {:?} ({}) → {} resultados em {} ms", q.q, q.kind, list.len(), started.elapsed().as_millis());
-            Json(list).into_response()
+        Ok(out) => {
+            crate::log!(
+                "catálogo: {:?} ({}) → {} resultados em {} ms{}",
+                q.q,
+                q.kind,
+                out.results.len(),
+                started.elapsed().as_millis(),
+                if out.warnings.is_empty() { String::new() } else { format!(" · avisos: {}", out.warnings.join("; ")) }
+            );
+            Json(out).into_response()
         }
         Err(e) => err(StatusCode::BAD_GATEWAY, format!("{e:#}")),
     }
@@ -288,8 +305,18 @@ async fn catalog_img(Query(q): Query<UrlQuery>) -> Response {
     }
 }
 
-async fn catalog_details(Path(id): Path<String>) -> Response {
-    match catalog::details(&id).await {
+#[derive(Deserialize)]
+struct DetailsQuery {
+    #[serde(default = "yes")]
+    art: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+async fn catalog_details(Path(id): Path<String>, Query(q): Query<DetailsQuery>) -> Response {
+    match catalog::details(&id, q.art).await {
         Ok(v) => Json(v).into_response(),
         Err(e) => err(StatusCode::NOT_FOUND, format!("{e:#}")),
     }
@@ -305,12 +332,21 @@ async fn catalog_files(Path(id): Path<String>) -> Response {
 #[derive(Deserialize)]
 struct DownloadReq {
     dest: Option<String>,
+    #[serde(default)]
+    hint: Option<crate::library::Hint>,
 }
 
 async fn catalog_download(Path(id): Path<String>, Json(r): Json<DownloadReq>) -> Response {
-    match catalog::download(&id, r.dest.filter(|d| !d.trim().is_empty())).await {
+    match catalog::download(&id, r.dest.filter(|d| !d.trim().is_empty()), r.hint).await {
         Ok(v) => Json(v).into_response(),
         Err(e) => err(StatusCode::BAD_GATEWAY, format!("{e:#}")),
+    }
+}
+
+async fn torrent_limits(Json(l): Json<crate::torrent::Limits>) -> Response {
+    match crate::torrent::set_limits(l) {
+        Ok(l) => Json(l).into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}")),
     }
 }
 

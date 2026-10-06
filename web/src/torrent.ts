@@ -3,13 +3,6 @@ import { useEffect, useState } from 'react'
 // Client for the native BitTorrent engine (librqbit) embedded in the Rust
 // launcher. It speaks regular TCP/uTP BitTorrent, DHT and trackers.
 
-export const SINTEL_MAGNET =
-  'magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10&dn=Sintel' +
-  '&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=udp%3A%2F%2Fexplodie.org%3A6969' +
-  '&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337&tr=wss%3A%2F%2Ftracker.openwebtorrent.com'
-
-const VIDEO_EXT = /\.(mp4|m4v|mkv|webm|mov|avi)$/i
-
 let apiBase = 'http://127.0.0.1:47801'
 
 export function setTorrentApi(base: string) {
@@ -35,6 +28,7 @@ export interface TorrentInfo {
   finished: boolean
   error: string | null
   files: TorrentFile[]
+  outputFolder: string
 }
 
 export interface EngineState {
@@ -85,6 +79,7 @@ async function fetchState(): Promise<EngineState> {
         finished: !!s.finished,
         error: s.error ?? null,
         files: files ?? [],
+        outputFolder: t.output_folder ?? '',
       }
     }),
   )
@@ -134,17 +129,6 @@ export const forget = (id: number) => {
 export const destroy = (id: number) => {
   filesCache.delete(id)
   return call(`/torrents/${id}/delete`, { method: 'POST' })
-}
-
-/** Largest video file, which is what "watch" should play. */
-export function mainVideo(t: TorrentInfo): TorrentFile | null {
-  const videos = t.files.filter(f => VIDEO_EXT.test(f.name))
-  return videos.sort((a, b) => b.length - a.length)[0] ?? null
-}
-
-/** Ranged HTTP stream; plays while still downloading (pieces are prioritised). */
-export function streamUrl(t: TorrentInfo, f: TorrentFile) {
-  return `${apiBase}/torrents/${t.id}/stream/${f.index}/${encodeURIComponent(f.name)}`
 }
 
 export function formatBytes(n: number) {
