@@ -7,6 +7,7 @@
 // Optional env:
 //   SHOTS_REPLACE  {"from": "to", …} text rewrites before each shot (a stand-in
 //                  HOME back to /home/deck, a LAN address to a hostname).
+//   SHOTS_LANG     en | pt: the app's language for the captures (default: as set).
 //   SHOTS_DEMO=1   Transfers shows representative downloads of free, open-source
 //                  games (Steam art and data), served to the capture browser
 //                  only: nothing is downloaded.
@@ -26,6 +27,7 @@ const DEVICES = [
   { id: 'deck', width: 1280, height: 800 },
 ]
 const sleep = ms => new Promise(r => setTimeout(r, ms))
+const LANG = process.env.SHOTS_LANG
 
 async function session(port) {
   const profile = mkdtempSync(join(tmpdir(), 'pishop-shots-'))
@@ -90,12 +92,14 @@ const DEMO = [
   { appid: 380840, release: 'Teeworlds 0.7.5', indexer: '1337x', size: 32e6, progress: 1, state: 'paused', down: 0, up: 0, peers: 0, files: 87 },
 ]
 
+const steamLang = () => (LANG === 'pt' ? 'brazilian' : 'english')
+
 async function steamGame(appid) {
   const input = encodeURIComponent(
-    JSON.stringify({ ids: [{ appid }], context: { language: 'brazilian', country_code: 'BR' }, data_request: { include_assets: true } }),
+    JSON.stringify({ ids: [{ appid }], context: { language: steamLang(), country_code: 'BR' }, data_request: { include_assets: true } }),
   )
   const [info, item] = await Promise.all([
-    fetch(`https://store.steampowered.com/api/appdetails?appids=${appid}&l=brazilian&cc=br`)
+    fetch(`https://store.steampowered.com/api/appdetails?appids=${appid}&l=${steamLang()}&cc=br`)
       .then(r => r.json())
       .then(j => j[appid]?.data ?? {})
       .catch(() => ({})),
@@ -195,6 +199,9 @@ async function capture(device, port) {
     console.log(`  ${device.id}/${name}.webp`)
   }
 
+  if (LANG) {
+    await fetch(new URL('/api/settings', base), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ lang: LANG }) })
+  }
   await send('Emulation.setFocusEmulationEnabled', { enabled: true })
   await send('Emulation.setDeviceMetricsOverride', { width: device.width, height: device.height, deviceScaleFactor: 1, mobile: false })
   await send('Page.navigate', { url: base })

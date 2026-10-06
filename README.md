@@ -50,6 +50,7 @@ Um app nativo para SteamOS (Steam Deck, ROG Ally, Legion Go…) feito para o con
 - **BitTorrent nativo** — TCP/uTP, DHT, retomada e limite de velocidade.
 - **Explorar** — compartilhamentos de rede (SMB) num explorador de dois painéis, com fila de cópias para o aparelho.
 - **Interface SteamOS** — abas em L1/R1, legenda de botões, analógico direito para rolar, teclado da Steam sob demanda, escala automática (Deck / Ally / TV).
+- **Inglês e português** — o idioma é escolhido em Configurações → Idioma; a configuração dos serviços pode ser exportada e importada para compartilhar.
 
 A lista completa, incluindo o que está em estudo, está no [site](https://anarqz.github.io/pishop/#features).
 

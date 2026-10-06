@@ -139,7 +139,7 @@
       'screens.kicker': 'Screens',
       'screens.title': 'Looks like SteamOS. Because it was made for it.',
       'screens.lead':
-        "Real captures of the app at each device's resolution. The interface follows Steam's scale on its own. (The app is shown in Portuguese — the English interface is on the way.)",
+        "Real captures of the app at each device's resolution. The interface follows Steam's scale on its own.",
       'screens.prev': 'Previous screen',
       'screens.next': 'Next screen',
       'screens.zoom': 'Enlarge capture',
@@ -180,6 +180,7 @@
     bolt: '<path d="M13 2.5L5 13.5h6l-1 8 8-11h-6z"/>',
     box: '<path d="M3.5 7.5L12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9"/>',
     shield: '<path d="M12 3l7.5 3v5.5c0 4.5-3.2 8-7.5 9.5-4.3-1.5-7.5-5-7.5-9.5V6z"/><rect x="9" y="11" width="6" height="5" rx="1"/><path d="M10.5 11V9.5a1.5 1.5 0 0 1 3 0V11"/>',
+    globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 9.5h17M3.5 14.5h17"/><path d="M12 3.5c2.3 2.4 3.4 5.2 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.2-3.4-8.5S9.7 5.9 12 3.5z"/>',
     refresh: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/>',
   }
   const icon = name =>
@@ -275,6 +276,17 @@
       ],
     },
     {
+      icon: 'globe',
+      pt: [
+        'Inglês e português',
+        'A interface inteira em inglês ou em português, escolhida em Configurações → Idioma. As descrições dos jogos da Steam acompanham o idioma.',
+      ],
+      en: [
+        'English and Portuguese',
+        "The whole interface in English or Portuguese, picked in Settings → Language. Game descriptions from Steam follow along.",
+      ],
+    },
+    {
       icon: 'pad',
       pt: [
         'Cara de SteamOS',
@@ -311,11 +323,11 @@
       icon: 'shield',
       pt: [
         'Suas chaves, seu aparelho',
-        'The Pirate Bay, Prowlarr, TheGamesDB e isitcracked são configurados em Configurações → Serviços. Nenhuma chave vem embutida, nada passa por servidores do piShop e não há telemetria.',
+        'The Pirate Bay, Prowlarr, TheGamesDB e isitcracked são configurados em Configurações → Serviços — e dá para exportar e importar essa configuração num arquivo, para compartilhar. Nenhuma chave vem embutida, nada passa por servidores do piShop e não há telemetria.',
       ],
       en: [
         'Your keys, your device',
-        "The Pirate Bay, Prowlarr, TheGamesDB and isitcracked are set up in Settings → Services. No keys are baked in, nothing goes through piShop servers and there's no telemetry.",
+        "The Pirate Bay, Prowlarr, TheGamesDB and isitcracked are set up in Settings → Services — and that setup can be exported and imported as a file, to share. No keys are baked in, nothing goes through piShop servers and there's no telemetry.",
       ],
     },
     {
@@ -385,19 +397,6 @@
           'Then: solve the challenge with the bundled Chromium itself, nothing to install',
           'Experimental — it depends on how Cloudflare behaves',
         ],
-      ],
-    },
-    {
-      status: 'wip',
-      pt: [
-        'App em pt-BR e en-US',
-        'A interface do app nos dois idiomas, como este site.',
-        ['Troca de idioma em Configurações', 'Telas, legendas de botões e mensagens traduzidas'],
-      ],
-      en: [
-        'App in pt-BR and en-US',
-        "The app's interface in both languages, just like this site.",
-        ['Language switch in Settings', 'Screens, button legends and messages translated'],
       ],
     },
     {
@@ -538,8 +537,8 @@
     },
     {
       id: 'settings',
-      pt: ['Configurações', 'Fontes de jogos, serviços (The Pirate Bay, Prowlarr, TheGamesDB, isitcracked), limite de download, tela e controle.'],
-      en: ['Settings', 'Game sources, services (The Pirate Bay, Prowlarr, TheGamesDB, isitcracked), download speed cap, display and controller.'],
+      pt: ['Configurações', 'Fontes de jogos, serviços (The Pirate Bay, Prowlarr, TheGamesDB, isitcracked) com importar/exportar, limite de download, tela e idioma.'],
+      en: ['Settings', 'Game sources, services (The Pirate Bay, Prowlarr, TheGamesDB, isitcracked) with import/export, download speed cap, display and language.'],
     },
   ]
   const DEVICES = { ally: { name: 'ROG Ally', w: 1920, h: 1080 }, deck: { name: 'Steam Deck', w: 1280, h: 800 } }
@@ -549,6 +548,8 @@
   const browserLang = () => ((navigator.languages || [navigator.language]).some(l => /^pt/i.test(l || '')) ? 'pt' : 'en')
   let lang = norm(new URLSearchParams(location.search).get('lang')) || norm(store.get('pishop-lang')) || browserLang()
   const tr = key => I18N[lang][key] ?? I18N.pt[key] ?? key
+  // Screens are captured in each language; Portuguese ones at the root.
+  const shotUrl = (dev, id) => `assets/screens/${lang === 'en' ? 'en/' : ''}${dev}/${id}.webp`
 
   function applyLang() {
     const d = I18N[lang]
@@ -570,6 +571,8 @@
       }),
     )
     $$('.lang button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)))
+    $('#hero-ally').src = shotUrl('ally', 'discover')
+    $('#hero-deck').src = shotUrl('deck', 'game')
     renderFeatures()
     renderRoadmap()
     renderFaq()
@@ -597,7 +600,7 @@
       const tags = f.tags ? `<div class="tags">${f.tags.map(t => `<span>${t}</span>`).join('')}</div>` : ''
       const body = `<span class="icon">${icon(f.icon)}</span><h3>${title}</h3><p>${text}</p>${tags}`
       return f.shot
-        ? `<article class="card wide"><div class="text">${body}</div><div class="shot"><img src="assets/screens/ally/${f.shot}.webp" width="1920" height="1080" alt="" loading="lazy" decoding="async"></div></article>`
+        ? `<article class="card wide"><div class="text">${body}</div><div class="shot"><img src="${shotUrl('ally', f.shot)}" width="1920" height="1080" alt="" loading="lazy" decoding="async"></div></article>`
         : `<article class="card">${body}</article>`
     }).join('')
   }
@@ -697,7 +700,7 @@
     current = (i + SCREENS.length) % SCREENS.length
     const s = SCREENS[current]
     const dev = DEVICES[device]
-    const url = `assets/screens/${device}/${s.id}.webp`
+    const url = shotUrl(device, s.id)
     stageDevice.className = `device ${device}`
     stageImg.alt = `${s[lang][0]} — ${dev.name}`
     $('#stage-caption b').textContent = s[lang][0]
@@ -728,7 +731,7 @@
   function preload(dev) {
     SCREENS.forEach(s => {
       const img = new Image()
-      img.src = `assets/screens/${dev}/${s.id}.webp`
+      img.src = shotUrl(dev, s.id)
     })
   }
 
