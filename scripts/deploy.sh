@@ -15,8 +15,11 @@ if [[ -n "${DECK_PASS:-}" ]]; then
 fi
 
 "${SSH[@]}" "$DECK" "mkdir -p ~/$DEST"
-# .cache holds downloaded covers; --delete must not wipe it.
-rsync -az --delete --exclude ".cache" -e "$RSYNC_SSH" dist/piShop/ "$DECK:$DEST/"
+# .cache holds downloaded covers; --delete must not wipe it. A device installed
+# from a release keeps its VERSION (so it still updates itself to the next
+# release) and its browser's version marker (so Chromium isn't fetched again).
+rsync -az --delete --exclude ".cache" --exclude "VERSION" --exclude "chromium.version" --exclude "chromium/.version-*" \
+  -e "$RSYNC_SSH" dist/piShop/ "$DECK:$DEST/"
 echo "copiado para $DECK:~/$DEST"
 
 if [[ "${1:-}" == "--install" ]]; then
