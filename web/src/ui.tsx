@@ -183,6 +183,7 @@ export function TextPrompt({
   validate,
   onSubmit,
   onCancel,
+  extra,
 }: {
   title: string
   placeholder?: string
@@ -191,6 +192,8 @@ export function TextPrompt({
   validate?: (v: string) => boolean
   onSubmit: (v: string) => void
   onCancel: () => void
+  /** A second way to submit (e.g. "Search without cache"). */
+  extra?: { label: string; onSubmit: (v: string) => void }
 }) {
   const [value, setValue] = useState(initial)
   const field = useRef<HTMLInputElement>(null)
@@ -218,6 +221,11 @@ export function TextPrompt({
         <button data-nav className="btn" onClick={onCancel}>
           {tr('Cancel')}
         </button>
+        {extra && (
+          <button data-nav className="btn" disabled={!ok} onClick={() => extra.onSubmit(value.trim())}>
+            {extra.label}
+          </button>
+        )}
         <button data-nav className="btn primary" disabled={!ok} onClick={() => onSubmit(value.trim())}>
           {submitLabel}
         </button>

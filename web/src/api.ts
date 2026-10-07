@@ -367,6 +367,8 @@ export interface GameHint {
   name: string
   sgdb: { name: string; cover: string; hero: string | null; year: number | null } | null
   crack: DiscoverGame | null
+  /** A Steam game picked by hand ("Match another game"): its data wins. */
+  steam_appid?: string | null
 }
 
 export interface LibraryEntry {
@@ -544,8 +546,10 @@ export const api = {
   testCatalog: (prowlarr_url: string, prowlarr_key: string) =>
     post<{ version: string; indexers: string[] }>('/api/catalog/config/test', { prowlarr_url, prowlarr_key }),
   /** Results from every indexer that answered, plus a note per one that failed. */
-  search: (q: string, kind: 'console' | 'pc') =>
-    call<{ results: Release[]; warnings: string[] }>(`/api/catalog/search?q=${encodeURIComponent(q)}&kind=${kind}`),
+  search: (q: string, kind: 'console' | 'pc', fresh = false) =>
+    call<{ results: Release[]; warnings: string[] }>(`/api/catalog/search?q=${encodeURIComponent(q)}&kind=${kind}${fresh ? '&fresh=true' : ''}`),
+  steamArt: (appid: string) => call<{ cover: string | null; hero: string | null }>(`/api/steam/art?appid=${encodeURIComponent(appid)}`),
+  importServicesUrl: (url: string) => post<{ imported: string[] }>('/api/services/import-url', { url }),
   art: (name: string) => call<Art | null>(`/api/catalog/art?name=${encodeURIComponent(name)}`),
   /** `art: false`: the caller already has the matched game (skip the lookup). */
   release: (id: string, art = true) => call<ReleaseDetails>(`/api/catalog/release/${id}${art ? '' : '?art=false'}`),

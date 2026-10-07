@@ -65,5 +65,15 @@
   "Save to the folder you picked": "Salvar na pasta que você escolheu",
   "Pick another folder…": "Escolher outra pasta…",
   "Custom…": "Personalizado…",
-  "Any folder: a card, a drive, another place on this device": "Qualquer pasta: um cartão, um disco, outro lugar deste aparelho"
+  "Any folder: a card, a drive, another place on this device": "Qualquer pasta: um cartão, um disco, outro lugar deste aparelho",
+  "Game matched": "Jogo escolhido",
+  "Downloads from this list now get {name}’s details.": "Os downloads desta lista agora levam os dados de {name}.",
+  "Search without cache": "Buscar sem cache",
+  "Matched by you": "Escolhido por você",
+  "Match another game": "Escolher outro jogo",
+  "Match a game": "Escolher um jogo",
+  "Whatever you download from this list is filed under **{name}**: its name, art and details follow it to Transfers and Games.": "O que você baixar desta lista fica como **{name}**: o nome, a arte e os detalhes seguem para Transferências e Jogos.",
+  "No game matched this search: downloads keep their torrent’s name. Match a game to give them art and details.": "Nenhum jogo corresponde a esta busca: os downloads ficam com o nome do torrent. Escolha um jogo para eles ganharem arte e detalhes.",
+  "Steam’s games bring their exact details; SteamGridDB has the rest.": "Os jogos da Steam trazem os dados exatos; o SteamGridDB tem o resto.",
+  "Steam · app {id}": "Steam · app {id}"
 }

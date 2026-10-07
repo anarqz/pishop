@@ -126,6 +126,8 @@ pub fn public_config() -> Value {
 pub fn save_config(mut c: Config) -> anyhow::Result<Config> {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
+    // Other sources (Prowlarr just added, another TPB mirror) answer differently.
+    SEARCH_CACHE.lock().unwrap().clear();
     c.prowlarr_url = c.prowlarr_url.trim().trim_end_matches('/').to_string();
     if !c.prowlarr_url.is_empty() && !c.prowlarr_url.starts_with("http") {
         c.prowlarr_url = format!("http://{}", c.prowlarr_url);
@@ -221,9 +223,11 @@ const SEARCH_TTL: Duration = Duration::from_secs(15 * 60);
 static SEARCH_CACHE: LazyLock<Mutex<HashMap<String, (std::time::Instant, Vec<Release>)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-pub async fn search(query: &str, kind: &str) -> anyhow::Result<SearchOutcome> {
+/// `fresh`: ask the sources again even when the same search is cached (the
+/// answer still replaces the cached one).
+pub async fn search(query: &str, kind: &str, fresh: bool) -> anyhow::Result<SearchOutcome> {
     let key = format!("{kind}|{}", query.trim().to_lowercase());
-    if let Some((at, hit)) = SEARCH_CACHE.lock().unwrap().get(&key) {
+    if let Some((at, hit)) = SEARCH_CACHE.lock().unwrap().get(&key).filter(|_| !fresh) {
         // Results also live in RELEASES, unless that map was reset meanwhile.
         if at.elapsed() < SEARCH_TTL && hit.iter().all(|r| RELEASES.lock().unwrap().contains_key(&r.id)) {
             return Ok(SearchOutcome { results: hit.clone(), warnings: vec![] });

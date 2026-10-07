@@ -109,7 +109,7 @@ pub fn places() -> Vec<Place> {
     let mut out: Vec<Place> = list.into_iter().map(|p| place(p, "place")).collect();
 
     // Steam's libraries (internal storage, SD card, other drives).
-    for lib in crate::proton::library_paths() {
+    for lib in crate::proton::library_paths().into_iter().filter(|l| l.is_dir()) {
         let label = tr!("Steam library · {}", "Biblioteca Steam · {}", crate::install::disk_label(&lib));
         out.push(place((format!("lib:{}", lib.display()), label, lib, "library"), "library"));
     }

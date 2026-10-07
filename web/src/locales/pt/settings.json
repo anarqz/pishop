@@ -121,5 +121,10 @@
   "Browse…": "Procurar…",
   "Sign in to {name}": "Entrar em {name}",
   "The username and password from your VPN provider. NetworkManager keeps them with the connection.": "O usuário e a senha do seu provedor de VPN. O NetworkManager guarda os dois com a conexão.",
-  "Username": "Usuário"
+  "Username": "Usuário",
+  "Import from a link": "Importar de um link",
+  "Import": "Importar",
+  "Downloading…": "Baixando…",
+  "From a link…": "De um link…",
+  "A GitHub gist, a Pastebin paste or any link to the file": "Um gist do GitHub, um paste do Pastebin ou qualquer link para o arquivo"
 }

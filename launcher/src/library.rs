@@ -93,6 +93,10 @@ fn yes() -> bool {
 pub struct Hint {
     #[serde(default)]
     pub name: String,
+    /// A Steam game the user picked by hand in the Store ("Match another
+    /// game"): its data is used whatever the names say.
+    #[serde(default, deserialize_with = "lenient_string")]
+    pub steam_appid: Option<String>,
     #[serde(default)]
     pub sgdb: Option<SgdbHint>,
     #[serde(default)]
@@ -275,7 +279,8 @@ pub fn quick(h: &Hint, fallback_name: &str, platform: Option<String>) -> Game {
 /// by name (an appid from isitcracked is used either way).
 pub async fn resolve(h: &Hint, fallback_name: &str, platform: Option<String>, pc: bool) -> Game {
     let name = lookup_name(h, fallback_name);
-    let crack_appid = h.crack.as_ref().and_then(|c| clean(c.steam_appid.as_ref(), 20));
+    let picked = clean(h.steam_appid.as_ref(), 20).filter(|a| a.chars().all(|c| c.is_ascii_digit()));
+    let crack_appid = picked.or_else(|| h.crack.as_ref().and_then(|c| clean(c.steam_appid.as_ref(), 20)));
     let appid = match crack_appid {
         Some(a) => Some(a),
         None if pc => steam_store::find_appid(&name).await,
@@ -400,6 +405,7 @@ mod tests {
     fn priority_without_steam_or_tgdb() {
         let h = Hint {
             name: "Game".into(),
+            steam_appid: None,
             sgdb: Some(SgdbHint { name: "Game (SGDB)".into(), cover: Some("sg.png".into()), hero: None, year: Some(2020) }),
             crack: Some(CrackHint { title: "Game (iic)".into(), cover: Some("iic.webp".into()), header: Some("h.jpg".into()), ..Default::default() }),
         };

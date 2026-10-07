@@ -32,6 +32,7 @@ pub fn router() -> Router {
         .route("/api/game/info", get(game_info))
         .route("/api/game/trailer", get(game_trailer))
         .route("/api/steam/open", post(steam_open))
+        .route("/api/steam/art", get(steam_art))
         .route("/api/catalog/context", get(catalog_context))
         .route("/api/catalog/config", get(catalog_config).post(catalog_save))
         .route("/api/catalog/config/test", post(catalog_test))
@@ -56,6 +57,7 @@ pub fn router() -> Router {
         .route("/api/settings", get(|| async { Json(crate::settings::get()) }).post(save_settings))
         .route("/api/services/export", post(services_export))
         .route("/api/services/import", get(|| async { Json(crate::services_file::candidates()) }).post(services_import))
+        .route("/api/services/import-url", post(services_import_url))
         .route("/api/torrent/limits", get(|| async { Json(crate::torrent::limits()) }).post(torrent_limits))
         .route(
             "/api/library/{hash}",
@@ -293,11 +295,14 @@ struct SearchQuery {
     q: String,
     #[serde(default)]
     kind: String,
+    /// Skip the cached answer for this search.
+    #[serde(default)]
+    fresh: bool,
 }
 
 async fn catalog_search(Query(q): Query<SearchQuery>) -> Response {
     let started = std::time::Instant::now();
-    match catalog::search(q.q.trim(), &q.kind).await {
+    match catalog::search(q.q.trim(), &q.kind, q.fresh).await {
         Ok(out) => {
             crate::log!(
                 "catálogo: {:?} ({}) → {} resultados em {} ms{}",
@@ -310,6 +315,14 @@ async fn catalog_search(Query(q): Query<SearchQuery>) -> Response {
             Json(out).into_response()
         }
         Err(e) => err(StatusCode::BAD_GATEWAY, format!("{e:#}")),
+    }
+}
+
+/// A Steam game's library art (cover, hero), for the Store's match picked by hand.
+async fn steam_art(Query(q): Query<AppidQuery>) -> Response {
+    match crate::steam_store::library_art(q.appid.trim()).await {
+        Some(a) => Json(json!({ "cover": a.cover_2x.or(a.cover), "hero": a.hero_2x.or(a.hero) })).into_response(),
+        None => Json(json!({ "cover": null, "hero": null })).into_response(),
     }
 }
 
@@ -397,6 +410,18 @@ struct ImportReq {
 
 async fn services_import(Json(r): Json<ImportReq>) -> Response {
     match crate::services_file::import(&r.path) {
+        Ok(names) => Json(json!({ "imported": names })).into_response(),
+        Err(e) => err(StatusCode::BAD_REQUEST, format!("{e:#}")),
+    }
+}
+
+#[derive(Deserialize)]
+struct ImportUrlReq {
+    url: String,
+}
+
+async fn services_import_url(Json(r): Json<ImportUrlReq>) -> Response {
+    match crate::services_file::import_url(&r.url).await {
         Ok(names) => Json(json!({ "imported": names })).into_response(),
         Err(e) => err(StatusCode::BAD_REQUEST, format!("{e:#}")),
     }

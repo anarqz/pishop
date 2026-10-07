@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { type ServicesConfig, type ServicesFile, type Source, type SourceInput, type UpdateStatus, type VpnConn, type VpnFile, type VpnStatus, api } from '../api'
 import { type Lang, LANGS, locale, setLang, tr, trb, trn, useLang } from '../i18n'
 import { SCALE_CHOICES, type ScaleSetting, autoScale, getScaleSetting, setScaleSetting } from '../scale'
-import { Dialog, Icon, Progress, Spinner, toast, useHints } from '../ui'
+import { Dialog, Icon, Progress, Spinner, TextPrompt, toast, useHints } from '../ui'
 import FilePicker from './FilePicker'
 
 export type SettingsSection = 'sources' | 'indexers' | 'downloads' | 'vpn' | 'display' | 'language' | 'about'
@@ -440,10 +440,23 @@ function IndexersSection() {
   )
 }
 
-/** Picks a piShop services file found on the device and applies it. */
+/** Picks a piShop services file found on the device, or downloads one from a link, and applies it. */
 function ImportDialog({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
   const [files, setFiles] = useState<ServicesFile[] | null>(null)
   const [busy, setBusy] = useState(false)
+  const [link, setLink] = useState(false)
+  const fromLink = async (url: string) => {
+    setLink(false)
+    setBusy(true)
+    try {
+      const r = await api.importServicesUrl(url)
+      toast(tr('Services imported'), r.imported.join(', '), 'ok')
+      onImported()
+    } catch (e) {
+      setBusy(false)
+      toast(tr("Couldn't import"), (e as Error).message, 'error')
+    }
+  }
   useEffect(() => {
     api
       .importCandidates()
@@ -463,6 +476,18 @@ function ImportDialog({ onClose, onImported }: { onClose: () => void; onImported
   }
   const when = (secs: number) =>
     new Date(secs * 1000).toLocaleString(locale(), { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  if (link) {
+    return (
+      <TextPrompt
+        title={tr('Import from a link')}
+        placeholder="https://gist.github.com/… · https://pastebin.com/…"
+        submitLabel={tr('Import')}
+        validate={v => /^https?:\/\/\S+\.\S+/.test(v)}
+        onCancel={() => setLink(false)}
+        onSubmit={v => void fromLink(v)}
+      />
+    )
+  }
   return (
     <Dialog title={tr('Import services')} onClose={onClose} wide>
       {files === null && (
@@ -493,8 +518,15 @@ function ImportDialog({ onClose, onImported }: { onClose: () => void; onImported
           ))}
         </div>
       )}
+      <button data-nav data-nav-default={files?.length ? undefined : ''} className="settings-row" disabled={busy} onClick={() => setLink(true)}>
+        <Icon name="globe" />
+        <div className="settings-row-main">
+          <b>{busy ? tr('Downloading…') : tr('From a link…')}</b>
+          <small>{tr('A GitHub gist, a Pastebin paste or any link to the file')}</small>
+        </div>
+      </button>
       <div className="dialog-actions">
-        <button data-nav data-nav-default={files?.length ? undefined : ''} className="btn" onClick={onClose}>
+        <button data-nav className="btn" onClick={onClose}>
           {tr('Cancel')}
         </button>
       </div>

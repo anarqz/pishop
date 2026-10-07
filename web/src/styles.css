@@ -805,7 +805,7 @@ button { font: inherit; color: inherit; }
 .inst-shade { position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, rgba(11,15,20,.96) 30%, rgba(11,15,20,.75) 65%, rgba(11,15,20,.5)); }
 .inst-content { display: flex; gap: 34px; height: 100%; padding: 26px 28px 24px; overflow-y: auto; }
 .inst-side { flex: 0 0 210px; display: grid; gap: 12px; align-content: start; }
-.inst-side .btn { display: flex; align-items: center; justify-content: flex-start; gap: 10px; }
+.inst-side .btn { display: flex; align-items: center; justify-content: flex-start; gap: 10px; text-align: left; }
 .inst-cover { aspect-ratio: 2 / 3; border-radius: 10px; overflow: hidden; display: grid; place-items: center; background: var(--panel); box-shadow: 0 14px 34px rgba(0,0,0,.55); color: var(--muted); }
 .inst-cover img { width: 100%; height: 100%; object-fit: cover; }
 .inst-main { flex: 1; min-width: 0; display: grid; gap: 14px; align-content: start; max-width: 860px; }
@@ -965,3 +965,9 @@ button.scard:focus .sring small { color: #39414b; }
 .patch:focus .patch-main small, .patch:focus .patch-state { color: #4a525d; }
 .patch.on:focus .patch-state { color: #2f7d1f; }
 .pane-head .sring small { font-size: 9.5px; }
+
+/* ---------- store: the matched game can be swapped from its banner ---------- */
+.origin .origin-match { position: absolute; right: 16px; bottom: 14px; z-index: 1; }
+.origin-note { display: flex; align-items: center; gap: 8px; margin: -6px 0 12px; font-size: 13.5px; color: var(--muted); }
+.origin-note .icon { flex: none; color: #7cc3ff; }
+.origin-note b { color: var(--text); }

@@ -2,8 +2,11 @@
 // grid matched against SteamGridDB, with a full details page and download.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { type Art, type DiscoverGame, type GameHint, type LibraryGame, type Place, type Release, type ReleaseDetails, api, formatBytes, imgUrl } from '../api'
-import { locale, tr, trn } from '../i18n'
+import {
+  type Art, type ArtSearch, type DiscoverGame, type GameHint, type LibraryGame, type Place, type Release, type ReleaseDetails, api, formatBytes,
+  imgUrl,
+} from '../api'
+import { locale, tr, trb, trn } from '../i18n'
 import { ensureVisible, focusFirst, input } from '../input'
 import DirPicker from './DirPicker'
 import { StorageCard, useSpace } from '../storage'
@@ -69,6 +72,10 @@ interface SearchContext {
   art: Art | null
   hero: string | null
   crack: DiscoverGame | null
+  /** Picked by hand ("Match another game"): every result is this game. */
+  manual?: boolean
+  /** The Steam game picked by hand, if it was a Steam one. */
+  steam_appid?: string | null
 }
 
 /**
@@ -77,6 +84,7 @@ interface SearchContext {
  */
 function matchFor(r: Release, ctx: SearchContext | null): SearchContext | null {
   if (!ctx || (!ctx.art && !ctx.crack)) return null
+  if (ctx.manual) return ctx
   return relevance(r, ctx.art?.name ?? ctx.crack?.title ?? ctx.q) > 0 ? ctx : null
 }
 
@@ -92,7 +100,7 @@ function libraryGame(r: Release, m: SearchContext | null): LibraryGame {
     crack_date: c?.crack_date ?? null,
     scene_group: c?.scene_group ?? null,
     drm: c?.drm ?? null,
-    steam_appid: c?.steam_appid != null ? String(c.steam_appid) : null,
+    steam_appid: m?.steam_appid ?? (c?.steam_appid != null ? String(c.steam_appid) : null),
   }
 }
 
@@ -102,6 +110,7 @@ function gameHint(r: Release, m: SearchContext | null): GameHint {
     name: m?.art?.name ?? m?.crack?.title ?? r.parsed.name,
     sgdb: m?.art ? { name: m.art.name, cover: m.art.cover, hero: m.hero, year: m.art.year } : null,
     crack: m?.crack ?? null,
+    steam_appid: m?.steam_appid ?? null,
   }
 }
 
@@ -150,6 +159,7 @@ export default function Store({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [prompt, setPrompt] = useState(false)
+  const [matching, setMatching] = useState(false)
   const [details, setDetails] = useState<string | null>(memory.details)
   // Where results come from. Without Prowlarr, The Pirate Bay (apibay)
   // always answers: the Store never waits on setup.
@@ -169,7 +179,7 @@ export default function Store({
     Object.assign(memory, { kind, sort, query, results, platform, origin, ctx, details })
   }, [kind, sort, query, results, platform, origin, ctx, details])
 
-  const runSearch = useCallback(async (q: string, k: Kind, from?: DiscoverGame | null) => {
+  const runSearch = useCallback(async (q: string, k: Kind, from?: DiscoverGame | null, fresh = false) => {
     if (!q.trim()) return
     setQuery(q)
     // Header in parallel with the torrent search; Discover already gave the crack.
@@ -182,7 +192,7 @@ export default function Store({
     setError(null)
     setPlatform(null)
     try {
-      const r = await api.search(q, k)
+      const r = await api.search(q, k, fresh)
       setResults(r.results)
       // One indexer down doesn't hide the others' results: just say so.
       for (const w of r.warnings) toast(tr("An indexer didn't respond"), w, 'error')
@@ -244,7 +254,7 @@ export default function Store({
   const ctl = useRef({ switchKind, cyclePlatform, sort, setSort })
   ctl.current = { switchKind, cyclePlatform, sort, setSort }
   useEffect(() => {
-    if (prompt || details) return
+    if (prompt || details || matching) return
     return input.pushHandler(a => {
       const c = ctl.current
       switch (a) {
@@ -267,7 +277,62 @@ export default function Store({
           return false
       }
     })
-  }, [prompt, details])
+  }, [prompt, details, matching])
+
+  /** "Match another game": the pick becomes this search's game (art, crack, Steam data). */
+  const pickMatch = (p: MatchPick) => {
+    setMatching(false)
+    const q = ctx?.q ?? query
+    const next: SearchContext =
+      p.source === 'sgdb'
+        ? {
+            q,
+            art: { game_id: p.id, name: p.name, year: p.year, cover: p.cover ?? '', cover_thumb: p.cover ?? '', score: 1 },
+            hero: null,
+            crack: null,
+            manual: true,
+            steam_appid: null,
+          }
+        : {
+            q,
+            art: { game_id: 0, name: p.name, year: null, cover: p.image ?? '', cover_thumb: p.image ?? '', score: 1 },
+            hero: null,
+            crack: null,
+            manual: true,
+            steam_appid: p.appid,
+          }
+    setCtx(next)
+    toast(tr('Game matched'), tr('Downloads from this list now get {name}’s details.', { name: p.name }), 'ok')
+    const still = (cur: SearchContext | null) => !!cur?.manual && cur.art?.name === p.name
+    // Steam's own library art for a Steam pick.
+    if (p.source === 'steam') {
+      void api
+        .steamArt(p.appid)
+        .then(a =>
+          setCtx(cur =>
+            still(cur) && cur?.art
+              ? { ...cur, art: { ...cur.art, cover: a.cover ?? cur.art.cover, cover_thumb: a.cover ?? cur.art.cover_thumb }, hero: a.hero ?? cur.hero }
+              : cur,
+          ),
+        )
+        .catch(() => {})
+    }
+    // Its crack status, and a background when there's none yet.
+    void api
+      .context(p.name)
+      .then(c =>
+        setCtx(cur =>
+          still(cur)
+            ? {
+                ...cur!,
+                hero: cur!.hero ?? (c.art && (p.source === 'steam' || c.art.game_id === (p as { id: number }).id) ? c.hero : null),
+                crack: c.crack && relevance({ title: c.crack.title } as Release, p.name) > 0 ? c.crack : null,
+              }
+            : cur,
+        ),
+      )
+      .catch(() => {})
+  }
 
   const hints: Hint[] = [
     { glyph: 'A', label: results?.length ? tr('Open torrent') : tr('Select') },
@@ -276,7 +341,7 @@ export default function Store({
     ...(results?.length ? [{ glyph: 'X' as const, label: tr('Sort') }, { glyph: 'R2' as const, label: tr('Platform') }] : []),
     { glyph: 'B', label: tr('Back') },
   ]
-  useHints(prompt || details ? null : hints)
+  useHints(prompt || details || matching ? null : hints)
 
   const history = readHistory()
 
@@ -319,7 +384,9 @@ export default function Store({
       )}
 
       <div className="store-body">
-        {ctx && query && <ContextHeader ctx={ctx} query={query} count={results?.length ?? null} loading={loading} />}
+        {ctx && query && (
+          <ContextHeader ctx={ctx} query={query} count={results?.length ?? null} loading={loading} onMatch={() => setMatching(true)} />
+        )}
         {error && (
           <div className="store-msg error">
             <b>{tr('Search failed')}</b>
@@ -410,8 +477,19 @@ export default function Store({
             setSort('relevance')
             void runSearch(v, kind)
           }}
+          extra={{
+            // Fresh answers from every source (e.g. right after adding Prowlarr).
+            label: tr('Search without cache'),
+            onSubmit: v => {
+              setPrompt(false)
+              setOrigin(null)
+              setSort('relevance')
+              void runSearch(v, kind, null, true)
+            },
+          }}
         />
       )}
+      {matching && <MatchDialog initial={ctx?.art?.name ?? ctx?.crack?.title ?? query} onPick={pickMatch} onClose={() => setMatching(false)} />}
       {details && (
         <Details
           id={details}
@@ -490,13 +568,31 @@ function daysAgo(iso: string | null) {
   return days <= 0 ? tr('today') : days === 1 ? tr('yesterday') : tr('{n} days ago', { n: days })
 }
 
-/** Header for any search: the game (SteamGridDB) and its crack (isitcracked). */
-function ContextHeader({ ctx, query, count, loading }: { ctx: SearchContext; query: string; count: number | null; loading: boolean }) {
+/**
+ * Header for any search: the game (SteamGridDB, or picked by hand) and its
+ * crack (isitcracked). Downloads from the list get this game's details, so
+ * a wrong match can be swapped for another game right here.
+ */
+function ContextHeader({
+  ctx,
+  query,
+  count,
+  loading,
+  onMatch,
+}: {
+  ctx: SearchContext
+  query: string
+  count: number | null
+  loading: boolean
+  onMatch: () => void
+}) {
   const g = ctx.crack
   const bg = ctx.hero ?? g?.header ?? null
-  const cover = g?.cover ?? ctx.art?.cover_thumb ?? null
+  const cover = (ctx.manual ? ctx.art?.cover_thumb : null) ?? g?.cover ?? ctx.art?.cover_thumb ?? null
   const title = ctx.art?.name ?? g?.title ?? query
+  const matched = !!(ctx.art || g)
   return (
+    <>
     <div className="origin">
       {bg && <div className="origin-bg" style={{ backgroundImage: `url(${imgUrl(bg)})` }} />}
       <div className="origin-shade" />
@@ -509,7 +605,11 @@ function ContextHeader({ ctx, query, count, loading }: { ctx: SearchContext; que
       )}
       <div className="origin-info">
         <span className="hero-kicker">
-          {ctx.art ? `SteamGridDB${ctx.art.year ? ` · ${ctx.art.year}` : ''}` : tr('Your search')}
+          {ctx.manual
+            ? [tr('Matched by you'), ctx.steam_appid ? 'Steam' : 'SteamGridDB', ctx.art?.year].filter(Boolean).join(' · ')
+            : ctx.art
+              ? `SteamGridDB${ctx.art.year ? ` · ${ctx.art.year}` : ''}`
+              : tr('Your search')}
           {g ? ' · isitcracked' : ''}
         </span>
         <h2>{title}</h2>
@@ -554,7 +654,129 @@ function ContextHeader({ ctx, query, count, loading }: { ctx: SearchContext; que
           {loading ? tr('Searching for torrents…') : count === null ? '' : trn(count, '{n} torrent found', '{n} torrents found')}
         </span>
       </div>
+      <button data-nav className="btn small origin-match" onClick={onMatch}>
+        <Icon name="refresh" size={16} /> {matched ? tr('Match another game') : tr('Match a game')}
+      </button>
     </div>
+    <p className="origin-note">
+      <Icon name="info" size={16} />
+      <span>
+        {matched
+          ? trb('Whatever you download from this list is filed under **{name}**: its name, art and details follow it to Transfers and Games.', {
+              name: title,
+            })
+          : tr('No game matched this search: downloads keep their torrent’s name. Match a game to give them art and details.')}
+      </span>
+    </p>
+    </>
+  )
+}
+
+/** A game picked by hand for this search: a Steam app or a SteamGridDB game. */
+type MatchPick =
+  | { source: 'steam'; appid: string; name: string; image: string | null }
+  | { source: 'sgdb'; id: number; name: string; year: number | null; cover: string | null }
+
+/** "Match another game": Steam's games first (exact details), then SteamGridDB's. */
+function MatchDialog({ initial, onPick, onClose }: { initial: string; onPick: (p: MatchPick) => void; onClose: () => void }) {
+  const [q, setQ] = useState(initial)
+  const [res, setRes] = useState<ArtSearch | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [typing, setTyping] = useState(false)
+  useEffect(() => {
+    let alive = true
+    setRes(null)
+    setError(null)
+    api
+      .artSearch(q)
+      .then(r => alive && setRes(r))
+      .catch(e => alive && setError((e as Error).message))
+    return () => {
+      alive = false
+    }
+  }, [q])
+  useEffect(() => {
+    if (res) requestAnimationFrame(focusFirst)
+  }, [res])
+  if (typing) {
+    return (
+      <TextPrompt
+        title={tr('Match another game')}
+        placeholder={tr('Game name…')}
+        initial={q}
+        submitLabel={tr('Search')}
+        onCancel={() => setTyping(false)}
+        onSubmit={v => {
+          setTyping(false)
+          if (v.trim()) setQ(v.trim())
+        }}
+      />
+    )
+  }
+  return (
+    <Dialog title={tr('Match another game')} onClose={onClose} wide>
+      <div className="row">
+        <button data-nav className="btn" onClick={() => setTyping(true)}>
+          <Icon name="search" size={18} /> {q}
+        </button>
+        <span className="muted small">{tr('Steam’s games bring their exact details; SteamGridDB has the rest.')}</span>
+      </div>
+      {error && <p className="error">{error}</p>}
+      {!res && !error && (
+        <p className="muted">
+          <Spinner /> {tr('Searching…')}
+        </p>
+      )}
+      {res && (
+        <div className="inst-list scroll art-results">
+          {res.steam.length > 0 && <h4 className="inst-sub">Steam</h4>}
+          <div className="art-grid">
+            {res.steam.map((s, i) => (
+              <button
+                key={`s${s.appid}`}
+                data-nav
+                data-nav-default={i === 0 ? '' : undefined}
+                className="art-pick wide"
+                onClick={() => onPick({ source: 'steam', appid: s.appid, name: s.name, image: s.image })}
+              >
+                {s.image ? (
+                  <img src={imgUrl(s.image)} alt="" />
+                ) : (
+                  <span className="art-ph">
+                    <Icon name="image" />
+                  </span>
+                )}
+                <b>{s.name}</b>
+                <small>{tr('Steam · app {id}', { id: s.appid })}</small>
+              </button>
+            ))}
+          </div>
+          {res.sgdb.length > 0 && <h4 className="inst-sub">SteamGridDB</h4>}
+          <div className="art-grid">
+            {res.sgdb.map((g, i) => (
+              <button
+                key={`g${g.id}`}
+                data-nav
+                data-nav-default={!res.steam.length && i === 0 ? '' : undefined}
+                className="art-pick"
+                onClick={() => onPick({ source: 'sgdb', id: g.id, name: g.name, year: g.year, cover: g.cover })}
+              >
+                {g.cover ? (
+                  <img src={imgUrl(g.cover)} alt="" />
+                ) : (
+                  <span className="art-ph">
+                    <Icon name="image" />
+                  </span>
+                )}
+                <b>{g.name}</b>
+                <small>{[g.year, g.verified ? tr('verified') : null].filter(Boolean).join(' · ')}</small>
+              </button>
+            ))}
+          </div>
+          {!res.steam.length && !res.sgdb.length && <p className="muted">{tr('Nothing found. Try another name.')}</p>}
+        </div>
+      )}
+    </Dialog>
   )
 }
 
