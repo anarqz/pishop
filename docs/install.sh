@@ -71,16 +71,44 @@ quit_running() {
 
 # Steam rewrites its shortcut list on exit, so it must be closed (or
 # restarted afterwards) for the piShop shortcut to stick.
+STEAM_CLOSED=0
 steam_closed_or_warn() {
   pgrep -x steam >/dev/null 2>&1 || return 0
   if ask "A Steam está aberta. Fechar a Steam agora para registrar o atalho?" \
          "Steam is running. Close Steam now to register the shortcut?" y; then
     steam -shutdown >/dev/null 2>&1 || true
-    for _ in $(seq 1 60); do pgrep -x steam >/dev/null 2>&1 || { ok "Steam fechada." "Steam closed."; return 0; }; sleep 0.5; done
+    for _ in $(seq 1 60); do
+      if ! pgrep -x steam >/dev/null 2>&1; then
+        ok "Steam fechada." "Steam closed."
+        STEAM_CLOSED=1
+        return 0
+      fi
+      sleep 0.5
+    done
     warn "A Steam não fechou a tempo; reinicie-a depois." "Steam didn't close in time; restart it afterwards."
   else
     warn "Reinicie a Steam depois para o piShop aparecer." "Restart Steam afterwards for piShop to show up."
   fi
+}
+
+# Steam was closed for the shortcut: open it again, in its own session so it
+# keeps running when this terminal closes (Desktop Mode doesn't bring it back).
+reopen_steam() {
+  [ "$STEAM_CLOSED" = 1 ] || return 0
+  step "Abrindo a Steam de novo…" "Opening Steam again…"
+  if command -v setsid >/dev/null 2>&1; then
+    setsid -f steam >/dev/null 2>&1 < /dev/null || true
+  else
+    nohup steam >/dev/null 2>&1 < /dev/null &
+  fi
+  for _ in $(seq 1 30); do
+    if pgrep -x steam >/dev/null 2>&1; then
+      ok "Steam aberta." "Steam is open."
+      return 0
+    fi
+    sleep 0.5
+  done
+  warn "A Steam ainda não abriu; abra-a pelo menu se ela não aparecer." "Steam hasn't opened yet; open it from the menu if it doesn't show up."
 }
 
 release_url() {
@@ -110,6 +138,7 @@ if [ "$UNINSTALL" = 1 ]; then
   if [ "$NO_STEAM" = 0 ] && [ -x "$DEST/pishop" ]; then
     steam_closed_or_warn
     "$DEST/pishop" --uninstall-steam || warn "Não foi possível remover o atalho da Steam." "Couldn't remove the Steam shortcut."
+    reopen_steam
   fi
   rm -rf "$DEST"
   ok "piShop removido de $DEST" "piShop removed from $DEST"
@@ -184,6 +213,7 @@ if [ "$NO_STEAM" = 0 ]; then
     warn "Não foi possível criar o atalho; adicione $DEST/pishop como jogo não-Steam." \
          "Couldn't create the shortcut; add $DEST/pishop as a non-Steam game."
   fi
+  reopen_steam
 fi
 
 printf '\n%s%s%s\n' "$B" "$(t 'Pronto!' 'All set!')" "$N"
