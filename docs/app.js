@@ -388,43 +388,14 @@
     {
       status: 'research',
       pt: [
-        'Prowlarr embutido',
-        'Buscar nos indexadores direto do piShop, sem precisar de um servidor Prowlarr rodando na rede.',
-        [
-          'Indexadores nativos — o The Pirate Bay já funciona; 1337x em seguida',
-          'Definições Cardigann: o mesmo formato YAML do Prowlarr e do Jackett',
-          'Um Prowlarr externo continua opcional',
-        ],
+        'VPN',
+        'Importe uma configuração WireGuard ou OpenVPN em Configurações → VPN e ligue ou desligue pelo controle.',
+        ['WireGuard e OpenVPN', 'Baixar só pela VPN: se ela cair, os downloads param', 'Sem root nem pacotes extras'],
       ],
       en: [
-        'Embedded Prowlarr',
-        'Search indexers straight from piShop, without a Prowlarr server running on your network.',
-        [
-          'Native indexers — The Pirate Bay already works; 1337x next',
-          'Cardigann definitions: the same YAML format Prowlarr and Jackett use',
-          'An external Prowlarr stays optional',
-        ],
-      ],
-    },
-    {
-      status: 'research',
-      pt: [
-        'Byparr embutido',
-        'Alguns indexadores ficam atrás do desafio anti-bot do Cloudflare. O Byparr resolve isso — a ideia é trazê-lo para dentro do piShop.',
-        [
-          'Primeiro: usar um Byparr ou FlareSolverr que você já tenha na rede',
-          'Depois: resolver o desafio com o próprio Chromium embutido, sem instalar nada',
-          'Experimental — depende de como o Cloudflare se comporta',
-        ],
-      ],
-      en: [
-        'Embedded Byparr',
-        "Some indexers sit behind Cloudflare's anti-bot challenge. Byparr solves that — the idea is to bring it inside piShop.",
-        [
-          'First: use a Byparr or FlareSolverr you already run on your network',
-          'Then: solve the challenge with the bundled Chromium itself, nothing to install',
-          'Experimental — it depends on how Cloudflare behaves',
-        ],
+        'VPN',
+        'Import a WireGuard or OpenVPN config in Settings → VPN and switch it on or off with the controller.',
+        ['WireGuard and OpenVPN', 'Download only through the VPN: if it drops, downloads stop', 'No root, no extra packages'],
       ],
     },
     {
