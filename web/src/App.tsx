@@ -9,7 +9,7 @@ import Discover from './screens/Discover'
 import Store, { type StoreRequest } from './screens/Store'
 import { useEngineState } from './screens/Torrents'
 import { setTorrentApi } from './torrent'
-import { Dialog, Footer, Glyph, Spinner, Toasts } from './ui'
+import { Dialog, Footer, Glyph, Spinner, Toasts, toast } from './ui'
 
 export type Tab = 'discover' | 'store' | 'explorer' | 'jobs' | 'settings'
 
@@ -138,6 +138,31 @@ export default function App() {
       }
     })
   }, [go])
+
+  // A new version finished downloading: say so once (it installs on the next start).
+  useEffect(() => {
+    let told = ''
+    const tick = () =>
+      api
+        .update()
+        .then(u => {
+          if (u.state === 'ready' && u.latest && told !== u.latest) {
+            told = u.latest
+            toast(
+              tr('piShop {v} is ready', { v: u.latest }),
+              tr('It installs the next time piShop starts. To update now: Settings → About → Restart now.'),
+              'ok',
+            )
+          }
+        })
+        .catch(() => {})
+    const first = setTimeout(tick, 45_000)
+    const id = setInterval(tick, 10 * 60_000)
+    return () => {
+      clearTimeout(first)
+      clearInterval(id)
+    }
+  }, [])
 
   // Each tab change lands focus on that screen's default element.
   useEffect(() => {

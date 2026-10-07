@@ -2,10 +2,10 @@
 // on the right. "Game sources" manages where games are collected from.
 
 import { useEffect, useState } from 'react'
-import { type ServicesConfig, type ServicesFile, type Source, type SourceInput, api } from '../api'
+import { type ServicesConfig, type ServicesFile, type Source, type SourceInput, type UpdateStatus, api } from '../api'
 import { type Lang, LANGS, locale, setLang, tr, trb, trn, useLang } from '../i18n'
 import { SCALE_CHOICES, type ScaleSetting, autoScale, getScaleSetting, setScaleSetting } from '../scale'
-import { Dialog, Icon, Spinner, toast, useHints } from '../ui'
+import { Dialog, Icon, Progress, Spinner, toast, useHints } from '../ui'
 
 export type SettingsSection = 'sources' | 'indexers' | 'downloads' | 'display' | 'language' | 'about'
 type Section = SettingsSection
@@ -627,6 +627,7 @@ function AboutSection({ info }: { info: { version: string; addr: string } | null
           <small>{tr('Local server at {addr}', { addr: info?.addr ?? '' })}</small>
         </div>
       </div>
+      <UpdateBox />
       <button
         data-nav
         className="btn danger"
@@ -639,5 +640,85 @@ function AboutSection({ info }: { info: { version: string; addr: string } | null
         {quitting ? tr('Quitting…') : tr('Quit piShop')}
       </button>
     </>
+  )
+}
+
+/** Updates: piShop looks for new GitHub releases and installs them itself. */
+function UpdateBox() {
+  const [u, setU] = useState<UpdateStatus | null>(null)
+  const [restarting, setRestarting] = useState(false)
+  useEffect(() => {
+    let alive = true
+    const tick = () =>
+      api
+        .update()
+        .then(s => alive && setU(s))
+        .catch(() => {})
+    void tick()
+    const id = setInterval(tick, 2000)
+    return () => {
+      alive = false
+      clearInterval(id)
+    }
+  }, [])
+  if (!u) return null
+  const line = (() => {
+    switch (u.state) {
+      case 'checking':
+        return (
+          <>
+            <Spinner /> {tr('Checking for updates…')}
+          </>
+        )
+      case 'downloading':
+        return tr('Downloading {v}…', { v: u.latest ?? '' })
+      case 'ready':
+        return trb('**{v}** is ready. It installs by itself the next time piShop starts.', { v: u.latest ?? '' })
+      case 'available':
+        return tr('{v} is out. This is a development build, so it only checks: install a release with the installer to get updates.', {
+          v: u.latest ?? '',
+        })
+      case 'up_to_date':
+        return tr('You have the latest version.')
+      case 'error':
+        return tr('Couldn’t check for updates: {error}', { error: u.error ?? '' })
+      default:
+        return tr('piShop looks for new versions by itself and installs them.')
+    }
+  })()
+  return (
+    <div className="update-box">
+      <p>{line}</p>
+      {u.state === 'downloading' && <Progress value={u.progress} />}
+      {u.checked && (
+        <small className="muted">{tr('Last checked {when}', { when: new Date(u.checked * 1000).toLocaleString(locale()) })}</small>
+      )}
+      <div className="row">
+        {u.state === 'ready' && (
+          <button
+            data-nav
+            className="btn primary"
+            disabled={restarting}
+            onClick={() => {
+              setRestarting(true)
+              void api.updateApply().catch(e => {
+                setRestarting(false)
+                toast(tr('Something went wrong'), (e as Error).message, 'error')
+              })
+            }}
+          >
+            {restarting ? tr('Restarting…') : tr('Restart now')}
+          </button>
+        )}
+        <button
+          data-nav
+          className="btn"
+          disabled={u.state === 'checking' || u.state === 'downloading'}
+          onClick={() => void api.updateCheck().then(setU).catch(() => {})}
+        >
+          {tr('Check for updates')}
+        </button>
+      </div>
+    </div>
   )
 }

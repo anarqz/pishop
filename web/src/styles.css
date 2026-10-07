@@ -853,3 +853,5 @@ button { font: inherit; color: inherit; }
 .inst-list .muted.small { margin: 0 4px 4px; font-size: 13px; }
 .inst-note { display: flex; align-items: center; gap: 8px; margin: 0; }
 .store-hint { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 4px 0 6px; }
+.update-box { display: grid; gap: 10px; margin: 6px 0 22px; padding: 16px 18px; border-radius: 12px; background: rgba(23,29,37,.88); box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); max-width: 720px; }
+.update-box p { margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

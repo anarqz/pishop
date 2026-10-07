@@ -46,6 +46,7 @@ pub fn router() -> Router {
         .merge(crate::exeguess::router())
         .merge(crate::install::router())
         .merge(crate::winetricks::router())
+        .merge(crate::update::router())
         .route("/api/library", get(|| async { Json(crate::library::all()) }))
         .route("/api/focus", get(|| async { Json(json!({ "focused": crate::focus::focused() })) }))
         .route("/api/settings", get(|| async { Json(crate::settings::get()) }).post(save_settings))

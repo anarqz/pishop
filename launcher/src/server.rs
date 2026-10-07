@@ -73,8 +73,18 @@ async fn ask_previous_to_quit(addr: SocketAddr) {
     }
 }
 
+/// The app's quit signal, for parts of piShop that end it (an update restart).
+static QUIT: std::sync::OnceLock<Arc<Notify>> = std::sync::OnceLock::new();
+
+pub fn request_quit() {
+    if let Some(q) = QUIT.get() {
+        q.notify_one();
+    }
+}
+
 pub async fn serve(listener: TcpListener, quit: Arc<Notify>, started: Instant) {
     let addr = listener.local_addr().expect("local addr");
+    let _ = QUIT.set(quit.clone());
     let state = AppState { quit, started, addr };
     let app = Router::new()
         .route("/api/info", get(info))
@@ -92,7 +102,7 @@ pub async fn serve(listener: TcpListener, quit: Arc<Notify>, started: Instant) {
 async fn info(State(s): State<AppState>) -> impl IntoResponse {
     axum::Json(json!({
         "name": crate::APP_NAME,
-        "version": env!("CARGO_PKG_VERSION"),
+        "version": crate::update::display_version(),
         "addr": s.addr.to_string(),
         "uptime_secs": s.started.elapsed().as_secs(),
         "pid": std::process::id(),

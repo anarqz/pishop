@@ -32,6 +32,7 @@ mod tgdb;
 mod torrent;
 mod tpb;
 mod trailer;
+mod update;
 mod vdf;
 mod winetricks;
 
@@ -118,6 +119,8 @@ fn main() {
     let data = data_dir();
     let _ = std::fs::create_dir_all(&data);
     log::init(&data.join("launcher.log"));
+    // A release downloaded earlier takes over before anything starts.
+    update::apply_staged();
 
     torrent::allow_origin(port());
 
@@ -139,13 +142,18 @@ fn main() {
     let code = rt.block_on(run(args));
     drop(rt);
     browser::reap_orphans();
+    if update::restart_requested() {
+        // "Restart now": the new version replaces this process (same pid,
+        // so Steam keeps seeing its game running).
+        update::apply_staged();
+    }
     log!("encerrado (código {code})");
     std::process::exit(code);
 }
 
 async fn run(args: Args) -> i32 {
     let started = Instant::now();
-    log!("{APP_NAME} {} iniciando (pid {})", env!("CARGO_PKG_VERSION"), std::process::id());
+    log!("{APP_NAME} {} iniciando (pid {})", update::display_version(), std::process::id());
 
     for (k, v) in std::env::vars_os() {
         let k = k.to_string_lossy();
@@ -171,6 +179,7 @@ async fn run(args: Args) -> i32 {
     sources::load();
     focus::start();
     jobs::start();
+    update::start();
     tokio::spawn(install::recover());
 
     let mut term = signal(SignalKind::terminate()).expect("SIGTERM handler");

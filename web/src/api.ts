@@ -146,6 +146,18 @@ export interface MoveJob {
   to: string
   error: string | null
 }
+/** Updates from GitHub releases (launcher's update.rs). */
+export interface UpdateStatus {
+  current: string
+  /** A development build: newer releases are only reported. */
+  dev: boolean
+  latest: string | null
+  state: 'idle' | 'checking' | 'up_to_date' | 'available' | 'downloading' | 'ready' | 'error'
+  progress: number
+  error: string | null
+  checked: number | null
+  notes: string | null
+}
 /** Where an installed game can move: its prefix, or a Steam library. */
 export interface MoveTarget {
   /** "prefix" or the library's path */
@@ -400,6 +412,9 @@ export const api = {
   clearJobs: () => post<void>('/api/jobs/clear'),
   openKeyboard: () => post<void>('/api/keyboard'),
   quit: () => post<void>('/api/quit'),
+  update: () => call<UpdateStatus>('/api/update'),
+  updateCheck: () => post<UpdateStatus>('/api/update/check'),
+  updateApply: () => post<{ restarting: boolean }>('/api/update/apply'),
   discover: (offset: number, search: string, limit = 30) =>
     call<{ items: DiscoverGame[]; total: number; offset: number }>(
       `/api/discover?offset=${offset}&limit=${limit}${search ? `&search=${encodeURIComponent(search)}` : ''}`,

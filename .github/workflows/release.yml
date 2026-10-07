@@ -1,6 +1,6 @@
 # Builds the SteamOS bundle and publishes it as a GitHub Release.
 #
-# The release ships the static launcher, yt-dlp and the Steam artwork. The
+# The release ships the static launcher, yt-dlp, winetricks and the Steam artwork. The
 # Chromium build (Chrome for Testing) is not redistributed: the installer
 # (docs/install.sh) downloads the pinned version straight from Google.
 name: Release
@@ -56,6 +56,8 @@ jobs:
         run: cargo build --release --locked --target x86_64-unknown-linux-musl
 
       - name: Bundle
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           # Single source of truth for the Chromium version: scripts/build.sh
@@ -65,7 +67,11 @@ jobs:
           mkdir -p "$OUT/bin" "$OUT/art"
           cp launcher/target/x86_64-unknown-linux-musl/release/pishop "$OUT/pishop"
           curl -fsSL -o "$OUT/bin/yt-dlp" https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux
-          chmod +x "$OUT/pishop" "$OUT/bin/yt-dlp"
+          # winetricks (latest release; LGPL-2.1) for game components; piShop is its cabextract/unzip.
+          WT_TAG=$(curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/Winetricks/winetricks/releases/latest | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
+          curl -fsSL -o "$OUT/bin/winetricks" "https://raw.githubusercontent.com/Winetricks/winetricks/${WT_TAG:-master}/src/winetricks"
+          head -1 "$OUT/bin/winetricks" | grep -q '^#!/bin/sh'
+          chmod +x "$OUT/pishop" "$OUT/bin/yt-dlp" "$OUT/bin/winetricks"
           cp art/*.png "$OUT/art/"
           echo "$CHROME_VERSION" > "$OUT/chromium.version"
           echo "$TAG" > "$OUT/VERSION"

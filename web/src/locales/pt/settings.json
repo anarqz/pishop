@@ -84,5 +84,16 @@
   "Default": "Padrão",
   "Brazilian Portuguese": "Português do Brasil",
   "Tip: “192.168.0.10:/games” in the Server field fills in the share too.": "Dica: “192.168.0.10:/games” no campo Servidor já preenche o compartilhamento.",
-  "Empty: The Pirate Bay’s own API (apibay.org) whenever Prowlarr isn’t set up, so the Store always works.": "Vazio: a API do próprio The Pirate Bay (apibay.org) sempre que o Prowlarr não estiver configurado, para a Loja sempre funcionar."
+  "Empty: The Pirate Bay’s own API (apibay.org) whenever Prowlarr isn’t set up, so the Store always works.": "Vazio: a API do próprio The Pirate Bay (apibay.org) sempre que o Prowlarr não estiver configurado, para a Loja sempre funcionar.",
+  "Checking for updates…": "Procurando atualizações…",
+  "Downloading {v}…": "Baixando a {v}…",
+  "**{v}** is ready. It installs by itself the next time piShop starts.": "A **{v}** está pronta. Ela se instala sozinha na próxima vez que o piShop abrir.",
+  "{v} is out. This is a development build, so it only checks: install a release with the installer to get updates.": "A {v} saiu. Esta é uma versão de desenvolvimento, então ela só verifica: instale uma versão publicada pelo instalador para receber atualizações.",
+  "You have the latest version.": "Você está com a versão mais recente.",
+  "Couldn’t check for updates: {error}": "Não foi possível procurar atualizações: {error}",
+  "piShop looks for new versions by itself and installs them.": "O piShop procura novas versões sozinho e as instala.",
+  "Last checked {when}": "Última verificação: {when}",
+  "Restarting…": "Reiniciando…",
+  "Restart now": "Reiniciar agora",
+  "Check for updates": "Procurar atualizações"
 }

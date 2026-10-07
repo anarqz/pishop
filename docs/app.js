@@ -25,7 +25,7 @@
     pt: {
       'meta.title': 'piShop — sua loja de jogos no SteamOS',
       'meta.description':
-        'Descubra lançamentos, busque nos seus indexadores, traga jogos do seu NAS e baixe tudo pelo controle — direto no Modo de Jogo do SteamOS. Instale com uma linha.',
+        'Descubra lançamentos, busque, baixe e instale seus jogos pelo controle — direto no Modo de Jogo do SteamOS. Instale com uma linha; depois ele se atualiza sozinho.',
       'nav.install': 'Instalar',
       'nav.screens': 'Telas',
       'nav.features': 'Recursos',
@@ -34,7 +34,7 @@
       'hero.title1': 'Sua loja de jogos',
       'hero.title2': 'dentro do Modo de Jogo.',
       'hero.lead':
-        'Descubra lançamentos, busque nos seus indexadores, traga jogos do seu NAS e baixe tudo pelo controle — sem sair do SteamOS e sem instalar nada no sistema.',
+        'Descubra lançamentos, busque, baixe e instale seus jogos pelo controle — com Proton, componentes e arte oficial da Steam — sem sair do SteamOS e sem instalar nada no sistema.',
       'hero.hint': 'No <b>Modo Desktop</b>, abra o <b>Konsole</b>, cole e pressione <kbd>Enter</kbd>.',
       'hero.b1': 'Sem root nem senha',
       'hero.b2': 'Zero dependências',
@@ -47,14 +47,14 @@
       'copy.done': 'Copiado!',
       'copy.toast': 'Comando copiado — agora é só colar no Konsole.',
       'copy.fail': 'Não deu para copiar; selecione o comando e copie à mão.',
-      'stats.s1': 'linha para instalar e atualizar',
+      'stats.s1': 'linha para instalar — depois ele se atualiza sozinho',
       'stats.s2': 'pacotes no sistema, nada de sudo',
       'stats.s3': 'jogável no controle',
       'stats.s4': 'mesma escala de interface da Steam',
       'install.kicker': 'Instalação',
       'install.title': 'Uma linha. Como o EmuDeck.',
       'install.lead':
-        'O instalador baixa a versão mais recente e o navegador embutido, e cria o atalho na Steam com capa, banner e ícone. Rodar de novo atualiza.',
+        'O instalador baixa a versão mais recente e o navegador embutido, e cria o atalho na Steam com capa, banner e ícone. Depois disso o piShop se atualiza sozinho.',
       'install.s1t': 'Vá para o Modo Desktop',
       'install.s1': 'Botão Steam → Energia → Mudar para o Modo Desktop.',
       'install.s2t': 'Cole o comando no Konsole',
@@ -96,7 +96,7 @@
     en: {
       'meta.title': 'piShop — your game store on SteamOS',
       'meta.description':
-        'Discover new releases, search your indexers, pull games from your NAS and download everything with the controller — right in SteamOS Gaming Mode. Install with one line.',
+        'Discover new releases, then search, download and install your games with the controller — right in SteamOS Gaming Mode. Install with one line; it keeps itself up to date.',
       'nav.install': 'Install',
       'nav.screens': 'Screens',
       'nav.features': 'Features',
@@ -105,7 +105,7 @@
       'hero.title1': 'Your game store',
       'hero.title2': 'inside Gaming Mode.',
       'hero.lead':
-        'Discover new releases, search your indexers, pull games from your NAS and download everything with the controller — without leaving SteamOS or installing anything on the system.',
+        'Discover new releases, then search, download and install your games with the controller — Proton, components and official Steam art included — without leaving SteamOS or installing anything on the system.',
       'hero.hint': 'In <b>Desktop Mode</b>, open <b>Konsole</b>, paste and press <kbd>Enter</kbd>.',
       'hero.b1': 'No root, no password',
       'hero.b2': 'Zero dependencies',
@@ -118,14 +118,14 @@
       'copy.done': 'Copied!',
       'copy.toast': 'Command copied — now paste it into Konsole.',
       'copy.fail': "Couldn't copy; select the command and copy it by hand.",
-      'stats.s1': 'line to install and update',
+      'stats.s1': 'line to install — then it updates itself',
       'stats.s2': 'system packages, no sudo',
       'stats.s3': 'playable with a controller',
       'stats.s4': 'same UI scale as Steam',
       'install.kicker': 'Install',
       'install.title': 'One line. Just like EmuDeck.',
       'install.lead':
-        'The installer grabs the latest release and the bundled browser, and creates the Steam shortcut with capsule, banner and icon. Run it again to update.',
+        'The installer grabs the latest release and the bundled browser, and creates the Steam shortcut with capsule, banner and icon. From then on, piShop updates itself.',
       'install.s1t': 'Switch to Desktop Mode',
       'install.s1': 'Steam button → Power → Switch to Desktop.',
       'install.s2t': 'Paste the command into Konsole',
@@ -181,6 +181,9 @@
     box: '<path d="M3.5 7.5L12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9"/>',
     shield: '<path d="M12 3l7.5 3v5.5c0 4.5-3.2 8-7.5 9.5-4.3-1.5-7.5-5-7.5-9.5V6z"/><rect x="9" y="11" width="6" height="5" rx="1"/><path d="M10.5 11V9.5a1.5 1.5 0 0 1 3 0V11"/>',
     globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 9.5h17M3.5 14.5h17"/><path d="M12 3.5c2.3 2.4 3.4 5.2 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.2-3.4-8.5S9.7 5.9 12 3.5z"/>',
+    sliders: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
+    layers: '<path d="M12 3.5l8.5 4.5-8.5 4.5-8.5-4.5z"/><path d="M3.5 12l8.5 4.5 8.5-4.5"/><path d="M3.5 16l8.5 4.5 8.5-4.5"/>',
+    image: '<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5.5-5.5L6 20"/>',
     refresh: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/>',
   }
   const icon = name =>
@@ -213,15 +216,52 @@
       ],
     },
     {
-      icon: 'play',
-      tags: ['yt-dlp'],
+      icon: 'download',
+      shot: 'transfers',
+      tags: ['Proton', 'Steam'],
       pt: [
-        'Trailer com um toque',
-        'Aperte ↑ na página do jogo e o trailer entra em tela cheia, sem cortes, como no Xbox — só uma barra embaixo para voltar ou silenciar. O vídeo é encontrado com o yt-dlp.',
+        'Instale pelo controle',
+        'Em Transferências, A abre o jogo baixado: arquivos compactados são extraídos, o instalador roda pela Steam no próprio Modo de Jogo e, quando ele fecha, o piShop descobre onde o jogo foi parar e aponta o atalho para o executável certo — Unreal, Unity e jogos GDK inclusos.',
       ],
       en: [
-        'One-press trailers',
-        'Press ↑ on a game page and the trailer takes the whole screen, uncropped, Xbox style — with just a bar at the bottom to go back or mute. The video is found with yt-dlp.',
+        'Install with the controller',
+        "In Transfers, A opens the downloaded game: archives get extracted, the installer runs through Steam right in Gaming Mode, and when it closes piShop finds where the game went and points the shortcut at the right executable — Unreal, Unity and GDK games included.",
+      ],
+    },
+    {
+      icon: 'sliders',
+      tags: ['Proton'],
+      pt: [
+        'Cada jogo do seu jeito',
+        'Escolha a versão do Proton, veja o prefixo e onde o jogo está, e mova os arquivos para dentro do prefixo ou para outra biblioteca da Steam (NVMe ou cartão SD) — o atalho e o registro acompanham sozinhos.',
+      ],
+      en: [
+        'Every game, your way',
+        'Pick the Proton version, see the prefix and where the game lives, and move its files into the prefix or to another Steam library (NVMe or SD card) — the shortcut and the registry follow on their own.',
+      ],
+    },
+    {
+      icon: 'layers',
+      tags: ['Steam', 'winetricks'],
+      pt: [
+        'Componentes por jogo',
+        'Visual C++, DirectX, .NET e PhysX direto dos instaladores da própria Steam, sem internet; o winetricks embutido cuida do resto. Ou rode, dentro do prefixo do jogo, os redistribuíveis que vieram no download.',
+      ],
+      en: [
+        'Components per game',
+        "Visual C++, DirectX, .NET and PhysX straight from Steam's own installers, offline; the bundled winetricks handles the rest. Or run the redistributables that came with the download inside the game's prefix.",
+      ],
+    },
+    {
+      icon: 'image',
+      tags: ['Steam', 'SteamGridDB'],
+      pt: [
+        'Arte oficial da Steam',
+        'Capa, banner, fundo, logo (na posição que a Steam usa) e ícone na maior resolução que a Steam publica; o SteamGridDB só completa o que faltar. Um botão atualiza a arte de todos os jogos.',
+      ],
+      en: [
+        'Official Steam art',
+        "Cover, banner, hero, logo (placed where Steam puts it) and icon at the largest size Steam publishes; SteamGridDB only fills what's missing. One button refreshes every game's art.",
       ],
     },
     {
@@ -230,11 +270,11 @@
       tags: ['The Pirate Bay', 'Prowlarr'],
       pt: [
         'Loja',
-        'Busca nativa no The Pirate Bay e nos indexadores do seu Prowlarr, ao mesmo tempo, em consoles ou PC. Uma lista compacta com tamanho, data, seeders e leechers, ordenação e filtro por plataforma; o jogo aparece no cabeçalho com arte e informações, e os detalhes do torrent já vêm com ele. As buscas ficam em cache para poupar os limites dos indexadores.',
+        'Busca no The Pirate Bay e nos indexadores do seu Prowlarr, ao mesmo tempo, em consoles ou PC — e funciona sem configurar nada, direto na API do próprio The Pirate Bay. Uma lista compacta com tamanho, data, seeders e leechers, ordenação e filtro por plataforma; o jogo aparece no cabeçalho com arte e informações, e os detalhes do torrent já vêm com ele. As buscas ficam em cache para poupar os limites dos indexadores.',
       ],
       en: [
         'Store',
-        "Native The Pirate Bay search and your Prowlarr indexers, side by side, for consoles or PC. A compact list with size, date, seeders and leechers, sorting and a platform filter; the game shows up in the header with art and details, and the release details carry it along. Searches are cached to spare your indexers' limits.",
+        "The Pirate Bay and your Prowlarr indexers, side by side, for consoles or PC — and it works with no setup at all, straight from The Pirate Bay's own API. A compact list with size, date, seeders and leechers, sorting and a platform filter; the game shows up in the header with art and details, and the release details carry it along. Searches are cached to spare your indexers' limits.",
       ],
     },
     {
@@ -333,30 +373,17 @@
     {
       icon: 'refresh',
       pt: [
-        'Atualiza com o mesmo comando',
-        'Rode o instalador de novo para atualizar. Configurações e capas ficam; o navegador só é baixado outra vez quando muda de versão. Desinstalar também é uma linha.',
+        'Atualiza sozinho',
+        'O piShop procura novas versões no GitHub, baixa em segundo plano e se instala na próxima vez que abrir — ou na hora, em Configurações → Sobre. Configurações e capas ficam; o navegador só é baixado de novo quando muda de versão.',
       ],
       en: [
-        'Updates with the same command',
-        'Run the installer again to update. Settings and covers stay; the browser is only downloaded again when its version changes. Uninstalling is one line too.',
+        'Updates itself',
+        'piShop checks GitHub for new versions, downloads them in the background and installs them the next time it starts — or right away from Settings → About. Settings and covers stay; the browser is only downloaded again when its version changes.',
       ],
     },
   ]
 
   const ROADMAP = [
-    {
-      status: 'next',
-      pt: [
-        'Instaladores',
-        'Do download ao jogo pronto: o piShop instala o que baixou e cria o atalho na Steam, direto de Transferências.',
-        ['Instalar a partir de “Ver detalhes” em Transferências', 'Atalho na Steam com a capa e a arte do jogo'],
-      ],
-      en: [
-        'Installers',
-        'From download to a ready-to-play game: piShop installs what it downloaded and adds the Steam shortcut, right from Transfers.',
-        ['Install from “View details” in Transfers', "A Steam shortcut with the game's cover and art"],
-      ],
-    },
     {
       status: 'research',
       pt: [
@@ -427,7 +454,7 @@
       ],
       [
         'Como atualizo?',
-        'Rode o mesmo comando de novo. Suas configurações e o cache de capas ficam; o navegador embutido só é baixado outra vez quando muda de versão.',
+        'Não precisa: o piShop procura novas versões sozinho, baixa em segundo plano e se instala na próxima vez que abrir (ou na hora, em Configurações → Sobre). Rodar o comando de novo também atualiza. Suas configurações e o cache de capas ficam; o navegador só é baixado outra vez quando muda de versão.',
       ],
       [
         'Como desinstalo?',
@@ -435,7 +462,7 @@
       ],
       [
         'O que preciso configurar?',
-        'Para explorar o NAS e baixar por link magnet, só o próprio compartilhamento. A Loja busca no The Pirate Bay (só o endereço da API) e/ou no seu Prowlarr (endereço e chave de API); o Descobrir e os detalhes dos jogos usam as APIs do isitcracked e do TheGamesDB. Tudo fica em Configurações → Serviços. A loja da Steam e o SteamGridDB não pedem chave.',
+        'Nada para começar: a Loja já busca no The Pirate Bay. O Prowlarr (endereço e chave de API) é opcional e soma os seus indexadores; o Descobrir usa a API do isitcracked e os detalhes dos jogos podem usar o TheGamesDB — sem eles, o piShop avisa e segue funcionando. Tudo fica em Configurações → Serviços. A loja da Steam e o SteamGridDB não pedem chave.',
       ],
       [
         'Por que o instalador baixa um navegador?',
@@ -465,7 +492,7 @@
       ],
       [
         'How do I update?',
-        'Run the same command again. Your settings and cover cache stay; the bundled browser is only downloaded again when its version changes.',
+        "You don't have to: piShop looks for new versions by itself, downloads them in the background and installs them the next time it starts (or right away from Settings → About). Running the command again updates too. Your settings and cover cache stay; the bundled browser is only downloaded again when its version changes.",
       ],
       [
         'How do I uninstall?',
@@ -473,7 +500,7 @@
       ],
       [
         'What do I need to set up?',
-        "To browse your NAS and download magnet links, just the share itself. The Store searches The Pirate Bay (just the API address) and/or your Prowlarr (address and API key); Discover and game details use the isitcracked and TheGamesDB APIs. It all lives in Settings → Services. The Steam store and SteamGridDB don't need a key.",
+        "Nothing to get started: the Store already searches The Pirate Bay. Prowlarr (address and API key) is optional and adds your indexers; Discover uses the isitcracked API and game details can use TheGamesDB — without them piShop says so and keeps working. It all lives in Settings → Services. The Steam store and SteamGridDB don't need a key.",
       ],
       [
         'Why does the installer download a browser?',
@@ -509,11 +536,6 @@
       id: 'game',
       pt: ['Página do jogo', 'Sinopse, gêneros e datas da loja da Steam, arte do SteamGridDB e o status do crack.'],
       en: ['Game page', 'Synopsis, genres and dates from the Steam store, SteamGridDB art and the crack status.'],
-    },
-    {
-      id: 'trailer',
-      pt: ['Trailer', 'Aperte ↑ e o trailer ocupa a tela inteira, sem cortes. ↓ ou B voltam aos detalhes.'],
-      en: ['Trailer', 'Press ↑ and the trailer fills the whole screen, uncropped. ↓ or B go back to the details.'],
     },
     {
       id: 'store',
@@ -802,7 +824,7 @@
   lightbox.addEventListener('click', () => lightbox.close())
 
   // ---------------------------------------------------------------- terminal
-  let version = 'v0.1.0-alpha.1'
+  let version = 'v0.2.0-alpha.1'
   let termRun = 0
   let termStarted = false
   const TERM = {
@@ -819,7 +841,7 @@
       shortcut: 'Atalho criado na Steam (Biblioteca → Não-Steam).',
       done: 'Pronto!',
       next: '  Volte ao Modo de Jogo → Biblioteca → Não-Steam → piShop.',
-      update: '  Para atualizar, rode o mesmo comando de novo.',
+      update: '  Daqui em diante o piShop se atualiza sozinho.',
     },
     en: {
       banner: 'for SteamOS',
@@ -834,7 +856,7 @@
       shortcut: 'Steam shortcut created (Library → Non-Steam).',
       done: 'All set!',
       next: '  Go back to Gaming Mode → Library → Non-Steam → piShop.',
-      update: '  To update, run the same command again.',
+      update: '  From now on piShop keeps itself up to date.',
     },
   }
 

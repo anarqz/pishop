@@ -188,4 +188,4 @@ fi
 
 printf '\n%s%s%s\n' "$B" "$(t 'Pronto!' 'All set!')" "$N"
 printf '%s\n' "$(t '  Volte ao Modo de Jogo → Biblioteca → Não-Steam → piShop.' '  Go back to Gaming Mode → Library → Non-Steam → piShop.')"
-printf '%s\n\n' "$D$(t '  Para atualizar, rode o mesmo comando de novo.' '  To update, run the same command again.')$N"
+printf '%s\n\n' "$D$(t '  Daqui em diante o piShop se atualiza sozinho (rodar este comando de novo também atualiza).' '  From now on piShop keeps itself up to date (running this command again updates too).')$N"
