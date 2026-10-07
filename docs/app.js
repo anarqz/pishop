@@ -34,7 +34,7 @@
       'hero.title1': 'Sua loja de jogos',
       'hero.title2': 'dentro do Modo de Jogo.',
       'hero.lead':
-        'Descubra lançamentos, busque, baixe e instale seus jogos pelo controle — com Proton, componentes, arte oficial da Steam e VPN — sem sair do SteamOS e sem instalar nada no sistema.',
+        'Descubra lançamentos, busque, baixe, instale e cuide dos seus jogos pelo controle — com Proton, componentes, patches, arte oficial da Steam e VPN — sem sair do SteamOS e sem instalar nada no sistema.',
       'hero.hint': 'No <b>Modo Desktop</b>, abra o <b>Konsole</b>, cole e pressione <kbd>Enter</kbd>.',
       'hero.b1': 'Sem root nem senha',
       'hero.b2': 'Zero dependências',
@@ -105,7 +105,7 @@
       'hero.title1': 'Your game store',
       'hero.title2': 'inside Gaming Mode.',
       'hero.lead':
-        'Discover new releases, then search, download and install your games with the controller — Proton, components, official Steam art and a VPN included — without leaving SteamOS or installing anything on the system.',
+        'Discover new releases, then search, download, install and manage your games with the controller — Proton, components, patches, official Steam art and a VPN included — without leaving SteamOS or installing anything on the system.',
       'hero.hint': 'In <b>Desktop Mode</b>, open <b>Konsole</b>, paste and press <kbd>Enter</kbd>.',
       'hero.b1': 'No root, no password',
       'hero.b2': 'Zero dependencies',
@@ -181,6 +181,8 @@
     box: '<path d="M3.5 7.5L12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9"/>',
     shield: '<path d="M12 3l7.5 3v5.5c0 4.5-3.2 8-7.5 9.5-4.3-1.5-7.5-5-7.5-9.5V6z"/><rect x="9" y="11" width="6" height="5" rx="1"/><path d="M10.5 11V9.5a1.5 1.5 0 0 1 3 0V11"/>',
     globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 9.5h17M3.5 14.5h17"/><path d="M12 3.5c2.3 2.4 3.4 5.2 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.2-3.4-8.5S9.7 5.9 12 3.5z"/>',
+    grid: '<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>',
+    wrench: '<path d="M14.7 6.3a4 4 0 0 0-5.2 5.2l-5.8 5.8a1.6 1.6 0 0 0 2.3 2.3l5.8-5.8a4 4 0 0 0 5.2-5.2l-2.5 2.5-2.3-.4-.4-2.3z"/>',
     sliders: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
     layers: '<path d="M12 3.5l8.5 4.5-8.5 4.5-8.5-4.5z"/><path d="M3.5 12l8.5 4.5 8.5-4.5"/><path d="M3.5 16l8.5 4.5 8.5-4.5"/>',
     image: '<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5.5-5.5L6 20"/>',
@@ -222,23 +224,50 @@
       tags: ['Proton', 'Steam'],
       pt: [
         'Instale pelo controle',
-        'Em Transferências, A abre o jogo baixado: arquivos compactados são extraídos, o instalador roda pela Steam no próprio Modo de Jogo e, quando ele fecha, o piShop descobre onde o jogo foi parar e aponta o atalho para o executável certo — Unreal, Unity e jogos GDK inclusos.',
+        'Em Transferências, A abre o jogo baixado: arquivos compactados são extraídos, o instalador roda pela Steam no próprio Modo de Jogo (a transferência para enquanto isso) e, quando ele fecha, o piShop acha onde o jogo foi parar e aponta o atalho para o executável certo — Unreal, launchers e .NET incluídos. Daí o jogo vai para Jogos, e os arquivos baixados podem sair com um botão.',
       ],
       en: [
         'Install with the controller',
-        "In Transfers, A opens the downloaded game: archives get extracted, the installer runs through Steam right in Gaming Mode, and when it closes piShop finds where the game went and points the shortcut at the right executable — Unreal, Unity and GDK games included.",
+        "In Transfers, A opens the downloaded game: archives get extracted, the installer runs through Steam right in Gaming Mode (the transfer stops meanwhile), and when it closes piShop finds where the game went and points the shortcut at the right executable — Unreal, launchers and .NET included. The game then moves to Games, and the downloaded files can go with one button.",
+      ],
+    },
+    {
+      icon: 'grid',
+      shot: 'games',
+      tags: ['Steam', 'Proton'],
+      pt: [
+        'Jogos',
+        'Todos os atalhos não-Steam num lugar só: os jogos instalados pelo piShop e todo o resto — emuladores, outros launchers, os que você adicionou à mão. A página de cada jogo tem Jogar, o Proton, os componentes, a pasta e o prefixo no Explorar e remover o atalho, o prefixo ou os arquivos.',
+      ],
+      en: [
+        'Games',
+        'Every non-Steam shortcut in one place: the games you installed through piShop and everything else — emulators, other launchers, the ones you added by hand. Each game\'s page has Play, its Proton, components, its folder and prefix in Explore, and removing the shortcut, the prefix or the files.',
       ],
     },
     {
       icon: 'sliders',
+      shot: 'game-page',
       tags: ['Proton'],
       pt: [
         'Cada jogo do seu jeito',
-        'Escolha a versão do Proton, veja o prefixo e onde o jogo está, e mova os arquivos para dentro do prefixo ou para outra biblioteca da Steam (NVMe ou cartão SD) — o atalho e o registro acompanham sozinhos.',
+        'Escolha o Proton, veja onde ficam o jogo e o prefixo — com o espaço livre de cada disco — e mova os arquivos para dentro do prefixo ou para outra biblioteca Steam (NVMe ou cartão SD): o atalho e o registro acompanham. Vale também para os atalhos que o piShop não criou.',
       ],
       en: [
         'Every game, your way',
-        'Pick the Proton version, see the prefix and where the game lives, and move its files into the prefix or to another Steam library (NVMe or SD card) — the shortcut and the registry follow on their own.',
+        "Pick the Proton version, see where the game and its prefix are — with each disk's free space — and move its files into the prefix or to another Steam library (NVMe or SD card): the shortcut and the registry follow. Shortcuts piShop didn't create too.",
+      ],
+    },
+    {
+      icon: 'wrench',
+      shot: 'patches',
+      tags: ['Proton', 'Wine'],
+      pt: [
+        'Patches',
+        'Correções rápidas para tentar quando um jogo não roda no Linux, ligadas e desligadas no jogo (Y): cada uma é uma mudança nas opções de inicialização — como o Sobrescrever o winmm de alguns repacks da FitGirl — e o piShop lê de volta se está ligada, mesmo quando você mexeu na Steam.',
+      ],
+      en: [
+        'Patches',
+        "Quick workarounds to try when a game won't run on Linux, switched on and off from the game (Y): each one is a change to its launch options — like Override winmm for some FitGirl repacks — and piShop reads back whether it's on, even when you set it in Steam.",
       ],
     },
     {
@@ -259,11 +288,11 @@
       tags: ['Steam', 'SteamGridDB'],
       pt: [
         'Arte oficial da Steam',
-        'Capa, banner, fundo, logo (na posição que a Steam usa) e ícone na maior resolução que a Steam publica; o SteamGridDB só completa o que faltar. Um botão atualiza a arte de todos os jogos.',
+        'Capa, banner, fundo, logo (na posição que a Steam usa) e ícone na maior resolução que a Steam publica; o SteamGridDB só completa o que faltar. Um botão atualiza a arte de todos os jogos — ou escolha à mão a arte oficial de um jogo da Steam ou qualquer jogo do SteamGridDB.',
       ],
       en: [
         'Official Steam art',
-        "Cover, banner, hero, logo (placed where Steam puts it) and icon at the largest size Steam publishes; SteamGridDB only fills what's missing. One button refreshes every game's art.",
+        "Cover, banner, hero, logo (placed where Steam puts it) and icon at the largest size Steam publishes; SteamGridDB only fills what's missing. One button refreshes every game's art — or pick it by hand: a Steam game's official art or any SteamGridDB game.",
       ],
     },
     {
@@ -272,11 +301,11 @@
       tags: ['The Pirate Bay', 'Prowlarr'],
       pt: [
         'Loja',
-        'Busca no The Pirate Bay e nos indexadores do seu Prowlarr, ao mesmo tempo, em consoles ou PC — e funciona sem configurar nada, direto na API do próprio The Pirate Bay. Uma lista compacta com tamanho, data, seeders e leechers, ordenação e filtro por plataforma; o jogo aparece no cabeçalho com arte e informações, e os detalhes do torrent já vêm com ele. As buscas ficam em cache para poupar os limites dos indexadores.',
+        'Busca no The Pirate Bay e nos indexadores do seu Prowlarr, ao mesmo tempo, em consoles ou PC — e funciona sem configurar nada, direto na API do próprio The Pirate Bay. Uma lista compacta com tamanho, data, seeders e leechers, ordenação e filtro por plataforma; o jogo aparece no cabeçalho com arte e informações, e os detalhes do torrent já vêm com ele. As buscas ficam em cache para poupar os limites dos indexadores. O download vai para Downloads ou para a pasta que você escolher, com o espaço livre de cada lugar à vista. Jogo errado no cabeçalho? Escolha outro — da Steam ou do SteamGridDB — e o download leva os dados dele. E dá para buscar sem cache, quando você acabou de adicionar uma fonte.',
       ],
       en: [
         'Store',
-        "The Pirate Bay and your Prowlarr indexers, side by side, for consoles or PC — and it works with no setup at all, straight from The Pirate Bay's own API. A compact list with size, date, seeders and leechers, sorting and a platform filter; the game shows up in the header with art and details, and the release details carry it along. Searches are cached to spare your indexers' limits.",
+        "The Pirate Bay and your Prowlarr indexers, side by side, for consoles or PC — and it works with no setup at all, straight from The Pirate Bay's own API. A compact list with size, date, seeders and leechers, sorting and a platform filter; the game shows up in the header with art and details, and the release details carry it along. Searches are cached to spare your indexers' limits. Downloads go to Downloads or a folder you pick, with each place's free space in view. Wrong game in the header? Match another one — from Steam or SteamGridDB — and the download takes its details. You can also search without the cache, right after adding a source.",
       ],
     },
     {
@@ -285,11 +314,11 @@
       tags: ['SMB2/3', 'EmuDeck'],
       pt: [
         'Explorar',
-        'Seus compartilhamentos de rede num explorador de dois painéis feito para o controle: marque com X, copie com Y para as pastas do EmuDeck — na memória interna ou no cartão SD. Pensado para acervos com dezenas de milhares de jogos.',
+        'Um explorador de dois painéis feito para o controle, os dois começando na pasta pessoal: L2/R2 levam às suas pastas e cartões, às bibliotecas Steam, ao prefixo de cada jogo e aos seus compartilhamentos de rede. Marque com X, copie com Y — com o espaço livre de cada disco sempre à vista. Pensado para acervos com dezenas de milhares de jogos.',
       ],
       en: [
         'Explore',
-        "Your network shares in a two-pane explorer built for the controller: mark with X, copy with Y into EmuDeck's folders — on internal storage or the SD card. Built for libraries with tens of thousands of games.",
+        "A two-pane explorer built for the controller, both panes starting at home: L2/R2 jump to your folders and cards, Steam libraries, each game's prefix and your network shares. Mark with X, copy with Y — with each disk's free space always in view. Built for libraries with tens of thousands of games.",
       ],
     },
     {
@@ -297,11 +326,11 @@
       tags: ['librqbit'],
       pt: [
         'BitTorrent nativo',
-        'Motor próprio com TCP, uTP e DHT, links magnet, retomada automática e limite de velocidade em Configurações → Downloads. Jogos de console podem ir direto para <code>roms/&lt;sistema&gt;</code>; os de PC ficam em Downloads, prontos para instalar.',
+        'Motor próprio com TCP, uTP e DHT, links magnet, retomada automática e limite de velocidade em Configurações → Downloads. Os downloads vão para Downloads ou para a pasta que você escolher.',
       ],
       en: [
         'Native BitTorrent',
-        'A built-in engine with TCP, uTP and DHT, magnet links, automatic resume and a speed cap in Settings → Downloads. Console games can go straight to <code>roms/&lt;system&gt;</code>; PC games land in Downloads, ready to install.',
+        'A built-in engine with TCP, uTP and DHT, magnet links, automatic resume and a speed cap in Settings → Downloads. Downloads go to Downloads or a folder you pick.',
       ],
     },
     {
@@ -310,11 +339,11 @@
       tags: ['Steam', 'TheGamesDB'],
       pt: [
         'Transferências',
-        'Cada download aparece como o jogo: capa, anel de progresso e, embaixo, velocidade e tempo restante. Os dados vêm da Steam, do TheGamesDB, do SteamGridDB e do isitcracked, nessa ordem. Pause, pare ou exclua — com ou sem os arquivos. As cópias da rede ficam na mesma tela.',
+        'Cada download aparece como o jogo: capa, anel de progresso e, embaixo, velocidade e tempo restante. Os dados vêm da Steam, do TheGamesDB, do SteamGridDB e do isitcracked, nessa ordem. Pause, pare ou exclua — com ou sem os arquivos; o jogo instalado continua em Jogos. As cópias da rede ficam na mesma tela.',
       ],
       en: [
         'Transfers',
-        'Every download shows up as the game: cover, a progress ring and, below it, speed and time left. Game data comes from Steam, TheGamesDB, SteamGridDB and isitcracked, in that order. Pause, stop or delete — with or without the files. Network copies live on the same screen.',
+        'Every download shows up as the game: cover, a progress ring and, below it, speed and time left. Game data comes from Steam, TheGamesDB, SteamGridDB and isitcracked, in that order. Pause, stop or delete — with or without the files; an installed game stays in Games. Network copies live on the same screen.',
       ],
     },
     {
@@ -332,11 +361,11 @@
       icon: 'pad',
       pt: [
         'Cara de SteamOS',
-        'Abas em L1/R1, legenda de botões, analógico direito para rolar, teclado da Steam só quando você pede e a mesma escala de interface da Steam — no Deck, no Ally ou na TV.',
+        'Abas em L1/R1, L2/R2 para trocar dentro da tela, legenda de botões, analógico direito para rolar, teclado da Steam só quando você pede e a mesma escala de interface da Steam — no Deck, no Ally ou na TV.',
       ],
       en: [
         'Feels like SteamOS',
-        'L1/R1 tabs, a button legend, right stick to scroll, the Steam keyboard only when you ask for it and the same UI scale as Steam — on the Deck, the Ally or a TV.',
+        'L1/R1 tabs, L2/R2 to flip within a screen, a button legend, right stick to scroll, the Steam keyboard only when you ask for it and the same UI scale as Steam — on the Deck, the Ally or a TV.',
       ],
     },
     {
@@ -365,11 +394,11 @@
       icon: 'shield',
       pt: [
         'Suas chaves, seu aparelho',
-        'The Pirate Bay, Prowlarr, TheGamesDB e isitcracked são configurados em Configurações → Serviços — e dá para exportar e importar essa configuração num arquivo, para compartilhar. Nenhuma chave vem embutida, nada passa por servidores do piShop e não há telemetria.',
+        'The Pirate Bay, Prowlarr, TheGamesDB e isitcracked são configurados em Configurações → Serviços — e dá para exportar e importar essa configuração num arquivo, ou importar direto de um link (um gist do GitHub, um paste do Pastebin), para compartilhar. Nenhuma chave vem embutida, nada passa por servidores do piShop e não há telemetria.',
       ],
       en: [
         'Your keys, your device',
-        "The Pirate Bay, Prowlarr, TheGamesDB and isitcracked are set up in Settings → Services — and that setup can be exported and imported as a file, to share. No keys are baked in, nothing goes through piShop servers and there's no telemetry.",
+        "The Pirate Bay, Prowlarr, TheGamesDB and isitcracked are set up in Settings → Services — and that setup can be exported to a file and imported from one, or straight from a link (a GitHub gist, a Pastebin paste), to share. No keys are baked in, nothing goes through piShop servers and there's no telemetry.",
       ],
     },
     {
@@ -435,11 +464,15 @@
       ],
       [
         'O que preciso configurar?',
-        'Nada para começar: a Loja já busca no The Pirate Bay. O Prowlarr (endereço e chave de API) é opcional e soma os seus indexadores; o Descobrir usa a API do isitcracked e os detalhes dos jogos podem usar o TheGamesDB — sem eles, o piShop avisa e segue funcionando. Tudo fica em Configurações → Serviços. A loja da Steam e o SteamGridDB não pedem chave.',
+        'Nada para começar: a Loja já busca no The Pirate Bay. O Prowlarr (endereço e chave de API) é opcional e soma os seus indexadores; o Descobrir usa a API do isitcracked e os detalhes dos jogos podem usar o TheGamesDB — sem eles, o piShop avisa e segue funcionando. Tudo fica em Configurações → Serviços — e dá para importar a configuração de alguém de um arquivo ou de um link (gist do GitHub, Pastebin). A loja da Steam e o SteamGridDB não pedem chave.',
       ],
       [
         'Tem VPN?',
         'Tem: importe o arquivo WireGuard (.conf) ou OpenVPN (.ovpn) do seu provedor em Configurações → VPN e ligue pelo controle. Ela usa o NetworkManager do próprio SteamOS, sem root nem pacotes extras, e enquanto está ligada o aparelho inteiro — downloads, Steam e jogos online — passa por ela.',
+      ],
+      [
+        'E os jogos que eu adicionei de outro jeito?',
+        'A aba Jogos mostra todos os atalhos não-Steam — emuladores, outros launchers, os que você adicionou à mão — e deixa trocar o Proton, os componentes, a arte e os patches, mover ou remover. O piShop só trata uma pasta como sendo do jogo quando é seguro: nunca a pasta pessoal, uma pasta compartilhada ou uma de onde outro atalho roda.',
       ],
       [
         'Por que o instalador baixa um navegador?',
@@ -477,11 +510,15 @@
       ],
       [
         'What do I need to set up?',
-        "Nothing to get started: the Store already searches The Pirate Bay. Prowlarr (address and API key) is optional and adds your indexers; Discover uses the isitcracked API and game details can use TheGamesDB — without them piShop says so and keeps working. It all lives in Settings → Services. The Steam store and SteamGridDB don't need a key.",
+        "Nothing to get started: the Store already searches The Pirate Bay. Prowlarr (address and API key) is optional and adds your indexers; Discover uses the isitcracked API and game details can use TheGamesDB — without them piShop says so and keeps working. It all lives in Settings → Services — and someone's setup can be imported from a file or a link (a GitHub gist, Pastebin). The Steam store and SteamGridDB don't need a key.",
       ],
       [
         'Is there a VPN?',
         "Yes: import your provider's WireGuard (.conf) or OpenVPN (.ovpn) file in Settings → VPN and turn it on with the controller. It uses SteamOS's own NetworkManager, with no root or extra packages, and while it's on the whole device — downloads, Steam and online games — goes through it.",
+      ],
+      [
+        'What about games I added some other way?',
+        "Games lists every non-Steam shortcut — emulators, other launchers, the ones you added by hand — and lets you change their Proton, components, artwork and patches, move them or remove them. piShop only treats a folder as a game's own when that's safe: never your home folder, a shared folder or one another shortcut runs from.",
       ],
       [
         'Why does the installer download a browser?',
@@ -529,9 +566,9 @@
       en: ['Release', "A release's details carry the matched game's art and crack info. One button and it starts downloading."],
     },
     {
-      id: 'explorer',
-      pt: ['Explorar', 'Dois painéis: o NAS à esquerda, as pastas do EmuDeck à direita. X marca, Y copia.'],
-      en: ['Explore', 'Two panes: your NAS on the left, EmuDeck folders on the right. X marks, Y copies.'],
+      id: 'download',
+      pt: ['Download', 'Em Downloads ou numa pasta que você escolher — com o espaço livre de cada lugar.'],
+      en: ['Download', "To Downloads or a folder you pick — with each place's free space."],
     },
     {
       id: 'transfers',
@@ -540,13 +577,33 @@
     },
     {
       id: 'install',
-      pt: ['Pronto para jogar', 'A página do jogo instalado: atalho da Steam, pasta, prefixo e Proton — e mover para outra biblioteca ou para dentro do prefixo.'],
-      en: ['Ready to play', "An installed game's page: its Steam shortcut, folder, prefix and Proton — and moving it to another library or into the prefix."],
+      pt: ['Instalado', 'Depois do instalador: o jogo está na Steam e em Jogos, e os arquivos baixados podem sair.'],
+      en: ['Installed', "After the installer: the game is in Steam and in Games, and the downloaded files can go."],
+    },
+    {
+      id: 'games',
+      pt: ['Jogos', 'Todos os atalhos não-Steam: os instalados pelo piShop e, embaixo, todo o resto.'],
+      en: ['Games', 'Every non-Steam shortcut: the ones installed through piShop, then everything else.'],
+    },
+    {
+      id: 'game-page',
+      pt: ['Configurar o jogo', 'Atalho, pasta e prefixo com o espaço livre de cada disco, o Proton, componentes e mover o jogo.'],
+      en: ['Game setup', "Its shortcut, folder and prefix with each disk's free space, its Proton, components and moving it."],
+    },
+    {
+      id: 'patches',
+      pt: ['Patches', 'Correções nas opções de inicialização, ligadas e desligadas por jogo.'],
+      en: ['Patches', 'Launch-option workarounds, switched on and off per game.'],
     },
     {
       id: 'components',
       pt: ['Componentes', 'Visual C++, DirectX e .NET dos instaladores da própria Steam, offline, e o winetricks para o resto — por jogo.'],
       en: ['Components', "Visual C++, DirectX and .NET from Steam's own installers, offline, and winetricks for the rest — per game."],
+    },
+    {
+      id: 'explorer',
+      pt: ['Explorar', 'Dois painéis: o NAS à esquerda, as pastas do EmuDeck à direita, o espaço de cada disco no alto. X marca, Y copia.'],
+      en: ['Explore', "Two panes: your NAS on the left, EmuDeck folders on the right, each disk's free space on top. X marks, Y copies."],
     },
     {
       id: 'vpn',
@@ -820,7 +877,7 @@
   lightbox.addEventListener('click', () => lightbox.close())
 
   // ---------------------------------------------------------------- terminal
-  let version = 'v0.2.0-alpha.2'
+  let version = 'v0.2.0-alpha.3'
   let termRun = 0
   let termStarted = false
   const TERM = {

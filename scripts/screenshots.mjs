@@ -9,9 +9,12 @@
 //                  HOME back to /home/deck, a LAN address to a hostname).
 //   SHOTS_LANG     en | pt: the app's language for the captures (default: as set).
 //   SHOTS_DEMO=1   Transfers shows representative downloads of free, open-source
-//                  games (Steam art and data), one of them installed (its page
-//                  and components are captured too), served to the capture
-//                  browser only: nothing is downloaded or installed.
+//                  games (Steam art and data), two of them installed; Games
+//                  shows those and other non-Steam shortcuts (free games), one
+//                  game's page, its components and patches; Settings → VPN
+//                  shows demo connections; disks report a handheld's numbers
+//                  (not the capture machine's). All served to the capture
+//                  browser only: nothing is downloaded, installed or changed.
 //   CHROME         path to a Chrome/Chromium binary.
 //
 // Output: <out>/<device>/<screen>.webp for ROG Ally (1920×1080) and Steam Deck (1280×800).
@@ -127,8 +130,22 @@ async function steamGame(appid) {
 }
 
 /** The demo download shown as installed (DDraceNetwork): its install page,
- * Game setup and Components, as the launcher would answer on a Steam Deck. */
+ * its page in Games, Components and Patches, as the launcher would answer on
+ * a Steam Deck. Teeworlds is installed too (Games shows both). */
 const INSTALLED = 412220
+const ALSO_INSTALLED = 380840
+/** Steam shortcut appids of the demo games (any 32-bit id with the top bit set). */
+const SHORTCUT_IDS = { 412220: 3141592653, 380840: 2718281828 }
+
+/** Other non-Steam shortcuts in Games: free games on Steam (for their art). */
+const OTHERS = [
+  { appid: 1118310, id: 2847193650, name: 'RetroArch', windows: false, played: 1 },
+  { appid: 1536610, id: 3012456789, name: 'OpenTTD', windows: true, played: 4 },
+  { appid: 967460, id: 2593817264, name: 'Red Eclipse 2', windows: false, played: 12 },
+]
+
+/** Steam CDN images through the instance's image proxy, as the app shows them. */
+const proxied = u => (u ? `/api/catalog/img?u=${encodeURIComponent(u)}` : null)
 
 function demoInstall(row, downloadDir) {
   const pt = LANG === 'pt'
@@ -194,21 +211,40 @@ function demoInstall(row, downloadDir) {
     info: {
       appid,
       steam_api: true,
-      shortcut: { exe: `"${exe}"`, start_dir: `"${dir}"`, launch_options: '', tool: 'proton_11' },
+      shortcut: { exe: `"${exe}"`, start_dir: `"${dir}"`, launch_options: 'WINEDLLOVERRIDES="winmm=n,b" %command%', tool: 'proton_11' },
       tool: 'proton_11',
       tools,
       exe: { path: exe, windows: win('C:/Program Files/DDNet/DDNet.exe') },
-      game_dir: { path: dir, windows: win('C:/Program Files/DDNet'), size: 141e6, disk: internal },
-      prefix: { path: pfx, exists: true, disk: internal, free: 261e9 },
+      game_dir: { path: dir, windows: win('C:/Program Files/DDNet'), size: 141e6, disk: internal, free: 261e9, total: 1.9e12 },
+      prefix: { path: pfx, exists: true, disk: internal, free: 261e9, total: 1.9e12 },
       in_prefix: true,
       targets: [
-        { id: 'prefix', kind: 'prefix', label: pt ? 'Dentro do prefixo' : 'Inside its prefix', to: dir, windows: win('C:/Program Files/DDNet'), here: true, same_disk: true, free: 261e9, blocked: null },
-        { id: libraries[0].path, kind: 'library', label: internal, to: `${libraries[0].path}/piShop/DDNet`, windows: win('Z:/home/deck/.local/share/Steam/piShop/DDNet'), here: false, same_disk: true, free: 261e9, blocked: null },
-        { id: libraries[1].path, kind: 'library', label: 'SN01T', to: '/run/media/deck/SN01T/piShop/DDNet', windows: win('D:/piShop/DDNet'), here: false, same_disk: false, free: 395e9, blocked: null },
+        { id: 'prefix', kind: 'prefix', label: pt ? 'Dentro do prefixo' : 'Inside its prefix', to: dir, windows: win('C:/Program Files/DDNet'), here: true, same_disk: true, free: 261e9, total: 1.9e12, disk: internal, blocked: null },
+        { id: libraries[0].path, kind: 'library', label: internal, to: `${libraries[0].path}/piShop/DDNet`, windows: win('Z:/home/deck/.local/share/Steam/piShop/DDNet'), here: false, same_disk: true, free: 261e9, total: 1.9e12, disk: internal, blocked: null },
+        { id: libraries[1].path, kind: 'library', label: 'SN01T', to: '/run/media/deck/SN01T/piShop/DDNet', windows: win('D:/piShop/DDNet'), here: false, same_disk: false, free: 395e9, total: 1e12, disk: 'SN01T', blocked: null },
       ],
       moving: null,
       borrowed: null,
       running: false,
+      busy: false,
+      is_download: false,
+      download_dir: null,
+      external: false,
+      stage: 'installed',
+      name: row.game.name,
+    },
+    patches: {
+      launch_options: 'WINEDLLOVERRIDES="winmm=n,b" %command%',
+      patches: [
+        {
+          id: 'winmm',
+          title: pt ? 'Sobrescrever o winmm' : 'Override winmm',
+          about: pt
+            ? 'Usado em alguns repacks da FitGirl: o winmm.dll do próprio jogo carrega antes do do Wine. Adiciona WINEDLLOVERRIDES="winmm=n,b" %command% às opções de inicialização.'
+            : 'Used in some FitGirl repacks: the game\'s own winmm.dll loads before Wine\'s. Adds WINEDLLOVERRIDES="winmm=n,b" %command% to the launch options.',
+          applied: true,
+        },
+      ],
       busy: false,
     },
     components: {
@@ -258,7 +294,9 @@ async function demoData(downloadDir) {
     rows.map(r => [r.id, { files: Array.from({ length: r.files }, (_, k) => ({ name: `file-${k}`, length: Math.round(r.size / r.files) })) }]),
   )
   const installed = rows.find(r => r.appid === INSTALLED)
+  const also = rows.find(r => r.appid === ALSO_INSTALLED)
   const install = demoInstall(installed, downloadDir)
+  const alsoState = { ...install.state, appid: SHORTCUT_IDS[ALSO_INSTALLED], tool: 'proton_11', exe: null, game_dir: null, started: -1 }
   const library = Object.fromEntries(
     rows.map((r, i) => [
       r.hash,
@@ -271,11 +309,47 @@ async function demoData(downloadDir) {
         dest: null,
         added: now - i * 600,
         resolved: true,
-        ...(r === installed ? { install: install.state } : {}),
+        ...(r === installed ? { install: install.state } : r === also ? { install: alsoState } : {}),
       },
     ]),
   )
-  return { torrents, stats, files, library, install, installed: { id: installed.id, hash: installed.hash } }
+  // Games: the two installs, then other shortcuts (free games with Steam art).
+  const others = await Promise.all(OTHERS.map(async o => ({ ...o, game: await steamGame(o.appid) })))
+  const tools = install.options.tools.map(t => ({ name: t.name, display: t.display }))
+  const item = (o, extra) => ({
+    appid: o.id,
+    key: null,
+    name: o.name,
+    origin: 'shortcut',
+    stage: null,
+    exe: o.windows ? `/home/deck/Games/${o.name}/${o.name}.exe` : `/home/deck/Applications/${o.name}.AppImage`,
+    tool: o.windows ? 'proton_experimental' : '',
+    windows: o.windows,
+    prefix: o.windows,
+    running: false,
+    last_played: o.played ? now - o.played * 86400 : 0,
+    missing: false,
+    art: { cover: proxied(o.game.cover), wide: null, hero: proxied(o.game.hero), logo: null },
+    game: null,
+    ...extra,
+  })
+  const games = {
+    steam_api: true,
+    tools,
+    games: [
+      item(
+        { id: SHORTCUT_IDS[INSTALLED], name: installed.game.name, windows: true, played: 0.2, game: installed.game },
+        { key: installed.hash, origin: 'pishop', stage: 'installed', tool: 'proton_11', game: installed.game },
+      ),
+      item(
+        { id: SHORTCUT_IDS[ALSO_INSTALLED], name: also.game.name, windows: true, played: 3, game: also.game },
+        { key: also.hash, origin: 'pishop', stage: 'installed', tool: 'proton_11', game: also.game },
+      ),
+      ...others.map(o => item(o)),
+    ],
+  }
+  const keys = { [SHORTCUT_IDS[INSTALLED]]: installed.hash, [SHORTCUT_IDS[ALSO_INSTALLED]]: also.hash }
+  return { torrents, stats, files, library, install, installed: { id: installed.id, hash: installed.hash }, games, keys }
 }
 
 async function capture(device, port) {
@@ -308,9 +382,62 @@ async function capture(device, port) {
     console.log(`  ${device.id}/${name}.webp`)
   }
 
+  /** Waits until a page expression is truthy (true if it got there). */
+  const waitFor = async (expr, ms = 10000) => {
+    for (let t = 0; t < ms; t += 250) {
+      if (await val(`!!(${expr})`)) return true
+      await sleep(250)
+    }
+    return false
+  }
+  /** Opens a tab by clicking it (sturdier than counting R1 presses). */
+  const tab = async re => {
+    await val(`[...document.querySelectorAll('.tabs .tab')].find(t => ${re}.test(t.textContent.trim()))?.click()`)
+    await sleep(600)
+  }
+
   if (LANG) {
     await fetch(new URL('/api/settings', base), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ lang: LANG }) })
   }
+  // One interception handler for the whole capture: with SHOTS_DEMO, answers
+  // about disks (/api/local/*) get a handheld's numbers instead of the capture
+  // machine's; requests go to the current demo mock, if any.
+  let mock = null
+  const DISK = { urlPattern: '*/api/local/*', requestStage: 'Response' }
+  const intercept = (...patterns) => send('Fetch.enable', { patterns: [...(process.env.SHOTS_DEMO ? [DISK] : []), ...patterns] })
+  const internal = LANG === 'en' ? 'Internal storage' : 'Armazenamento interno'
+  const asHandheld = o => {
+    if (o && typeof o === 'object' && ('free' in o || 'total' in o)) {
+      o.free = 261e9
+      o.total = 1.9e12
+      if ('disk' in o) o.disk = internal
+    }
+  }
+  on('Fetch.requestPaused', async params => {
+    const { requestId } = params
+    if (params.responseStatusCode !== undefined) {
+      const r = (await send('Fetch.getResponseBody', { requestId })).result ?? {}
+      let body = r.base64Encoded ? Buffer.from(r.body, 'base64').toString() : (r.body ?? '')
+      try {
+        const j = JSON.parse(body)
+        if (Array.isArray(j)) j.forEach(asHandheld)
+        else asHandheld(j)
+        body = JSON.stringify(j)
+      } catch {
+        // not JSON: as it came
+      }
+      void send('Fetch.fulfillRequest', {
+        requestId,
+        responseCode: params.responseStatusCode,
+        responseHeaders: params.responseHeaders,
+        body: Buffer.from(body).toString('base64'),
+      })
+      return
+    }
+    if (mock) mock(params)
+    else void send('Fetch.continueRequest', { requestId })
+  })
+  if (process.env.SHOTS_DEMO) await intercept()
   await send('Emulation.setFocusEmulationEnabled', { enabled: true })
   await send('Emulation.setDeviceMetricsOverride', { width: device.width, height: device.height, deviceScaleFactor: 1, mobile: false })
   await send('Page.navigate', { url: base })
@@ -332,49 +459,53 @@ async function capture(device, port) {
   await key('Enter') // first release: its details, with the matched game's art
   await sleep(3500)
   await shot('release')
-  await key('Escape')
-  await sleep(800)
-
-  await key('e') // R1 → Explorar
-  await sleep(2500)
-  await key('m') // search in the source pane
+  // The download dialog: Downloads or a folder picked by hand, with their free space.
+  const downloadButton = `[...document.querySelectorAll('button')].find(b => /^(Download|Baixar)$/.test(b.textContent.trim()))`
+  if (await waitFor(downloadButton, 15000)) {
+    await val(`${downloadButton}.click()`)
+    if (await waitFor(`document.querySelector('.dialog .scard')`, 8000)) {
+      await sleep(1500)
+      await shot('download')
+      await key('Escape')
+      await waitFor(`!document.querySelector('.dialog .scard')`, 3000)
+    }
+  }
   await sleep(500)
-  await type('Super Nintendo')
-  await sleep(600)
-  await key('Enter')
-  await sleep(2500)
-  await key('ArrowDown', 3)
-  await key('x', 3)
-  await key('ArrowDown')
-  await sleep(600)
-  await shot('explorer')
+  if (await val(`!!document.querySelector('.details-bg')`)) await key('Escape')
+  await sleep(800)
 
   if (process.env.SHOTS_DEMO) {
     const info = await val(`fetch('/api/info').then(r => r.json())`)
     const demo = await demoData(info.download_dir)
     const h = demo.installed.hash
-    on('Fetch.requestPaused', ({ requestId, request }) => {
+    mock = ({ requestId, request }) => {
       const p = new URL(request.url).pathname
       const body =
-        p === '/api/library'
-          ? demo.library
-          : p === `/api/install/${h}`
-            ? demo.install.options
-            : p === `/api/install/${h}/info`
-              ? demo.install.info
-              : p === `/api/install/${h}/components`
-                ? demo.install.components
-                : p.startsWith('/api/install/')
-                  ? {}
-                  : p === '/api/archive/inspect'
-                    ? { archives: [], exe_count: 0, has_installer: false }
-                    : p.startsWith('/api/archive/')
-                      ? []
-                      : p === '/torrents'
-                        ? demo.torrents
-                        : p === '/stats'
-                          ? demo.stats
-                          : (demo.files[p.split('/')[2]] ?? {})
+        p === '/api/games'
+          ? demo.games
+          : /^\/api\/games\/\d+\/manage$/.test(p)
+            ? { key: demo.keys[p.split('/')[3]] ?? h }
+            : /^\/api\/games\/\d+\/patches/.test(p)
+              ? demo.install.patches
+              : p === '/api/library'
+                ? demo.library
+                : p === `/api/install/${h}`
+                  ? demo.install.options
+                  : p === `/api/install/${h}/info`
+                    ? demo.install.info
+                    : p === `/api/install/${h}/components`
+                      ? demo.install.components
+                      : p.startsWith('/api/install/')
+                        ? {}
+                        : p === '/api/archive/inspect'
+                          ? { archives: [], exe_count: 0, has_installer: false }
+                          : p.startsWith('/api/archive/')
+                            ? []
+                            : p === '/torrents'
+                              ? demo.torrents
+                              : p === '/stats'
+                                ? demo.stats
+                                : (demo.files[p.split('/')[2]] ?? {})
       void send('Fetch.fulfillRequest', {
         requestId,
         responseCode: 200,
@@ -384,24 +515,51 @@ async function capture(device, port) {
         ],
         body: Buffer.from(JSON.stringify(body)).toString('base64'),
       })
-    })
-    await send('Fetch.enable', {
-      patterns: [{ urlPattern: `${info.torrent_api}/*` }, { urlPattern: '*/api/library' }, { urlPattern: '*/api/install/*' }, { urlPattern: '*/api/archive/*' }],
-    })
+    }
+    await intercept(
+      { urlPattern: `${info.torrent_api}/*` },
+      { urlPattern: '*/api/library' },
+      { urlPattern: '*/api/install/*' },
+      { urlPattern: '*/api/archive/*' },
+      { urlPattern: '*/api/games' },
+      { urlPattern: '*/api/games/*' },
+    )
     await val(`window.__demoInstalled = ${demo.installed.id}`)
   }
-  await key('e') // R1 → Transferências
-  await sleep(8000)
+  await tab('/^(Transfers|Transferências)/')
+  await waitFor(`document.querySelector('.dl-tile')`, 10000)
+  await sleep(5000)
   await shot('transfers')
   if (process.env.SHOTS_DEMO) {
-    // The installed demo game: A opens its page (Ready to play + Game setup),
-    // then its Components.
+    // The installed demo game: A opens its page (installed: Games, the download).
     await val(`document.querySelector('[data-torrent-id="' + window.__demoInstalled + '"]')?.focus()`)
     await sleep(600)
     await key('Enter')
-    await sleep(6000)
+    await waitFor(`document.querySelector('.inst .inst-card')`, 10000)
+    await sleep(3000)
     await shot('install')
-    await val(`document.querySelectorAll('.inst-card')[1]?.querySelectorAll('.inst-row')[1]?.focus()`)
+    await key('Escape')
+    await sleep(800)
+  }
+
+  await tab('/^(Games|Jogos)/')
+  await waitFor(`document.querySelector('.game-tile')`, 10000)
+  await sleep(4000)
+  await shot('games')
+  if (process.env.SHOTS_DEMO) {
+    await val(`document.querySelector('.game-tile')?.focus()`)
+    await key('y') // Patches of the first game
+    await waitFor(`document.querySelector('.aside .patch')`, 8000)
+    await sleep(1500)
+    await shot('patches')
+    await key('Escape')
+    await sleep(800)
+    await val(`document.querySelector('.game-tile')?.focus()`)
+    await key('Enter') // its page
+    await waitFor(`document.querySelector('.inst .scard')`, 10000)
+    await sleep(2500)
+    await shot('game-page')
+    await val(`[...document.querySelectorAll('.inst .inst-row')].find(r => /Components|Componentes/.test(r.textContent))?.focus()`)
     await sleep(300)
     await key('Enter')
     await sleep(2500)
@@ -410,10 +568,37 @@ async function capture(device, port) {
     await sleep(500)
     await key('Escape')
     await sleep(800)
-    await send('Fetch.disable')
+    mock = null
+    await intercept()
   }
 
-  await key('e') // R1 → Configurações
+  // Explore: the NAS on the left, EmuDeck's ROMs on the right (Go to…).
+  const menu = async item => {
+    await key('m')
+    await sleep(700)
+    await val(`[...document.querySelectorAll('.menu-item')].find(b => ${item}.test(b.textContent))?.click()`)
+    await sleep(900)
+  }
+  await tab('/^(Explore|Explorar)/')
+  await sleep(2500)
+  await menu('/Go to|Ir para/')
+  await val(`[...document.querySelectorAll('.dest-option')].find(b => /NAS/.test(b.textContent))?.click()`)
+  await sleep(3000)
+  await key('ArrowRight')
+  await menu('/Go to|Ir para/')
+  await val(`[...document.querySelectorAll('.scard')].find(b => /ROMs/.test(b.textContent))?.click()`)
+  await sleep(2000)
+  await key('ArrowLeft')
+  await menu('/Search|Buscar/')
+  await type('Super Nintendo')
+  await sleep(2500)
+  await key('ArrowDown', 3)
+  await key('x', 3)
+  await key('ArrowDown')
+  await sleep(600)
+  await shot('explorer')
+
+  await tab('/^(Settings|Configurações)/')
   await sleep(2000)
   await shot('settings')
 
@@ -427,20 +612,22 @@ async function capture(device, port) {
         { uuid: 'c3', name: 'us-nyc-03', kind: 'wireguard', state: 'off', device: null, ip: null, needs_login: false },
       ],
     }
-    on('Fetch.requestPaused', ({ requestId }) =>
+    mock = ({ requestId }) =>
       void send('Fetch.fulfillRequest', {
         requestId,
         responseCode: 200,
         responseHeaders: [{ name: 'content-type', value: 'application/json' }],
         body: Buffer.from(JSON.stringify(conns)).toString('base64'),
-      }),
-    )
-    await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/vpn' }] })
+      })
+    await intercept({ urlPattern: '*/api/vpn' })
   }
   await val(`document.querySelectorAll('.settings-tab')[3]?.focus()`)
   await sleep(3000)
   await shot('vpn')
-  if (process.env.SHOTS_DEMO) await send('Fetch.disable')
+  if (process.env.SHOTS_DEMO) {
+    mock = null
+    await send('Fetch.disable')
+  }
   await close()
 }
 

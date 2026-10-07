@@ -45,16 +45,18 @@ Nada é instalado no sistema: tudo fica em `~/Applications/piShop` e `~/.local/s
 Um app nativo para SteamOS (Steam Deck, ROG Ally, Legion Go…) feito para o controle:
 
 - **Descobrir** — lançamentos e cracks recentes em visual Big Picture; página do jogo com sinopse (Steam / TheGamesDB), nota no ProtonDB e arte (SteamGridDB).
-- **Loja** — busca no The Pirate Bay sem configurar nada, e nos indexadores do seu Prowlarr, se você tiver um.
+- **Loja** — busca no The Pirate Bay sem configurar nada, e nos indexadores do seu Prowlarr, se você tiver um; baixa em Downloads ou na pasta que você escolher. Se o jogo encontrado estiver errado, escolha outro (Steam ou SteamGridDB) e o download leva os dados dele.
 - **Transferências** — cada download com a capa do jogo e um anel de progresso; dados da Steam, TheGamesDB, SteamGridDB e isitcracked, nessa ordem.
-- **Instalação pelo controle** — extrai o download, roda o instalador pela Steam no Modo de Jogo e aponta o atalho para o executável certo; escolha o Proton, mova o jogo para outra biblioteca ou para dentro do prefixo, e instale componentes (Visual C++, DirectX, .NET…) pelos instaladores da própria Steam ou pelo winetricks embutido.
-- **Arte oficial da Steam** — capa, banner, fundo, logo e ícone na maior resolução; SteamGridDB só para o que faltar.
+- **Instalação pelo controle** — extrai o download, roda o instalador pela Steam no Modo de Jogo (a transferência para enquanto isso) e aponta o atalho para o executável certo; depois os arquivos baixados podem sair com um botão.
+- **Jogos** — todos os atalhos não-Steam, os instalados pelo piShop e os outros: Proton, componentes (Visual C++, DirectX, .NET… pelos instaladores da própria Steam ou pelo winetricks embutido), instaladores no prefixo, mover para outra biblioteca ou para dentro do prefixo, arte, patches (correções nas opções de inicialização) e remover o atalho, o prefixo ou os arquivos.
+- **Arte oficial da Steam** — capa, banner, fundo, logo e ícone na maior resolução; SteamGridDB só para o que faltar — ou escolhida à mão.
 - **VPN** — importe uma configuração WireGuard (.conf) ou OpenVPN (.ovpn) e ligue pelo controle (NetworkManager do SteamOS, sem root).
 - **BitTorrent nativo** — TCP/uTP, DHT, retomada e limite de velocidade.
-- **Explorar** — compartilhamentos de rede (SMB) num explorador de dois painéis, com fila de cópias para o aparelho.
+- **Explorar** — explorador de dois painéis: pastas e cartões, bibliotecas Steam, o prefixo de cada jogo e compartilhamentos de rede (SMB), com fila de cópias para o aparelho.
+- **Espaço em disco** — livre e total, com um anel, em todo lugar onde aparece uma pasta ou um disco.
 - **Interface SteamOS** — abas em L1/R1, legenda de botões, analógico direito para rolar, teclado da Steam sob demanda, escala automática (Deck / Ally / TV); ignora o controle enquanto um jogo está na tela.
 - **Atualiza sozinho** — novas versões do GitHub são baixadas em segundo plano e entram na próxima vez que o app abre.
-- **Inglês e português** — o idioma é escolhido em Configurações → Idioma; a configuração dos serviços pode ser exportada e importada para compartilhar.
+- **Inglês e português** — o idioma é escolhido em Configurações → Idioma; a configuração dos serviços pode ser exportada e importada (de um arquivo ou de um link: gist do GitHub, Pastebin) para compartilhar.
 
 A lista completa, incluindo o que está em estudo, está no [site](https://anarqz.github.io/pishop/#features).
 
