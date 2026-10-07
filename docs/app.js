@@ -34,7 +34,7 @@
       'hero.title1': 'Sua loja de jogos',
       'hero.title2': 'dentro do Modo de Jogo.',
       'hero.lead':
-        'Descubra lançamentos, busque, baixe e instale seus jogos pelo controle — com Proton, componentes e arte oficial da Steam — sem sair do SteamOS e sem instalar nada no sistema.',
+        'Descubra lançamentos, busque, baixe e instale seus jogos pelo controle — com Proton, componentes, arte oficial da Steam e VPN — sem sair do SteamOS e sem instalar nada no sistema.',
       'hero.hint': 'No <b>Modo Desktop</b>, abra o <b>Konsole</b>, cole e pressione <kbd>Enter</kbd>.',
       'hero.b1': 'Sem root nem senha',
       'hero.b2': 'Zero dependências',
@@ -105,7 +105,7 @@
       'hero.title1': 'Your game store',
       'hero.title2': 'inside Gaming Mode.',
       'hero.lead':
-        'Discover new releases, then search, download and install your games with the controller — Proton, components and official Steam art included — without leaving SteamOS or installing anything on the system.',
+        'Discover new releases, then search, download and install your games with the controller — Proton, components, official Steam art and a VPN included — without leaving SteamOS or installing anything on the system.',
       'hero.hint': 'In <b>Desktop Mode</b>, open <b>Konsole</b>, paste and press <kbd>Enter</kbd>.',
       'hero.b1': 'No root, no password',
       'hero.b2': 'Zero dependencies',
@@ -184,6 +184,7 @@
     sliders: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
     layers: '<path d="M12 3.5l8.5 4.5-8.5 4.5-8.5-4.5z"/><path d="M3.5 12l8.5 4.5 8.5-4.5"/><path d="M3.5 16l8.5 4.5 8.5-4.5"/>',
     image: '<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5.5-5.5L6 20"/>',
+    vpn: '<path d="M12 3l7.5 3v5.5c0 4.5-3.2 8-7.5 9.5-4.3-1.5-7.5-5-7.5-9.5V6z"/><path d="M9 12l2 2 4-4"/>',
     refresh: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/>',
   }
   const icon = name =>
@@ -208,11 +209,11 @@
       tags: ['Steam', 'TheGamesDB'],
       pt: [
         'Página do jogo',
-        'Sinopse, gêneros, desenvolvedora e datas da loja da Steam (ou do TheGamesDB), arte do SteamGridDB e um botão para abrir o jogo na Steam.',
+        'Sinopse, gêneros, desenvolvedora e datas da loja da Steam (ou do TheGamesDB), a nota no ProtonDB, arte do SteamGridDB e um botão para abrir o jogo na Steam.',
       ],
       en: [
         'Game page',
-        'Synopsis, genres, developer and dates from the Steam store (or TheGamesDB), SteamGridDB art and a button to open the game on Steam.',
+        'Synopsis, genres, developer and dates from the Steam store (or TheGamesDB), its ProtonDB rating, SteamGridDB art and a button to open the game on Steam.',
       ],
     },
     {
@@ -296,11 +297,11 @@
       tags: ['librqbit'],
       pt: [
         'BitTorrent nativo',
-        'Motor próprio com TCP, uTP e DHT, links magnet, retomada automática e limite de velocidade em Configurações → Downloads. Os downloads vão direto para <code>roms/&lt;sistema&gt;</code>.',
+        'Motor próprio com TCP, uTP e DHT, links magnet, retomada automática e limite de velocidade em Configurações → Downloads. Jogos de console podem ir direto para <code>roms/&lt;sistema&gt;</code>; os de PC ficam em Downloads, prontos para instalar.',
       ],
       en: [
         'Native BitTorrent',
-        'A built-in engine with TCP, uTP and DHT, magnet links, automatic resume and a speed cap in Settings → Downloads. Downloads go straight to <code>roms/&lt;system&gt;</code>.',
+        'A built-in engine with TCP, uTP and DHT, magnet links, automatic resume and a speed cap in Settings → Downloads. Console games can go straight to <code>roms/&lt;system&gt;</code>; PC games land in Downloads, ready to install.',
       ],
     },
     {
@@ -342,11 +343,11 @@
       icon: 'bolt',
       pt: [
         'Entra e sai na hora',
-        'Abre como um jogo não-Steam e fecha limpo: segure View + Menu para sair, sem “Saindo do jogo…” travado, sem pop-ups do navegador e sem barra de tradução.',
+        'Abre como um jogo não-Steam e fecha limpo: segure View + Menu, ou aperte B até ele perguntar se quer sair — sem “Saindo do jogo…” travado, pop-ups ou barra de tradução. Com um jogo na tela, o piShop ignora o controle.',
       ],
       en: [
         'Instant in, instant out',
-        'Opens as a non-Steam game and closes cleanly: hold View + Menu to quit, with no stuck “Exiting game…”, no browser pop-ups and no translate bar.',
+        'Opens as a non-Steam game and closes cleanly: hold View + Menu, or press B until it asks to quit — no stuck “Exiting game…”, pop-ups or translate bar. While a game is on screen, piShop ignores the controller.',
       ],
     },
     {
@@ -372,6 +373,19 @@
       ],
     },
     {
+      icon: 'vpn',
+      shot: 'vpn',
+      tags: ['WireGuard', 'OpenVPN'],
+      pt: [
+        'VPN',
+        'Importe a configuração WireGuard (.conf) ou OpenVPN (.ovpn) do seu provedor em Configurações → VPN e ligue ou desligue pelo controle. Usa o NetworkManager do próprio SteamOS — sem root e sem instalar nada — e, ligada, o aparelho inteiro passa por ela.',
+      ],
+      en: [
+        'VPN',
+        "Import your provider's WireGuard (.conf) or OpenVPN (.ovpn) config in Settings → VPN and switch it on or off with the controller. It uses SteamOS's own NetworkManager — no root, nothing to install — and while it's on, the whole device goes through it.",
+      ],
+    },
+    {
       icon: 'refresh',
       pt: [
         'Atualiza sozinho',
@@ -385,19 +399,6 @@
   ]
 
   const ROADMAP = [
-    {
-      status: 'research',
-      pt: [
-        'VPN',
-        'Importe uma configuração WireGuard ou OpenVPN em Configurações → VPN e ligue ou desligue pelo controle.',
-        ['WireGuard e OpenVPN', 'Baixar só pela VPN: se ela cair, os downloads param', 'Sem root nem pacotes extras'],
-      ],
-      en: [
-        'VPN',
-        'Import a WireGuard or OpenVPN config in Settings → VPN and switch it on or off with the controller.',
-        ['WireGuard and OpenVPN', 'Download only through the VPN: if it drops, downloads stop', 'No root, no extra packages'],
-      ],
-    },
     {
       status: 'idea',
       pt: [
@@ -437,6 +438,10 @@
         'Nada para começar: a Loja já busca no The Pirate Bay. O Prowlarr (endereço e chave de API) é opcional e soma os seus indexadores; o Descobrir usa a API do isitcracked e os detalhes dos jogos podem usar o TheGamesDB — sem eles, o piShop avisa e segue funcionando. Tudo fica em Configurações → Serviços. A loja da Steam e o SteamGridDB não pedem chave.',
       ],
       [
+        'Tem VPN?',
+        'Tem: importe o arquivo WireGuard (.conf) ou OpenVPN (.ovpn) do seu provedor em Configurações → VPN e ligue pelo controle. Ela usa o NetworkManager do próprio SteamOS, sem root nem pacotes extras, e enquanto está ligada o aparelho inteiro — downloads, Steam e jogos online — passa por ela.',
+      ],
+      [
         'Por que o instalador baixa um navegador?',
         'A interface do piShop é uma PWA mostrada em tela cheia por um Chromium dedicado (Chrome for Testing, baixado direto do Google). Ele fica isolado na pasta do app — sem pop-ups, barra de tradução ou notificações — e é baixado uma vez só (~190 MB).',
       ],
@@ -473,6 +478,10 @@
       [
         'What do I need to set up?',
         "Nothing to get started: the Store already searches The Pirate Bay. Prowlarr (address and API key) is optional and adds your indexers; Discover uses the isitcracked API and game details can use TheGamesDB — without them piShop says so and keeps working. It all lives in Settings → Services. The Steam store and SteamGridDB don't need a key.",
+      ],
+      [
+        'Is there a VPN?',
+        "Yes: import your provider's WireGuard (.conf) or OpenVPN (.ovpn) file in Settings → VPN and turn it on with the controller. It uses SteamOS's own NetworkManager, with no root or extra packages, and while it's on the whole device — downloads, Steam and online games — goes through it.",
       ],
       [
         'Why does the installer download a browser?',
@@ -540,9 +549,14 @@
       en: ['Components', "Visual C++, DirectX and .NET from Steam's own installers, offline, and winetricks for the rest — per game."],
     },
     {
+      id: 'vpn',
+      pt: ['VPN', 'As configurações WireGuard e OpenVPN do seu provedor, ligadas e desligadas pelo controle.'],
+      en: ['VPN', "Your provider's WireGuard and OpenVPN configs, switched on and off with the controller."],
+    },
+    {
       id: 'settings',
-      pt: ['Configurações', 'Fontes de jogos, serviços (The Pirate Bay, Prowlarr, TheGamesDB, isitcracked) com importar/exportar, limite de download, tela e idioma.'],
-      en: ['Settings', 'Game sources, services (The Pirate Bay, Prowlarr, TheGamesDB, isitcracked) with import/export, download speed cap, display and language.'],
+      pt: ['Configurações', 'Fontes de jogos, serviços (The Pirate Bay, Prowlarr, TheGamesDB, isitcracked) com importar/exportar, limite de download, VPN, tela, idioma e atualizações.'],
+      en: ['Settings', 'Game sources, services (The Pirate Bay, Prowlarr, TheGamesDB, isitcracked) with import/export, download speed cap, VPN, display, language and updates.'],
     },
   ]
   const DEVICES = { ally: { name: 'ROG Ally', w: 1920, h: 1080 }, deck: { name: 'Steam Deck', w: 1280, h: 800 } }
@@ -806,7 +820,7 @@
   lightbox.addEventListener('click', () => lightbox.close())
 
   // ---------------------------------------------------------------- terminal
-  let version = 'v0.2.0-alpha.1'
+  let version = 'v0.2.0-alpha.2'
   let termRun = 0
   let termStarted = false
   const TERM = {

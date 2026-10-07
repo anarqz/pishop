@@ -416,6 +416,31 @@ async function capture(device, port) {
   await key('e') // R1 → Configurações
   await sleep(2000)
   await shot('settings')
+
+  // Settings → VPN: demo connections (a NetworkManager answer, as on SteamOS).
+  if (process.env.SHOTS_DEMO) {
+    const conns = {
+      available: true,
+      connections: [
+        { uuid: 'a1', name: 'br-sao-01', kind: 'wireguard', state: 'on', device: 'pswg0', ip: '10.66.12.34', needs_login: false },
+        { uuid: 'b2', name: 'nl-ams-02', kind: 'openvpn', state: 'off', device: null, ip: null, needs_login: false },
+        { uuid: 'c3', name: 'us-nyc-03', kind: 'wireguard', state: 'off', device: null, ip: null, needs_login: false },
+      ],
+    }
+    on('Fetch.requestPaused', ({ requestId }) =>
+      void send('Fetch.fulfillRequest', {
+        requestId,
+        responseCode: 200,
+        responseHeaders: [{ name: 'content-type', value: 'application/json' }],
+        body: Buffer.from(JSON.stringify(conns)).toString('base64'),
+      }),
+    )
+    await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/vpn' }] })
+  }
+  await val(`document.querySelectorAll('.settings-tab')[3]?.focus()`)
+  await sleep(3000)
+  await shot('vpn')
+  if (process.env.SHOTS_DEMO) await send('Fetch.disable')
   await close()
 }
 

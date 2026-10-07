@@ -28,8 +28,8 @@ curl -fsSL https://anarqz.github.io/pishop/install.sh | bash
 ```
 
 Volte ao **Modo de Jogo** → Biblioteca → **Não-Steam** → **piShop**.
-Rodar o mesmo comando de novo atualiza o app.
-*Back to **Gaming Mode** → Library → **Non-Steam** → **piShop**. Running the command again updates it.*
+Depois disso o piShop se atualiza sozinho a cada nova versão (rodar o comando de novo também atualiza).
+*Back to **Gaming Mode** → Library → **Non-Steam** → **piShop**. From then on piShop updates itself with every new release (running the command again updates too).*
 
 Desinstalar · Uninstall:
 
@@ -44,12 +44,16 @@ Nada é instalado no sistema: tudo fica em `~/Applications/piShop` e `~/.local/s
 
 Um app nativo para SteamOS (Steam Deck, ROG Ally, Legion Go…) feito para o controle:
 
-- **Descobrir** — lançamentos e cracks recentes em visual Big Picture, página do jogo com trailer, sinopse (Steam / TheGamesDB) e arte (SteamGridDB).
-- **Loja** — busca nativa no The Pirate Bay e nos indexadores do seu Prowlarr, com detalhes do torrent e download direto para `roms/<sistema>`.
+- **Descobrir** — lançamentos e cracks recentes em visual Big Picture; página do jogo com sinopse (Steam / TheGamesDB), nota no ProtonDB e arte (SteamGridDB).
+- **Loja** — busca no The Pirate Bay sem configurar nada, e nos indexadores do seu Prowlarr, se você tiver um.
 - **Transferências** — cada download com a capa do jogo e um anel de progresso; dados da Steam, TheGamesDB, SteamGridDB e isitcracked, nessa ordem.
+- **Instalação pelo controle** — extrai o download, roda o instalador pela Steam no Modo de Jogo e aponta o atalho para o executável certo; escolha o Proton, mova o jogo para outra biblioteca ou para dentro do prefixo, e instale componentes (Visual C++, DirectX, .NET…) pelos instaladores da própria Steam ou pelo winetricks embutido.
+- **Arte oficial da Steam** — capa, banner, fundo, logo e ícone na maior resolução; SteamGridDB só para o que faltar.
+- **VPN** — importe uma configuração WireGuard (.conf) ou OpenVPN (.ovpn) e ligue pelo controle (NetworkManager do SteamOS, sem root).
 - **BitTorrent nativo** — TCP/uTP, DHT, retomada e limite de velocidade.
 - **Explorar** — compartilhamentos de rede (SMB) num explorador de dois painéis, com fila de cópias para o aparelho.
-- **Interface SteamOS** — abas em L1/R1, legenda de botões, analógico direito para rolar, teclado da Steam sob demanda, escala automática (Deck / Ally / TV).
+- **Interface SteamOS** — abas em L1/R1, legenda de botões, analógico direito para rolar, teclado da Steam sob demanda, escala automática (Deck / Ally / TV); ignora o controle enquanto um jogo está na tela.
+- **Atualiza sozinho** — novas versões do GitHub são baixadas em segundo plano e entram na próxima vez que o app abre.
 - **Inglês e português** — o idioma é escolhido em Configurações → Idioma; a configuração dos serviços pode ser exportada e importada para compartilhar.
 
 A lista completa, incluindo o que está em estudo, está no [site](https://anarqz.github.io/pishop/#features).
@@ -58,7 +62,7 @@ A lista completa, incluindo o que está em estudo, está no [site](https://anarq
 
 | Parte | Stack |
 |---|---|
-| `launcher/` | Rust (axum, librqbit, smb — com patches em `launcher/vendor/`) |
+| `launcher/` | Rust (axum, librqbit, smb — com patches em `launcher/vendor/`); também é o `cabextract`/`unzip` do winetricks |
 | `web/` | React + Vite (PWA embutida no binário) |
 | `docs/` | Site (GitHub Pages) e `install.sh` |
 | `scripts/` | `build.sh` (bundle local), `deploy.sh` (copia para o aparelho via SSH) |
@@ -68,7 +72,7 @@ A lista completa, incluindo o que está em estudo, está no [site](https://anarq
 DECK=deck@steamdeck.local DECK_PASS=… ./scripts/deploy.sh --install
 ```
 
-Releases: `git tag v0.1.0 && git push --tags` (ou *Actions → Release → Run workflow*).
+Releases: `git tag vX.Y.Z && git push --tags` (ou *Actions → Release → Run workflow*). Quem instalou pelo `install.sh` recebe a versão nova sozinho.
 
 ## Aviso · Disclaimer
 
