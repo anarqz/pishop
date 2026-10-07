@@ -30,7 +30,7 @@
       'nav.screens': 'Telas',
       'nav.features': 'Recursos',
       'nav.roadmap': 'Em estudo',
-      'hero.pill': 'Alpha pública',
+      'hero.pill': 'Versão estável',
       'hero.title1': 'Sua loja de jogos',
       'hero.title2': 'dentro do Modo de Jogo.',
       'hero.lead':
@@ -101,7 +101,7 @@
       'nav.screens': 'Screens',
       'nav.features': 'Features',
       'nav.roadmap': 'Roadmap',
-      'hero.pill': 'Public alpha',
+      'hero.pill': 'Stable release',
       'hero.title1': 'Your game store',
       'hero.title2': 'inside Gaming Mode.',
       'hero.lead':
@@ -877,7 +877,7 @@
   lightbox.addEventListener('click', () => lightbox.close())
 
   // ---------------------------------------------------------------- terminal
-  let version = 'v0.2.0-alpha.3'
+  let version = 'v1.0.0'
   let termRun = 0
   let termStarted = false
   const TERM = {

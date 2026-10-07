@@ -116,7 +116,7 @@ release_url() {
     printf 'https://github.com/%s/releases/download/%s/%s' "$REPO" "$VERSION" "$ASSET"
     return
   fi
-  # Newest release, pre-releases included (alpha builds are the current ones).
+  # Newest release, pre-releases included.
   curl -fsSL -m 20 "https://api.github.com/repos/$REPO/releases?per_page=10" | python3 -c '
 import json, sys
 asset = sys.argv[1]
