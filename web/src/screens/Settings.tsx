@@ -7,18 +7,22 @@ import { type Lang, LANGS, locale, setLang, tr, trb, trn, useLang } from '../i18
 import { SCALE_CHOICES, type ScaleSetting, autoScale, getScaleSetting, setScaleSetting } from '../scale'
 import { Dialog, Icon, Spinner, toast, useHints } from '../ui'
 
-type Section = 'sources' | 'indexers' | 'downloads' | 'display' | 'language' | 'about'
+export type SettingsSection = 'sources' | 'indexers' | 'downloads' | 'display' | 'language' | 'about'
+type Section = SettingsSection
 
 export default function Settings({
   sources,
   reloadSources,
   info,
+  initialSection,
 }: {
   sources: Source[]
   reloadSources: () => void
   info: { version: string; addr: string } | null
+  /** Where another screen sent the user ("Set up isitcracked" → Services). */
+  initialSection?: SettingsSection
 }) {
-  const [section, setSection] = useState<Section>('sources')
+  const [section, setSection] = useState<Section>(initialSection ?? 'sources')
   const [editing, setEditing] = useState<SourceInput | null>(null)
 
   useHints(editing ? null : [{ glyph: 'A', label: tr('Select') }, { glyph: 'B', label: tr('Back') }])
@@ -332,13 +336,14 @@ function IndexersSection() {
       <div className="form-grid">
         <label>
           <span>{tr('API address (apibay format)')}</span>
-          <input data-nav className="field" placeholder={tr('https://… (empty turns it off)')} value={tpbUrl} onChange={e => setTpbUrl(e.target.value)} />
+          <input data-nav className="field" placeholder="https://apibay.org" value={tpbUrl} onChange={e => setTpbUrl(e.target.value)} />
         </label>
       </div>
+      <p className="settings-note">{tr('Empty: The Pirate Bay’s own API (apibay.org) whenever Prowlarr isn’t set up, so the Store always works.')}</p>
       <TestLine state={tests.tpb ?? { s: 'idle' }} />
       <div className="row">
-        <button data-nav className="btn" disabled={!tpbUrl} onClick={() => run('tpb', async () => {
-          const r = await api.testService('tpb', { url: tpbUrl })
+        <button data-nav className="btn" onClick={() => run('tpb', async () => {
+          const r = await api.testService('tpb', { url: tpbUrl || 'https://apibay.org' })
           return trn(r.total ?? 0, 'Connected · {n} result for the test search', 'Connected · {n} results for the test search')
         })}>
           {tr('Test')}

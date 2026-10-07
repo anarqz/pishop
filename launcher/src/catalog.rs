@@ -51,9 +51,22 @@ pub struct Config {
     pub iic_key: String,
     #[serde(default)]
     pub iic_cdn: String,
-    /// The Pirate Bay JSON API (apibay format) for native search. Empty disables it.
+    /// The Pirate Bay JSON API (apibay format) for native search. Empty means
+    /// apibay when Prowlarr isn't set up (the Store always has a source).
     #[serde(default)]
     pub tpb_url: String,
+}
+
+/// The Pirate Bay's own public JSON API: the Store's source when nothing else
+/// is set up, so searching never needs configuration first.
+pub const DEFAULT_TPB: &str = "https://apibay.org";
+
+fn tpb_base(c: &Config) -> String {
+    if c.tpb_url.is_empty() { DEFAULT_TPB.to_string() } else { c.tpb_url.clone() }
+}
+
+fn prowlarr_ready(c: &Config) -> bool {
+    !c.prowlarr_url.is_empty() && !c.prowlarr_key.is_empty()
 }
 
 fn config_path() -> PathBuf {
@@ -106,6 +119,7 @@ pub fn public_config() -> Value {
         "has_tgdb_key": !c.tgdb_key.is_empty(),
         "iic_url": c.iic_url, "iic_cdn": c.iic_cdn, "has_iic_key": !c.iic_key.is_empty(),
         "tpb_url": c.tpb_url,
+        "tpb_default": DEFAULT_TPB,
     })
 }
 
@@ -278,7 +292,7 @@ async fn prowlarr_search(c: &Config, query: &str, kind: &str) -> anyhow::Result<
 }
 
 async fn tpb_search(c: &Config, query: &str, kind: &str) -> anyhow::Result<Vec<Stored>> {
-    let hits = tpb::search(&c.tpb_url, query, tpb::categories(kind)).await?;
+    let hits = tpb::search(&tpb_base(c), query, tpb::categories(kind)).await?;
     Ok(hits
         .into_iter()
         .map(|h| {
@@ -311,15 +325,18 @@ async fn tpb_search(c: &Config, query: &str, kind: &str) -> anyhow::Result<Vec<S
 
 async fn search_uncached(query: &str, kind: &str) -> anyhow::Result<SearchOutcome> {
     let c = config();
-    let use_prowlarr = !c.prowlarr_url.is_empty() && !c.prowlarr_key.is_empty();
-    let use_tpb = !c.tpb_url.is_empty();
-    if !use_prowlarr && !use_tpb {
-        bail!(tr!("set up an indexer in Settings → Services (Prowlarr or The Pirate Bay)", "configure um indexador em Configurações → Serviços (Prowlarr ou The Pirate Bay)"));
-    }
-    let (prowlarr, native) = tokio::join!(
+    let use_prowlarr = prowlarr_ready(&c);
+    // Without Prowlarr, The Pirate Bay (apibay unless set otherwise) is the
+    // source: the Store works with no setup at all.
+    let use_tpb = !c.tpb_url.is_empty() || !use_prowlarr;
+    let (prowlarr, mut native) = tokio::join!(
         async { if use_prowlarr { Some(prowlarr_search(&c, query, kind).await) } else { None } },
         async { if use_tpb { Some(tpb_search(&c, query, kind).await) } else { None } },
     );
+    // Prowlarr set up but not answering: The Pirate Bay rather than nothing.
+    if native.is_none() && matches!(prowlarr, Some(Err(_))) {
+        native = Some(tpb_search(&c, query, kind).await);
+    }
 
     let mut found: Vec<Stored> = Vec::new();
     let mut warnings = Vec::new();
@@ -720,14 +737,10 @@ pub async fn image(url: &str) -> anyhow::Result<(Vec<u8>, String)> {
 
 static DESCRIPTIONS: LazyLock<Mutex<HashMap<String, Option<String>>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
-/// Best-effort description: The Pirate Bay's API has one per torrent (only
-/// when its endpoint is configured).
+/// Best-effort description: The Pirate Bay's API has one per torrent.
 async fn description(s: &Stored) -> Option<String> {
     let id = s.tpb_id.as_deref()?;
-    let base = config().tpb_url;
-    if base.is_empty() {
-        return None;
-    }
+    let base = tpb_base(&config());
     if let Some(hit) = DESCRIPTIONS.lock().unwrap().get(id).cloned() {
         return hit;
     }

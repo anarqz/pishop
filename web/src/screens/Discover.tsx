@@ -35,7 +35,23 @@ function heroMeta(title: string) {
   return p
 }
 
-export default function Discover({ onPick }: { onPick: (game: DiscoverGame) => void }) {
+export default function Discover({
+  onPick,
+  onGoStore,
+  onGoSettings,
+}: {
+  onPick: (game: DiscoverGame) => void
+  onGoStore: () => void
+  onGoSettings: () => void
+}) {
+  // isitcracked feeds this page; without it, point to the Store and Settings.
+  const [iic, setIic] = useState<boolean | null>(null)
+  useEffect(() => {
+    api
+      .catalogConfig()
+      .then(c => setIic(!!c.iic_url && c.has_iic_key))
+      .catch(() => setIic(true))
+  }, [])
   const [search, setSearch] = useState(memory.search)
   const [items, setItems] = useState<DiscoverGame[]>(memory.items)
   const [total, setTotal] = useState(memory.total)
@@ -73,8 +89,8 @@ export default function Discover({ onPick }: { onPick: (game: DiscoverGame) => v
   }, [])
 
   useEffect(() => {
-    if (!memory.items.length) void load(0, memory.search)
-  }, [load])
+    if (iic && !memory.items.length) void load(0, memory.search)
+  }, [load, iic])
 
   const hasMore = items.length < total
   const more = useRef({ hasMore, items, search, load })
@@ -140,7 +156,7 @@ export default function Discover({ onPick }: { onPick: (game: DiscoverGame) => v
   const ctl = useRef({ search, applySearch, n: featuredGames.length })
   ctl.current = { search, applySearch, n: featuredGames.length }
   useEffect(() => {
-    if (prompt || open) return
+    if (prompt || open || !iic) return
     return input.pushHandler(a => {
       const c = ctl.current
       if (a === 'menu') {
@@ -157,18 +173,39 @@ export default function Discover({ onPick }: { onPick: (game: DiscoverGame) => v
       }
       return false
     })
-  }, [prompt, open])
+  }, [prompt, open, iic])
 
   useHints(
     prompt || open
       ? null
-      : [
+      : iic === false
+        ? [{ glyph: 'A', label: tr('Select') }, { glyph: 'L1', label: tr('Tabs') }]
+        : [
           { glyph: 'A', label: tr('View game') },
           { glyph: 'MENU', label: tr('Search') },
           ...(!search ? [{ glyph: ['L2', 'R2'] as ['L2', 'R2'], label: tr('Spotlight') }] : []),
           ...(search ? [{ glyph: 'B' as const, label: tr('Clear search') }] : [{ glyph: 'L1' as const, label: tr('Tabs') }]),
         ],
   )
+
+  if (iic === false) {
+    return (
+      <div className="empty-state" data-nav-scope>
+        <Icon name="search" size={56} />
+        <h2>{tr('See what’s been cracked lately')}</h2>
+        <p>{tr('Discover lists recently cracked games from isitcracked.com. Add its address and key in Settings → Services to turn it on.')}</p>
+        <p className="muted">{tr('Meanwhile, the Store finds any game for you.')}</p>
+        <div className="row">
+          <button data-nav data-nav-default className="btn primary" onClick={onGoStore}>
+            <Icon name="search" /> {tr('Search the Store')}
+          </button>
+          <button data-nav className="btn" onClick={onGoSettings}>
+            {tr('Set up isitcracked')}
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="dsc" data-nav-scope>
@@ -252,9 +289,14 @@ export default function Discover({ onPick }: { onPick: (game: DiscoverGame) => v
           <div className="store-msg error">
             <b>{tr("Couldn't load")}</b>
             <span>{error}</span>
-            <button data-nav className="btn" onClick={() => load(items.length, search)}>
-              {tr('Try again')}
-            </button>
+            <div className="row">
+              <button data-nav className="btn" onClick={() => load(items.length, search)}>
+                {tr('Try again')}
+              </button>
+              <button data-nav className="btn" onClick={onGoStore}>
+                <Icon name="search" /> {tr('Search the Store')}
+              </button>
+            </div>
           </div>
         )}
 

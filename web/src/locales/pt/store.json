@@ -13,9 +13,6 @@
   "Sort": "Ordenar",
   "Platform": "Plataforma",
   "Back": "Voltar",
-  "Set up an indexer": "Configure um indexador",
-  "The Store searches The Pirate Bay (native) and/or your Prowlarr indexers.": "A loja busca jogos no The Pirate Bay (nativo) e/ou nos indexadores do seu Prowlarr.",
-  "Set up indexers": "Configurar indexadores",
   "Search games…": "Buscar jogos…",
   "Searching…": "Buscando…",
   "All": "Todas",
@@ -61,5 +58,9 @@
   "torrent name": "nome do torrent",
   "Cancel": "Cancelar",
   "Search by name. Results come from The Pirate Bay and your Prowlarr indexers.": "Pesquise pelo nome. Os resultados vêm do The Pirate Bay e dos indexadores do seu Prowlarr.",
-  "Searching for torrents…": "Buscando torrents…"
+  "Searching for torrents…": "Buscando torrents…",
+  "Search by name. Results come from your Prowlarr indexers.": "Busque pelo nome. Os resultados vêm dos seus indexadores do Prowlarr.",
+  "Search by name. Results come from The Pirate Bay.": "Busque pelo nome. Os resultados vêm do The Pirate Bay.",
+  "Have Prowlarr? Add it in Settings → Services for more sources.": "Tem Prowlarr? Adicione em Configurações → Serviços para ter mais fontes.",
+  "Set up Prowlarr": "Configurar o Prowlarr"
 }

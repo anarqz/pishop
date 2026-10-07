@@ -46,7 +46,6 @@
   "The file includes your API keys: share it only with people you trust.": "O arquivo inclui suas chaves de API: compartilhe só com quem você confia.",
   "The Pirate Bay · native torrent search": "The Pirate Bay · busca nativa de torrents",
   "API address (apibay format)": "Endereço da API (formato apibay)",
-  "https://… (empty turns it off)": "https://… (vazio desativa)",
   "Connected · {n} result for the test search": "Conectado · {n} resultado para a busca de teste",
   "Connected · {n} results for the test search": "Conectado · {n} resultados para a busca de teste",
   "Test": "Testar",
@@ -84,5 +83,6 @@
   "The language of piShop. Game descriptions from Steam follow it too.": "O idioma do piShop. As descrições dos jogos da Steam também seguem ele.",
   "Default": "Padrão",
   "Brazilian Portuguese": "Português do Brasil",
-  "Tip: “192.168.0.10:/games” in the Server field fills in the share too.": "Dica: “192.168.0.10:/games” no campo Servidor já preenche o compartilhamento."
+  "Tip: “192.168.0.10:/games” in the Server field fills in the share too.": "Dica: “192.168.0.10:/games” no campo Servidor já preenche o compartilhamento.",
+  "Empty: The Pirate Bay’s own API (apibay.org) whenever Prowlarr isn’t set up, so the Store always works.": "Vazio: a API do próprio The Pirate Bay (apibay.org) sempre que o Prowlarr não estiver configurado, para a Loja sempre funcionar."
 }

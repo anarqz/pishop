@@ -149,13 +149,18 @@ export default function Store({
   const [error, setError] = useState<string | null>(null)
   const [prompt, setPrompt] = useState(false)
   const [details, setDetails] = useState<string | null>(memory.details)
-  const [configured, setConfigured] = useState<boolean | null>(null)
+  // Where results come from. Without Prowlarr, The Pirate Bay (apibay)
+  // always answers: the Store never waits on setup.
+  const [sources, setSources] = useState<{ prowlarr: boolean; tpb: boolean } | null>(null)
 
   useEffect(() => {
     api
       .catalogConfig()
-      .then(c => setConfigured((!!c.prowlarr_url && c.has_key) || !!c.tpb_url))
-      .catch(() => setConfigured(false))
+      .then(c => {
+        const prowlarr = !!c.prowlarr_url && c.has_key
+        setSources({ prowlarr, tpb: !!c.tpb_url || !prowlarr })
+      })
+      .catch(() => setSources({ prowlarr: false, tpb: true }))
   }, [])
 
   useEffect(() => {
@@ -271,19 +276,6 @@ export default function Store({
   ]
   useHints(prompt || details ? null : hints)
 
-  if (configured === false) {
-    return (
-      <div className="empty-state" data-nav-scope>
-        <Icon name="search" size={56} />
-        <h2>{tr('Set up an indexer')}</h2>
-        <p>{tr('The Store searches The Pirate Bay (native) and/or your Prowlarr indexers.')}</p>
-        <button data-nav data-nav-default className="btn primary" onClick={onGoSettings}>
-          {tr('Set up indexers')}
-        </button>
-      </div>
-    )
-  }
-
   const history = readHistory()
 
   return (
@@ -340,7 +332,21 @@ export default function Store({
         {!loading && !error && !results && (
           <div className="store-start">
             <h2>{kind === 'console' ? tr('Console games') : tr('PC games')}</h2>
-            <p className="muted">{tr('Search by name. Results come from The Pirate Bay and your Prowlarr indexers.')}</p>
+            <p className="muted">
+              {sources?.prowlarr
+                ? sources.tpb
+                  ? tr('Search by name. Results come from The Pirate Bay and your Prowlarr indexers.')
+                  : tr('Search by name. Results come from your Prowlarr indexers.')
+                : tr('Search by name. Results come from The Pirate Bay.')}
+            </p>
+            {sources && !sources.prowlarr && (
+              <div className="store-hint">
+                <span className="muted">{tr('Have Prowlarr? Add it in Settings → Services for more sources.')}</span>
+                <button data-nav className="btn small" onClick={onGoSettings}>
+                  {tr('Set up Prowlarr')}
+                </button>
+              </div>
+            )}
             {history.length > 0 && (
               <>
                 <h3 className="section-title">{tr('Recent searches')}</h3>

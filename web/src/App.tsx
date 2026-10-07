@@ -4,7 +4,7 @@ import { locale, setLang, tr, useLang } from './i18n'
 import { focusFirst, input } from './input'
 import Explorer, { type ExplorerRequest } from './screens/Explorer'
 import Jobs from './screens/Jobs'
-import Settings from './screens/Settings'
+import Settings, { type SettingsSection } from './screens/Settings'
 import Discover from './screens/Discover'
 import Store, { type StoreRequest } from './screens/Store'
 import { useEngineState } from './screens/Torrents'
@@ -108,13 +108,20 @@ export default function App() {
 
   const tabRef = useRef(tab)
   tabRef.current = tab
+  const [settingsAt, setSettingsAt] = useState<SettingsSection | undefined>()
   const go = useCallback(
     (t: Tab) => {
       setTab(t)
+      setSettingsAt(undefined)
       if (t === 'explorer' || t === 'store') loadPlaces()
     },
     [loadPlaces],
   )
+  /** Settings, opened on the section that sets something up. */
+  const goSettings = (s: SettingsSection) => {
+    go('settings')
+    setSettingsAt(s)
+  }
 
   useEffect(() => {
     input.start()
@@ -179,9 +186,11 @@ export default function App() {
               setStoreRequest({ q: game.title, kind: 'pc', n: Date.now(), game })
               go('store')
             }}
+            onGoStore={() => go('store')}
+            onGoSettings={() => goSettings('indexers')}
           />
         )}
-        {tab === 'store' && <Store places={places} request={storeRequest} onGoSettings={() => go('settings')} />}
+        {tab === 'store' && <Store places={places} request={storeRequest} onGoSettings={() => goSettings('indexers')} />}
         {tab === 'explorer' && (
           <Explorer sources={sources} places={places} request={explorerRequest} onGoSettings={() => go('settings')} />
         )}
@@ -196,7 +205,7 @@ export default function App() {
             }}
           />
         )}
-        {tab === 'settings' && <Settings sources={sources} reloadSources={loadSources} info={info} />}
+        {tab === 'settings' && <Settings sources={sources} reloadSources={loadSources} info={info} initialSection={settingsAt} />}
       </main>
 
       <Footer quitProgress={quitProgress} />
