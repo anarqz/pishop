@@ -124,7 +124,7 @@
   "Username": "Usuário",
   "Import from a link": "Importar de um link",
   "Import": "Importar",
-  "Downloading…": "Baixando…",
   "From a link…": "De um link…",
-  "A GitHub gist, a Pastebin paste or any link to the file": "Um gist do GitHub, um paste do Pastebin ou qualquer link para o arquivo"
+  "A GitHub gist, a Pastebin paste or any link to the file": "Um gist do GitHub, um paste do Pastebin ou qualquer link para o arquivo",
+  "Couldn't import: {error}": "Não foi possível importar: {error}"
 }

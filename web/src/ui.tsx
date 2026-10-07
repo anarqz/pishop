@@ -184,6 +184,8 @@ export function TextPrompt({
   onSubmit,
   onCancel,
   extra,
+  busy,
+  error,
 }: {
   title: string
   placeholder?: string
@@ -194,6 +196,10 @@ export function TextPrompt({
   onCancel: () => void
   /** A second way to submit (e.g. "Search without cache"). */
   extra?: { label: string; onSubmit: (v: string) => void }
+  /** Submitted and waiting: the text stays, the buttons wait. */
+  busy?: boolean
+  /** Why the last submit failed, under the field (the text stays to fix). */
+  error?: string | null
 }) {
   const [value, setValue] = useState(initial)
   const field = useRef<HTMLInputElement>(null)
@@ -214,19 +220,21 @@ export function TextPrompt({
         autoComplete="off"
         onChange={e => setValue(e.target.value)}
         onKeyDown={e => {
-          if (e.key === 'Enter' && ok) onSubmit(value.trim())
+          if (e.key === 'Enter' && ok && !busy) onSubmit(value.trim())
         }}
       />
+      {error && <p className="prompt-error">{error}</p>}
       <div className="dialog-actions">
         <button data-nav className="btn" onClick={onCancel}>
           {tr('Cancel')}
         </button>
         {extra && (
-          <button data-nav className="btn" disabled={!ok} onClick={() => extra.onSubmit(value.trim())}>
+          <button data-nav className="btn" disabled={!ok || busy} onClick={() => extra.onSubmit(value.trim())}>
             {extra.label}
           </button>
         )}
-        <button data-nav className="btn primary" disabled={!ok} onClick={() => onSubmit(value.trim())}>
+        <button data-nav className="btn primary" disabled={!ok || busy} onClick={() => onSubmit(value.trim())}>
+          {busy && <Spinner />}
           {submitLabel}
         </button>
       </div>

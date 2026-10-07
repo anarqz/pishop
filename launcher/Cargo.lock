@@ -2774,7 +2774,7 @@ checksum = "13bee6c73da26345c729282832b60b0363cf3dd9f4bfd81d8551b7a1c889a113"
 
 [[package]]
 name = "pishop"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "axum",

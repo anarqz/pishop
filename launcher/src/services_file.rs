@@ -108,18 +108,58 @@ fn write_private(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
 }
 
 fn read(path: &Path) -> Option<ServicesFile> {
-    let meta = std::fs::metadata(path).ok()?;
-    if !meta.is_file() || meta.len() > MAX_SIZE {
-        return None;
-    }
-    parse(&std::fs::read(path).ok()?)
+    load(path).ok()
 }
 
-/// A services file's contents (a UTF-8 BOM, as some editors save, is fine).
-fn parse(bytes: &[u8]) -> Option<ServicesFile> {
+/// A services file on disk, or why it can't be used.
+fn load(path: &Path) -> Result<ServicesFile, String> {
+    let meta = std::fs::metadata(path).map_err(|e| e.to_string())?;
+    if !meta.is_file() || meta.len() > MAX_SIZE {
+        return Err(not_ours());
+    }
+    parse(&std::fs::read(path).map_err(|e| e.to_string())?)
+}
+
+fn not_ours() -> String {
+    tr!("not a piShop services file", "não é um arquivo de serviços do piShop")
+}
+
+/// A services file's contents. A UTF-8 BOM (some editors save one) is fine,
+/// and so are closing braces lost at the end — a paste missing its last
+/// line, which is how files shared by hand usually break. Anything else that
+/// isn't JSON says where it breaks.
+fn parse(bytes: &[u8]) -> Result<ServicesFile, String> {
     let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
-    let file: ServicesFile = serde_json::from_slice(bytes).ok()?;
-    (file.kind == MARK).then_some(file)
+    let mut text = String::from_utf8_lossy(bytes).trim_end().to_string();
+    let mut first: Option<serde_json::Error> = None;
+    for _ in 0..4 {
+        match serde_json::from_str::<ServicesFile>(&text) {
+            Ok(file) if file.kind == MARK => return Ok(file),
+            Ok(_) => return Err(not_ours()),
+            // Ended inside an object: give it the brace it lost and look again.
+            Err(e) if e.is_eof() => {
+                first.get_or_insert(e);
+                text.push('}');
+            }
+            Err(e) if e.is_data() && first.is_none() => return Err(not_ours()),
+            Err(e) => {
+                let e = first.unwrap_or(e);
+                return Err(tr!(
+                    "the file isn't valid JSON (line {}, column {}): was it copied whole?",
+                    "o arquivo não é um JSON válido (linha {}, coluna {}): foi copiado inteiro?",
+                    e.line(),
+                    e.column()
+                ));
+            }
+        }
+    }
+    let e = first.map(|e| (e.line(), e.column())).unwrap_or((0, 0));
+    Err(tr!(
+        "the file isn't valid JSON (line {}, column {}): was it copied whole?",
+        "o arquivo não é um JSON válido (linha {}, coluna {}): foi copiado inteiro?",
+        e.0,
+        e.1
+    ))
 }
 
 #[derive(Serialize)]
@@ -172,7 +212,7 @@ pub fn candidates() -> Vec<Candidate> {
 /// Applies a services file: only what it sets, so importing someone's keys
 /// never wipes a service they didn't share. Returns the services imported.
 pub fn import(path: &str) -> anyhow::Result<Vec<String>> {
-    let file = read(Path::new(path)).ok_or_else(|| anyhow::anyhow!(tr!("not a piShop services file", "não é um arquivo de serviços do piShop")))?;
+    let file = load(Path::new(path)).map_err(|m| anyhow::anyhow!(m))?;
     apply(file, path)
 }
 
@@ -211,7 +251,7 @@ pub async fn import_url(url: &str) -> anyhow::Result<Vec<String>> {
         Some(id) => gist_file(&client, &id).await?,
         None => fetch(&client, &raw_url(&parsed)).await?,
     };
-    let file = parse(&bytes).ok_or_else(|| anyhow::anyhow!(tr!("not a piShop services file", "não é um arquivo de serviços do piShop")))?;
+    let file = parse(&bytes).map_err(|m| anyhow::anyhow!(m))?;
     apply(file, url)
 }
 
@@ -299,11 +339,28 @@ mod tests {
     #[test]
     fn services_files_are_recognised() {
         let ok = br#"{"piShop":"services","version":1,"services":{"tpb_url":"https://apibay.org"}}"#;
-        assert!(parse(ok).is_some());
+        assert!(parse(ok).is_ok());
         let mut bom = b"\xEF\xBB\xBF".to_vec();
         bom.extend_from_slice(ok);
-        assert!(parse(&bom).is_some());
-        assert!(parse(br#"{"piShop":"something-else","version":1,"services":{}}"#).is_none());
-        assert!(parse(b"<html>not json</html>").is_none());
+        assert!(parse(&bom).is_ok());
+        assert!(parse(br#"{"piShop":"something-else","version":1,"services":{}}"#).is_err());
+        assert!(parse(br#"{"prowlarr_url":"http://x"}"#).is_err());
+        assert!(parse(b"<html>not json</html>").is_err());
+    }
+
+    #[test]
+    fn a_paste_that_lost_its_last_braces_still_imports() {
+        // An export pasted by hand (Windows line endings) without the line
+        // closing "services" — or without both closing lines.
+        let lost_one = "{\r\n  \"piShop\": \"services\",\r\n  \"version\": 1,\r\n  \"services\": {\r\n    \"tpb_url\": \"https://apibay.org\"\r\n}";
+        let f = parse(lost_one.as_bytes()).expect("one brace short");
+        assert_eq!(f.services.tpb_url, "https://apibay.org");
+        let lost_two = "{\n  \"piShop\": \"services\",\n  \"version\": 1,\n  \"services\": {\n    \"tpb_url\": \"https://apibay.org\"\n";
+        assert!(parse(lost_two.as_bytes()).is_ok());
+        // Broken elsewhere: says where.
+        let broken = "{\n  \"piShop\": \"services\"\n  \"version\": 1\n}";
+        // (No Debug on the file type: it holds API keys.)
+        let Err(e) = parse(broken.as_bytes()) else { panic!("a broken file was accepted") };
+        assert!(e.contains("line 3") || e.contains("linha 3"), "{e}");
     }
 }

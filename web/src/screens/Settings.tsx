@@ -440,21 +440,34 @@ function IndexersSection() {
   )
 }
 
+/** The last link that didn't import: offered again, to fix or retry, until one does. */
+let failedLink = ''
+
 /** Picks a piShop services file found on the device, or downloads one from a link, and applies it. */
 function ImportDialog({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
   const [files, setFiles] = useState<ServicesFile[] | null>(null)
   const [busy, setBusy] = useState(false)
+  // The link stays (in the prompt, and for next time) until it imports: a
+  // typo or a broken paste can be fixed and tried again.
   const [link, setLink] = useState(false)
-  const fromLink = async (url: string) => {
-    setLink(false)
-    setBusy(true)
+  const [url, setUrl] = useState(failedLink)
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [linkError, setLinkError] = useState<string | null>(null)
+  const fromLink = async (v: string) => {
+    setUrl(v)
+    setLinkBusy(true)
+    setLinkError(null)
     try {
-      const r = await api.importServicesUrl(url)
+      const r = await api.importServicesUrl(v)
+      failedLink = ''
       toast(tr('Services imported'), r.imported.join(', '), 'ok')
+      setLink(false)
       onImported()
     } catch (e) {
-      setBusy(false)
-      toast(tr("Couldn't import"), (e as Error).message, 'error')
+      failedLink = v
+      setLinkError(tr("Couldn't import: {error}", { error: (e as Error).message }))
+    } finally {
+      setLinkBusy(false)
     }
   }
   useEffect(() => {
@@ -481,9 +494,15 @@ function ImportDialog({ onClose, onImported }: { onClose: () => void; onImported
       <TextPrompt
         title={tr('Import from a link')}
         placeholder="https://gist.github.com/… · https://pastebin.com/…"
+        initial={url}
         submitLabel={tr('Import')}
         validate={v => /^https?:\/\/\S+\.\S+/.test(v)}
-        onCancel={() => setLink(false)}
+        busy={linkBusy}
+        error={linkError}
+        onCancel={() => {
+          setLink(false)
+          setLinkError(null)
+        }}
         onSubmit={v => void fromLink(v)}
       />
     )
@@ -521,7 +540,7 @@ function ImportDialog({ onClose, onImported }: { onClose: () => void; onImported
       <button data-nav data-nav-default={files?.length ? undefined : ''} className="settings-row" disabled={busy} onClick={() => setLink(true)}>
         <Icon name="globe" />
         <div className="settings-row-main">
-          <b>{busy ? tr('Downloading…') : tr('From a link…')}</b>
+          <b>{tr('From a link…')}</b>
           <small>{tr('A GitHub gist, a Pastebin paste or any link to the file')}</small>
         </div>
       </button>

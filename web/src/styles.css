@@ -971,3 +971,4 @@ button.scard:focus .sring small { color: #39414b; }
 .origin-note { display: flex; align-items: center; gap: 8px; margin: -6px 0 12px; font-size: 13.5px; color: var(--muted); }
 .origin-note .icon { flex: none; color: #7cc3ff; }
 .origin-note b { color: var(--text); }
+.prompt-error { margin: -6px 0 0; color: #ff8a8d; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
