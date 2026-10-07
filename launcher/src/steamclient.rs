@@ -212,15 +212,23 @@ pub fn game_id(appid: u32) -> u64 {
     ((appid as u64) << 32) | 0x0200_0000
 }
 
-/// Starts the shortcut, as pressing Play would.
+/// Starts the shortcut, as pressing Play would. Not for an app that's
+/// already running: Steam starts a second launch, waits on the first one and
+/// fails with an "already running" error (use `resume`).
 pub async fn run(appid: u32) -> anyhow::Result<()> {
-    run_game_id(&game_id(appid).to_string()).await
+    eval(&format!("SteamClient.Apps.RunGame({}, '', -1, 100)", js(&game_id(appid).to_string()))).await.map(drop)
 }
 
-/// RunGame by Steam's 64-bit game id; on a game that is already running it
-/// brings it back to the front.
-pub async fn run_game_id(game_id: &str) -> anyhow::Result<()> {
-    eval(&format!("SteamClient.Apps.RunGame({}, '', -1, 100)", js(game_id))).await.map(drop)
+/// Puts an app that's already running back on screen, the way Game Mode's own
+/// "Resume" does. False if Steam doesn't list it as running.
+pub async fn resume(appid: u32) -> anyhow::Result<bool> {
+    let v = eval(&format!(
+        "(() => {{ const s = window.SteamUIStore; \
+         if (!s?.RunningApps?.some(a => a.appid == {appid})) return false; \
+         s.NavigateToRunningApp(); s.SetRunningApp({appid}); s.CloseSideMenus?.(); return true }})()"
+    ))
+    .await?;
+    Ok(v.as_bool().unwrap_or(false))
 }
 
 pub async fn remove_shortcut(appid: u32) -> anyhow::Result<()> {

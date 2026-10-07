@@ -640,12 +640,22 @@ async fn wait_until_closed(appid: u32) -> bool {
     }
 }
 
-/// Brings piShop back to the front (Steam would otherwise stay on its own screen).
+/// Puts piShop back on screen once what it launched has closed. Steam usually
+/// does it by itself (piShop is the app still running); otherwise piShop asks
+/// for it as Game Mode's "Resume" would. Never RunGame on itself: Steam would
+/// start a second piShop and fail with "piShop is already running".
 async fn bring_back() {
-    if let Ok(me) = std::env::var("SteamGameId") {
-        if let Err(e) = steamclient::run_game_id(&me).await {
-            log!("instalar: não consegui voltar ao piShop: {e:#}");
+    for _ in 0..3 {
+        if crate::focus::focused() {
+            return;
         }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    let Some(me) = std::env::var("SteamAppId").ok().and_then(|v| v.parse::<u32>().ok()) else { return };
+    match steamclient::resume(me).await {
+        Ok(true) => log!("instalar: piShop de volta à frente"),
+        Ok(false) => {}
+        Err(e) => log!("instalar: não consegui voltar ao piShop: {e:#}"),
     }
 }
 
@@ -801,6 +811,10 @@ async fn play(hash: &str) -> anyhow::Result<Value> {
     let appid = entry(hash)?.install.and_then(|s| s.appid).ok_or_else(|| anyhow!(tr!("no shortcut yet", "ainda não há atalho")))?;
     if moving(hash) || winetricks::active(appid) {
         bail!(tr!("wait for the current task to finish", "espere a tarefa atual terminar"));
+    }
+    // Already running (Play pressed again): show it instead of launching it twice.
+    if steamclient::running(appid) && steamclient::resume(appid).await? {
+        return Ok(json!({ "appid": appid }));
     }
     steamclient::run(appid).await?;
     Ok(json!({ "appid": appid }))
