@@ -67,6 +67,11 @@ pub struct InstallState {
     /// The installer borrowing the shortcut.
     #[serde(default)]
     pub borrowed: Option<String>,
+    /// A shortcut piShop didn't create (Games → Other shortcuts): its game
+    /// folder is only what was found safe to move or delete, never a guess
+    /// from the executable's folder.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub external: bool,
 }
 
 fn now() -> i64 {
@@ -103,13 +108,14 @@ pub fn router() -> Router {
             get(|| async { Json(ART_JOB.lock().unwrap().clone()) }).post(|| async { reply(refresh_all_artwork().await) }),
         )
         .route("/api/install/{hash}/reset", post(|UrlPath(h): UrlPath<String>| async move { reply(reset(&h).await) }))
+        .route("/api/install/{hash}/delete-download", post(|UrlPath(h): UrlPath<String>| async move { reply(delete_download(&h).await) }))
         .route("/api/steam/client-api", post(|| async { reply(enable_client_api().await) }))
 }
 
 // ---------- what's on disk ----------
 
 /// Top-level files/folders of a download, from the torrent engine.
-async fn content(hash: &str) -> anyhow::Result<Vec<PathBuf>> {
+pub(crate) async fn content(hash: &str) -> anyhow::Result<Vec<PathBuf>> {
     let v: Value = reqwest::Client::new()
         .get(format!("http://127.0.0.1:{}/torrents/{hash}", torrent::api_port()))
         .timeout(Duration::from_secs(10))
@@ -140,7 +146,7 @@ async fn content(hash: &str) -> anyhow::Result<Vec<PathBuf>> {
 /// The download's own folders, plus what its archives were extracted to. Never
 /// the folder around a single-file download: that's the shared Downloads
 /// folder, full of other games.
-fn roots(content: &[PathBuf]) -> Vec<PathBuf> {
+pub(crate) fn roots(content: &[PathBuf]) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = content.iter().filter(|p| p.is_dir()).cloned().collect();
     for p in content {
         let archives: Vec<PathBuf> = if p.is_dir() {
@@ -167,11 +173,11 @@ fn loose_exes(content: &[PathBuf]) -> Vec<PathBuf> {
 }
 
 #[derive(Serialize)]
-struct Library {
-    path: String,
-    label: String,
-    free: Option<u64>,
-    total: Option<u64>,
+pub(crate) struct Library {
+    pub path: String,
+    pub label: String,
+    pub free: Option<u64>,
+    pub total: Option<u64>,
 }
 
 fn steam_root() -> PathBuf {
@@ -179,7 +185,7 @@ fn steam_root() -> PathBuf {
 }
 
 /// Steam library folders (internal, SD card, other drives).
-fn libraries() -> Vec<Library> {
+pub(crate) fn libraries() -> Vec<Library> {
     proton::library_paths()
         .into_iter()
         .map(|p| {
@@ -190,7 +196,7 @@ fn libraries() -> Vec<Library> {
 }
 
 /// "Internal storage", or the label of the card/drive a path is on.
-fn disk_label(path: &Path) -> String {
+pub(crate) fn disk_label(path: &Path) -> String {
     if path.starts_with("/home") {
         return tr!("Internal storage", "Armazenamento interno");
     }
@@ -207,15 +213,15 @@ fn disk_label(path: &Path) -> String {
 }
 
 #[derive(Serialize)]
-struct Tool {
-    name: String,
-    display: String,
-    installed: bool,
+pub(crate) struct Tool {
+    pub name: String,
+    pub display: String,
+    pub installed: bool,
 }
 
 /// Proton builds Steam offers, marking the ones already on disk; Steam
 /// downloads the others the first time they're used.
-async fn tools() -> anyhow::Result<Vec<Tool>> {
+pub(crate) async fn tools() -> anyhow::Result<Vec<Tool>> {
     let mut on_disk: Vec<String> = Vec::new();
     for lib in libraries() {
         for e in std::fs::read_dir(Path::new(&lib.path).join("steamapps/common")).into_iter().flatten().flatten() {
@@ -264,7 +270,7 @@ fn target_for(library: &str, game: &str) -> PathBuf {
     Path::new(library).join(crate::APP_NAME).join(folder_name(game))
 }
 
-fn entry(hash: &str) -> anyhow::Result<library::Entry> {
+pub(crate) fn entry(hash: &str) -> anyhow::Result<library::Entry> {
     library::get(hash).ok_or_else(|| anyhow!(tr!("this download has no game data", "este download não tem dados do jogo")))
 }
 
@@ -408,7 +414,11 @@ async fn set_icon_from(appid: u32, candidates: &[(String, &'static str)]) -> Opt
 /// had. `fresh` asks Steam's app info again. Returns where each piece came
 /// from ("steam", "steamgriddb", "piShop" or null).
 pub async fn apply_artwork(appid: u32, game: &library::Game, fresh: bool) -> Value {
-    let sid = game.steam_appid.clone().filter(|a| !a.is_empty() && a.chars().all(|c| c.is_ascii_digit()));
+    // A SteamGridDB game picked by hand wins over the Steam appid.
+    let by_hand = game.art_source.as_deref() == Some("sgdb") && game.sgdb_id.is_some();
+    let sid = game.steam_appid.clone().filter(|a| !by_hand && !a.is_empty() && a.chars().all(|c| c.is_ascii_digit()));
+    let sgdb_name = game.sgdb_name.clone().filter(|_| by_hand).unwrap_or_else(|| game.name.clone());
+    let sgdb_id = game.sgdb_id.filter(|_| by_hand);
     let (store, info) = match sid.as_deref() {
         Some(a) => tokio::join!(crate::steam_store::library_art(a), crate::steam_store::appinfo_art(a, fresh)),
         None => (None, None),
@@ -443,7 +453,7 @@ pub async fn apply_artwork(appid: u32, game: &library::Game, fresh: bool) -> Val
         let mut source = put(appid, slot, &urls).await.map(|_| "steam");
         if source.is_none() {
             if sgdb.is_none() {
-                sgdb = Some(crate::catalog::sgdb_pack(&game.name).await);
+                sgdb = Some(crate::catalog::sgdb_pack(&sgdb_name, sgdb_id).await);
             }
             let pack = sgdb.as_ref().unwrap();
             let url = match slot {
@@ -478,7 +488,7 @@ pub async fn apply_artwork(appid: u32, game: &library::Game, fresh: bool) -> Val
     let mut icon_source = set_icon_from(appid, &steam_icons).await;
     if icon_source.is_none() {
         if sgdb.is_none() {
-            sgdb = Some(crate::catalog::sgdb_pack(&game.name).await);
+            sgdb = Some(crate::catalog::sgdb_pack(&sgdb_name, sgdb_id).await);
         }
         let rest: Vec<(String, &'static str)> = sgdb
             .as_ref()
@@ -495,7 +505,7 @@ pub async fn apply_artwork(appid: u32, game: &library::Game, fresh: bool) -> Val
 }
 
 /// Refreshes one installed game's artwork on its shortcut.
-async fn refresh_artwork(hash: &str) -> anyhow::Result<Value> {
+pub(crate) async fn refresh_artwork(hash: &str) -> anyhow::Result<Value> {
     let e = entry(hash)?;
     let appid = e.install.as_ref().and_then(|s| s.appid).ok_or_else(|| anyhow!(tr!("no shortcut yet", "ainda não há atalho")))?;
     if !steamclient::available().await {
@@ -522,8 +532,12 @@ async fn refresh_all_artwork() -> anyhow::Result<ArtJob> {
     if !steamclient::available().await {
         bail!(tr!("Steam's client API isn't reachable", "a API do cliente Steam não está acessível"));
     }
-    let games: Vec<(u32, library::Game)> =
-        library::all().into_values().filter_map(|e| Some((e.install.as_ref()?.appid?, e.game))).collect();
+    // Games installed through piShop; other shortcuts keep the art their owner chose.
+    let games: Vec<(u32, library::Game)> = library::all()
+        .into_iter()
+        .filter(|(key, _)| !library::is_shortcut_key(key))
+        .filter_map(|(_, e)| Some((e.install.as_ref()?.appid?, e.game)))
+        .collect();
     *ART_JOB.lock().unwrap() = ArtJob { running: true, done: 0, total: games.len(), current: None };
     tokio::spawn(async move {
         for (appid, game) in games {
@@ -540,11 +554,11 @@ async fn refresh_all_artwork() -> anyhow::Result<ArtJob> {
 
 /// Steam stores shortcut paths quoted. AddShortcut quotes the exe itself;
 /// SetShortcutExe/StartDir store exactly what they get.
-fn quoted(p: &Path) -> String {
+pub(crate) fn quoted(p: &Path) -> String {
     format!("\"{}\"", p.display())
 }
 
-async fn create_shortcut(game: &library::Game, exe: &Path, launch_options: &str, tool: &str) -> anyhow::Result<u32> {
+pub(crate) async fn create_shortcut(game: &library::Game, exe: &Path, launch_options: &str, tool: &str) -> anyhow::Result<u32> {
     if !steamclient::available().await {
         bail!(tr!(
             "turn on Steam's client API first (Install → Enable)",
@@ -612,14 +626,24 @@ async fn start(hash: &str, r: StartReq) -> anyhow::Result<InstallState> {
         game_dir: None,
         restore: None,
         borrowed: None,
+        external: false,
     };
     library::set_install(hash, Some(state.clone()));
+    stop_sharing(hash).await;
     // Steam launches it as its own game: gamescope only shows windows whose
     // ancestors include a Steam reaper (`SteamLaunch AppId=…`).
     steamclient::run(appid).await?;
     tokio::spawn(return_when_done(appid));
     log!("instalar: {:?} → instalador {:?} (atalho {appid}, args {args:?})", e.game.name, installer);
     Ok(state)
+}
+
+/// Installing takes over the download's files: the transfer stops
+/// (downloading and sharing) so nothing changes them meanwhile.
+async fn stop_sharing(hash: &str) {
+    if let Err(e) = torrent::act(hash, "pause").await {
+        log!("instalar: transferência {hash} não pausada: {e:#}");
+    }
 }
 
 /// Waits for what Steam started under the shortcut to come and go (or never
@@ -745,7 +769,7 @@ async fn finish_route(UrlPath(hash): UrlPath<String>, Json(r): Json<ExeReq>) -> 
 }
 
 /// Repoints the installer's shortcut at the game.
-async fn finish(hash: &str, exe: &str) -> anyhow::Result<InstallState> {
+pub(crate) async fn finish(hash: &str, exe: &str) -> anyhow::Result<InstallState> {
     let e = entry(hash)?;
     let mut state = e.install.ok_or_else(|| anyhow!(tr!("nothing is being installed", "nada está sendo instalado")))?;
     let appid = state.appid.ok_or_else(|| anyhow!(tr!("no shortcut yet", "ainda não há atalho")))?;
@@ -755,11 +779,20 @@ async fn finish(hash: &str, exe: &str) -> anyhow::Result<InstallState> {
     }
     steamclient::set_exe(appid, &quoted(&exe)).await?;
     steamclient::set_start_dir(appid, &quoted(exe.parent().unwrap_or(Path::new("/")))).await?;
-    steamclient::set_launch_options(appid, "").await?;
+    // The installer's arguments go; launch options of a game that was already
+    // installed (picking another executable) stay.
+    if state.stage == Stage::Installing {
+        steamclient::set_launch_options(appid, "").await?;
+    }
     state.stage = Stage::Installed;
     state.exe = Some(exe.display().to_string());
-    state.game_dir = None;
-    state.game_dir = game_dir(&state).map(|d| d.display().to_string());
+    // A folder the user set (or found safe for another shortcut) stays if it
+    // still holds the executable.
+    let keep = state.game_dir.as_ref().is_some_and(|d| exe.starts_with(d));
+    if !keep {
+        state.game_dir = None;
+        state.game_dir = game_dir(&state).map(|d| d.display().to_string());
+    }
     library::set_install(hash, Some(state.clone()));
     log!("instalar: {:?} pronto → {}", e.game.name, exe.display());
     Ok(state)
@@ -802,12 +835,14 @@ async fn portable(hash: &str, exe: &str, tool: &str) -> anyhow::Result<InstallSt
         game_dir: holder.or_else(|| exe.parent().map(PathBuf::from)).map(|d| d.display().to_string()),
         restore: None,
         borrowed: None,
+        external: false,
     };
     library::set_install(hash, Some(state.clone()));
+    stop_sharing(hash).await;
     Ok(state)
 }
 
-async fn play(hash: &str) -> anyhow::Result<Value> {
+pub(crate) async fn play(hash: &str) -> anyhow::Result<Value> {
     let appid = entry(hash)?.install.and_then(|s| s.appid).ok_or_else(|| anyhow!(tr!("no shortcut yet", "ainda não há atalho")))?;
     if moving(hash) || winetricks::active(appid) {
         bail!(tr!("wait for the current task to finish", "espere a tarefa atual terminar"));
@@ -829,9 +864,12 @@ fn canon(p: &Path) -> PathBuf {
 /// Where the installed game lives: the folder its installer registered (the
 /// one holding the executable), else the install folder piShop chose, else
 /// the executable's own folder.
-fn game_dir(state: &InstallState) -> Option<PathBuf> {
+pub(crate) fn game_dir(state: &InstallState) -> Option<PathBuf> {
     if let Some(d) = state.game_dir.as_ref().map(PathBuf::from).filter(|d| d.is_dir()) {
         return Some(d);
+    }
+    if state.external {
+        return None;
     }
     let exe = canon(Path::new(state.exe.as_ref()?));
     let pfx = proton::compatdata(state.appid?).join("pfx");
@@ -848,7 +886,7 @@ fn game_dir(state: &InstallState) -> Option<PathBuf> {
 /// Everything about the installed game: what its Steam shortcut runs, where
 /// the game and its prefix are, its Proton, and whether it can move into the
 /// prefix's Program Files.
-async fn info(hash: &str) -> anyhow::Result<Value> {
+pub(crate) async fn info(hash: &str) -> anyhow::Result<Value> {
     let e = entry(hash)?;
     let state = e.install.clone().ok_or_else(|| anyhow!(tr!("not installed yet", "ainda não instalado")))?;
     let appid = state.appid.ok_or_else(|| anyhow!(tr!("no shortcut yet", "ainda não há atalho")))?;
@@ -867,10 +905,17 @@ async fn info(hash: &str) -> anyhow::Result<Value> {
     let running = steamclient::running(appid);
     let busy = running || proton::in_use(appid) || winetricks::active(appid) || moving(hash);
     let free = relocate::free_space(&compat);
+    let total = localfs::disk_space(if compat.exists() { &compat } else { compat.parent().unwrap_or(&compat) }).map(|s| s.1);
     let content = content(hash).await.unwrap_or_default();
     let is_download = dir.as_ref().is_some_and(|d| content.iter().any(|c| canon(d).starts_with(canon(c))));
+    // The download's own folder while it's there (installers to run in the prefix start there).
+    let download_dir = match content.as_slice() {
+        [one] if one.is_dir() => Some(one.clone()),
+        [first, ..] => first.parent().map(PathBuf::from),
+        [] => None,
+    };
     let targets = match &dir {
-        Some(d) => targets(d, size, &pfx, prefix_ok, is_download, in_prefix),
+        Some(d) => targets(d, size, &pfx, prefix_ok, in_prefix),
         None => Vec::new(),
     };
     let tool = shortcut.as_ref().map(|s| s.tool.clone()).filter(|t| !t.is_empty()).unwrap_or_else(|| state.tool.clone());
@@ -882,34 +927,38 @@ async fn info(hash: &str) -> anyhow::Result<Value> {
         "tool": tool,
         "tools": tools,
         "exe": state.exe.as_ref().map(|x| json!({ "path": x, "windows": proton::to_windows(&pfx, Path::new(x)) })),
-        "game_dir": dir.as_ref().map(|d| json!({ "path": d, "windows": proton::to_windows(&pfx, d), "size": size, "disk": disk_label(d) })),
-        "prefix": { "path": pfx, "exists": prefix_ok, "disk": disk_label(&compat), "free": free },
+        "game_dir": dir.as_ref().map(|d| {
+            let space = localfs::disk_space(d);
+            json!({ "path": d, "windows": proton::to_windows(&pfx, d), "size": size, "disk": disk_label(d), "free": space.map(|s| s.0), "total": space.map(|s| s.1) })
+        }),
+        "prefix": { "path": pfx, "exists": prefix_ok, "disk": disk_label(&compat), "free": free, "total": total },
         "in_prefix": in_prefix,
         "targets": targets,
         "moving": move_job(hash),
         "borrowed": state.borrowed,
         "running": running,
         "busy": busy,
+        "is_download": is_download,
+        "download_dir": download_dir,
+        "name": e.game.name,
+        "external": state.external,
+        "stage": state.stage,
     }))
 }
 
 /// Where the game can move: into its prefix's Program Files, or into any
 /// Steam library (`<library>/piShop/<its folder>`), each with what stands in
 /// its way.
-fn targets(dir: &Path, size: u64, pfx: &Path, prefix_ok: bool, is_download: bool, in_prefix: bool) -> Vec<Value> {
+fn targets(dir: &Path, size: u64, pfx: &Path, prefix_ok: bool, in_prefix: bool) -> Vec<Value> {
     let name = dir.file_name().unwrap_or_default();
     let here = canon(dir);
     let mut out = Vec::new();
     let mut add = |kind: &str, id: String, label: String, to: PathBuf, windows: String, is_here: bool| {
         let same_disk = relocate::same_disk(dir, &to);
         let free = relocate::free_space(&to);
+        let total = to.ancestors().find(|a| a.exists()).and_then(localfs::disk_space).map(|s| s.1);
         let blocked = if is_here {
             None
-        } else if is_download {
-            Some(tr!(
-                "These are the download's own files: copy them with Explore instead.",
-                "Estes são os próprios arquivos do download: copie-os com o Explorar."
-            ))
         } else if kind == "prefix" && !prefix_ok {
             Some(tr!("The prefix doesn't exist yet: play the game once first.", "O prefixo ainda não existe: jogue uma vez primeiro."))
         } else if to.exists() {
@@ -921,7 +970,8 @@ fn targets(dir: &Path, size: u64, pfx: &Path, prefix_ok: bool, is_download: bool
         };
         out.push(json!({
             "id": id, "kind": kind, "label": label, "to": to, "windows": windows,
-            "here": is_here, "same_disk": same_disk, "free": free, "blocked": blocked,
+            "here": is_here, "same_disk": same_disk, "free": free, "total": total, "blocked": blocked,
+            "disk": disk_label(to.ancestors().find(|a| a.exists()).unwrap_or(&to)),
         }));
     };
     let into_prefix = pfx.join("drive_c/Program Files").join(name);
@@ -1012,7 +1062,7 @@ async fn move_route(UrlPath(hash): UrlPath<String>, body: Option<Json<MoveReq>>)
 /// Moves the game's files into its prefix's Program Files or into another
 /// Steam library, then points the registry and the shortcut (target and
 /// start folder) at the new place — every move, without exception.
-async fn move_start(hash: &str, to: &str) -> anyhow::Result<Value> {
+pub(crate) async fn move_start(hash: &str, to: &str) -> anyhow::Result<Value> {
     if moving(hash) {
         bail!(tr!("already moving", "já está movendo"));
     }
@@ -1042,6 +1092,12 @@ async fn move_start(hash: &str, to: &str) -> anyhow::Result<Value> {
     let to_win = target["windows"].as_str().unwrap_or_default().to_string();
     let start_dir = info["shortcut"]["start_dir"].as_str().map(|s| s.trim_matches('"').to_string());
     let total = info["game_dir"]["size"].as_u64().unwrap_or(0);
+    // The game runs from the download's files: the transfer lets go of them
+    // (off Transfers, files kept) before they move.
+    if info["is_download"] == true {
+        torrent::act(hash, "forget").await.context(tr!("couldn't stop the transfer", "não foi possível parar a transferência"))?;
+        log!("mover: transferência {hash} retirada (os arquivos do jogo eram dela)");
+    }
     let progress = Arc::new(relocate::Progress::default());
     progress.total.store(total, Ordering::Relaxed);
     let job = MoveJob { state: "running", done: 0, total, to: to.display().to_string(), error: None };
@@ -1237,16 +1293,20 @@ fn move_cancel(hash: &str) -> anyhow::Result<Value> {
 
 /// Starts over: removes the shortcut the wizard created and its artwork
 /// (Steam keeps grid images of removed shortcuts). Game files stay.
-async fn reset(hash: &str) -> anyhow::Result<Value> {
+pub(crate) async fn reset(hash: &str) -> anyhow::Result<Value> {
     if let Some(appid) = entry(hash)?.install.and_then(|s| s.appid) {
         steamclient::remove_shortcut(appid).await?;
         remove_artwork(appid);
     }
-    library::set_install(hash, None);
+    if library::is_shortcut_key(hash) {
+        library::remove(hash);
+    } else {
+        library::set_install(hash, None);
+    }
     Ok(json!({}))
 }
 
-fn remove_artwork(appid: u32) {
+pub(crate) fn remove_artwork(appid: u32) {
     let prefix = appid.to_string();
     for user in std::fs::read_dir(steam_root().join("userdata")).into_iter().flatten().flatten() {
         for f in std::fs::read_dir(user.path().join("config/grid")).into_iter().flatten().flatten() {
@@ -1258,9 +1318,57 @@ fn remove_artwork(appid: u32) {
             }
         }
     }
-    for ext in ["png", "jpg"] {
+    for ext in ["png", "jpg", "ico"] {
         let _ = std::fs::remove_file(crate::data_dir().join("icons").join(format!("{appid}.{ext}")));
     }
+}
+
+/// Transfers → "Delete downloaded files", once the game has its shortcut: the
+/// torrent's own files and what its archives were extracted to, nothing else
+/// in the Downloads folder. Not while the installer runs, and not when the
+/// game itself runs from those files (move it first). The game stays in Games.
+async fn delete_download(hash: &str) -> anyhow::Result<Value> {
+    let e = entry(hash)?;
+    let state = e.install.clone().ok_or_else(|| anyhow!(tr!("install the game first", "instale o jogo primeiro")))?;
+    let appid = state.appid.ok_or_else(|| anyhow!(tr!("install the game first", "instale o jogo primeiro")))?;
+    if steamclient::running(appid) || proton::in_use(appid) {
+        bail!(tr!("close the installer first", "feche o instalador primeiro"));
+    }
+    let content = content(hash).await?;
+    let roots = roots(&content);
+    let out = content.first().and_then(|p| p.parent()).map(canon).unwrap_or_default();
+    let ours: Vec<PathBuf> = content.iter().chain(roots.iter()).map(|p| canon(p)).collect();
+    // The game (or its executable) inside the download: deleting would break it.
+    let game = game_dir(&state).map(|d| canon(&d)).into_iter().chain(state.exe.as_ref().map(|x| canon(Path::new(x))));
+    for g in game {
+        if ours.iter().any(|p| g.starts_with(p)) {
+            bail!(tr!(
+                "the game runs from these files: move it to a library first (Games → Location)",
+                "o jogo roda destes arquivos: mova-o para uma biblioteca primeiro (Jogos → Local)"
+            ));
+        }
+    }
+    // Only paths inside the download's folder, never the folder itself.
+    let paths: Vec<PathBuf> = ours.into_iter().filter(|p| p.starts_with(&out) && *p != out && p.exists()).collect();
+    let size = {
+        let p = paths.clone();
+        tokio::task::spawn_blocking(move || p.iter().map(|x| if x.is_dir() { relocate::dir_size(x) } else { std::fs::metadata(x).map(|m| m.len()).unwrap_or(0) }).sum::<u64>())
+            .await
+            .unwrap_or(0)
+    };
+    // The engine deletes its files; extracted folders go here.
+    if let Err(e) = torrent::act(hash, "delete").await {
+        log!("instalar: o motor não apagou {hash}: {e:#}");
+    }
+    let p = paths.clone();
+    tokio::task::spawn_blocking(move || {
+        for x in p {
+            let _ = if x.is_dir() { std::fs::remove_dir_all(&x) } else { std::fs::remove_file(&x) };
+        }
+    })
+    .await?;
+    log!("instalar: download de {:?} apagado ({} itens, {size} bytes)", e.game.name, paths.len());
+    Ok(json!({ "deleted": paths.len(), "freed": size }))
 }
 
 /// Turns on Steam's client API: writes Steam's debugging flag and restarts

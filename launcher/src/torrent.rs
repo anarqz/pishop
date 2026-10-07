@@ -38,6 +38,21 @@ pub fn download_dir() -> PathBuf {
         .join(crate::APP_NAME)
 }
 
+/// One of the engine's actions on a torrent, by info hash: "pause" (stops
+/// downloading and sharing), "forget" (off the list, files kept) or
+/// "delete" (off the list, its files deleted).
+pub async fn act(info_hash: &str, action: &str) -> anyhow::Result<()> {
+    let r = reqwest::Client::new()
+        .post(format!("http://127.0.0.1:{}/torrents/{}/{action}", api_port(), info_hash.trim().to_lowercase()))
+        .timeout(std::time::Duration::from_secs(20))
+        .send()
+        .await?;
+    if !r.status().is_success() {
+        anyhow::bail!("{}", r.text().await.unwrap_or_default());
+    }
+    Ok(())
+}
+
 /// Must run before any thread starts: librqbit reads it when building CORS.
 pub fn allow_origin(port: u16) {
     let re = format!(r"^http://(127\.0\.0\.1|localhost):{port}$");

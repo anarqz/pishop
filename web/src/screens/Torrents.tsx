@@ -165,7 +165,7 @@ export function DownloadTile({
   const name = entry?.game.name ?? t.name
   const state = dlState(t)
   const installed = entry?.install?.stage === 'installed'
-  const [line1, line2] = installed ? [tr('Installed'), tileLines(t, state)[1]] : tileLines(t, state)
+  const [line1, line2] = installed ? [tr('In Games'), tileLines(t, state)[1]] : tileLines(t, state)
   return (
     <div
       data-nav
@@ -257,9 +257,14 @@ export function DownloadHero({ t, entry }: { t: TorrentInfo; entry?: LibraryEntr
   )
 }
 
-/** Y: remove the download, keeping the files or deleting them too. */
+/**
+ * Y: remove the download, keeping the files or deleting them too. A game
+ * installed from it stays in Games either way; its files are only deleted
+ * when the game doesn't run from them (the launcher checks).
+ */
 export function DeleteDialog({ t, entry, onClose }: { t: TorrentInfo; entry?: LibraryEntry; onClose: () => void }) {
   const name = entry?.game.name ?? t.name
+  const installed = !!entry?.install?.appid
   const run = (p: Promise<unknown>, done: string) => {
     onClose()
     p.then(() => api.forgetLibrary(t.infoHash).catch(() => {}))
@@ -277,9 +282,19 @@ export function DeleteDialog({ t, entry, onClose }: { t: TorrentInfo; entry?: Li
               : tr('Stops the download and removes it from the list; what was downloaded stays on the device')}
           </small>
         </button>
-        <button data-nav className="menu-item danger" onClick={() => run(destroy(t.id), tr('Transfer and data deleted'))}>
+        <button
+          data-nav
+          className="menu-item danger"
+          onClick={() => run(installed ? api.installDeleteDownload(t.infoHash) : destroy(t.id), tr('Transfer and data deleted'))}
+        >
           {tr('Also delete the data')}
-          <small>{tr('Erases the {size} already downloaded', { size: formatBytes(t.progress * t.totalBytes) })}</small>
+          <small>
+            {installed
+              ? tr('Erases the {size} downloaded and what was extracted from it; the game stays in Games', {
+                  size: formatBytes(t.progress * t.totalBytes),
+                })
+              : tr('Erases the {size} already downloaded', { size: formatBytes(t.progress * t.totalBytes) })}
+          </small>
         </button>
         <button data-nav className="menu-item" onClick={onClose}>
           {tr('Cancel')}

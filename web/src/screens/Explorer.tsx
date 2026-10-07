@@ -1,14 +1,17 @@
-// Two-pane, FTP-style explorer: a network share or this device's own storage
-// on the left, the device's places on the right. Driven entirely by the
-// controller (custom list navigation, so folders with tens of thousands of
-// entries stay instant via virtualization). Transfers can open a finished
-// download here (request), already selected and ready to copy anywhere.
+// Two-pane explorer, driven by the controller. Both panes are alike and start
+// in the home folder; each can go to any quick location — folders and cards,
+// Steam libraries, each non-Steam game's prefix (its C:), network shares —
+// with L2/R2 or the pane's header, and shows how full its disk is. Y copies
+// what's marked (or the item under the cursor) into the folder open on the
+// other side. Other tabs open a folder here, on the left (`request`). Lists
+// are virtualized, so folders with tens of thousands of entries stay instant.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { type Entry, type Place, type Source, api, formatBytes, joinPath, parentPath } from '../api'
 import { type Action, focusFirst, input } from '../input'
 import { guessSystem } from '../systems'
 import { tr, trn } from '../i18n'
+import { StorageCard, StorageStatus, homePath } from '../storage'
 import { Dialog, type Hint, Icon, Spinner, TextPrompt, toast, useHints } from '../ui'
 
 const ROW_H = 46
@@ -18,6 +21,7 @@ const ROW_H = 46
 interface Listing {
   entries: Entry[]
   free?: number | null
+  total?: number | null
 }
 const cache = new Map<string, Listing>()
 
@@ -50,27 +54,77 @@ function useListing(key: string | null, load: () => Promise<Listing>) {
   return { ...state, reload: () => setNonce(n => n + 1) }
 }
 
+// ---------- locations ----------
+
+/** Where a pane is: this device (absolute paths) or a network share (paths inside it). */
+type Where = { kind: 'local' } | { kind: 'smb'; id: string }
+
+/** A quick location: a place on this device or a network share. */
+interface Loc {
+  id: string
+  label: string
+  icon: string
+  where: Where
+  /** Absolute path (device) or the share's start folder. */
+  path: string
+  group: Place['group'] | 'network'
+  free?: number
+  total?: number
+  disk?: string
+}
+
+function roster(places: Place[], sources: Source[]): Loc[] {
+  const order: Record<Loc['group'], number> = { place: 0, library: 1, prefix: 2, network: 3 }
+  const local: Loc[] = places.map(p => ({
+    id: p.id,
+    label: p.label,
+    icon: p.icon,
+    where: { kind: 'local' },
+    path: p.path,
+    group: p.group ?? 'place',
+    free: p.free,
+    total: p.total,
+    disk: p.disk,
+  }))
+  // Home first: both panes start there.
+  local.sort((a, b) => order[a.group] - order[b.group] || (a.id === 'home' ? -1 : b.id === 'home' ? 1 : 0))
+  const shares: Loc[] = sources.map(s => ({
+    id: `smb:${s.id}`,
+    label: s.name,
+    icon: 'network',
+    where: { kind: 'smb', id: s.id },
+    path: s.base_path,
+    group: 'network',
+    disk: `\\\\${s.host}\\${s.share}`,
+  }))
+  return [...local, ...shares]
+}
+
+const sameWhere = (a: Where, b: Where) => a.kind === b.kind && (a.kind === 'local' || (b.kind === 'smb' && a.id === b.id))
+
+/** The quick location a pane's folder is in (the deepest match). */
+function locFor(locs: Loc[], where: Where, path: string): Loc | undefined {
+  return locs
+    .filter(l => sameWhere(l.where, where))
+    .filter(l => path === l.path || path.startsWith(l.path.endsWith('/') ? l.path : `${l.path}/`) || (where.kind === 'smb' && !l.path))
+    .sort((a, b) => b.path.length - a.path.length)[0]
+}
+
 // ---------- remembered state across tab switches ----------
 
 interface PaneMem {
-  selected: number
+  where: Where
   path: string
   cursor: number
 }
-const memory: { panes: [PaneMem, PaneMem]; active: 0 | 1; handled: number } = {
-  panes: [
-    { selected: 0, path: '', cursor: 0 },
-    { selected: 0, path: '', cursor: 0 },
-  ],
+const memory: { panes: [PaneMem, PaneMem] | null; active: 0 | 1; handled: number } = {
+  panes: null,
   active: 0,
   /** Last request already applied (so coming back to the tab doesn't redo it). */
   handled: 0,
 }
 
-/** Left pane: a network share, or this device (absolute paths, after the shares). */
-type LeftSource = { kind: 'smb'; source: Source } | { kind: 'local' }
-
-/** Opens a local file or folder in the left pane, selected and ready to copy. */
+/** Opens a local folder in the left pane (or a file, selected in its folder). */
 export interface ExplorerRequest {
   path: string
   n: number
@@ -92,178 +146,178 @@ export default function Explorer({
   request?: ExplorerRequest | null
   onGoSettings: () => void
 }) {
+  const locs = useMemo(() => roster(places, sources), [places, sources])
+  const homeDir = places.find(p => p.id === 'home')?.path ?? ''
+  const start: PaneMem = { where: { kind: 'local' }, path: homeDir, cursor: 0 }
   const [active, setActive] = useState<0 | 1>(memory.active)
   const [head, setHead] = useState<[boolean, boolean]>([false, false])
-  const [left, setLeft] = useState<PaneMem>(memory.panes[0])
-  const [right, setRight] = useState<PaneMem>(memory.panes[1])
+  const [panes, setPanes] = useState<[PaneMem, PaneMem]>(memory.panes ?? [start, start])
   const [filters, setFilters] = useState<[string, string]>(['', ''])
-  const [marked, setMarked] = useState<Set<string>>(new Set())
-  const [dialog, setDialog] = useState<null | 'copy' | 'filter' | 'mkdir'>(null)
+  const [marked, setMarked] = useState<{ side: 0 | 1; names: Set<string> }>({ side: 0, names: new Set() })
+  const [dialog, setDialog] = useState<null | 'copy' | 'filter' | 'mkdir' | 'goto' | 'menu'>(null)
 
-  const leftSources = useMemo<LeftSource[]>(
-    () => [...sources.map(source => ({ kind: 'smb' as const, source })), { kind: 'local' as const }],
-    [sources],
-  )
-  const leftSrc = leftSources[Math.min(left.selected, leftSources.length - 1)]
-  const isLocal = leftSrc.kind === 'local'
-  const source = leftSrc.kind === 'smb' ? leftSrc.source : null
-  const place = places[Math.min(right.selected, places.length - 1)]
-  // Where "This device" starts: Downloads, where finished torrents land.
-  const localStart = places.find(p => p.id === 'downloads')?.path ?? places.find(p => p.id === 'home')?.path ?? '/'
+  const setPane = useCallback((side: 0 | 1, f: (p: PaneMem) => PaneMem) => {
+    setPanes(ps => (side === 0 ? [f(ps[0]), ps[1]] : [ps[0], f(ps[1])]))
+  }, [])
 
-  // First visit / changed selection: start at the source's base folder / place root.
+  // First visit: both panes in the home folder, once the places arrive.
   useEffect(() => {
-    if (source && !left.path && source.base_path) setLeft(p => ({ ...p, path: source.base_path }))
-    if (isLocal && !left.path && places.length) setLeft(p => ({ ...p, path: localStart }))
-  }, [source?.id, isLocal, places.length])
+    if (!homeDir) return
+    setPanes(ps => ps.map(p => (p.where.kind === 'local' && !p.path ? { ...p, path: homeDir } : p)) as [PaneMem, PaneMem])
+  }, [homeDir])
+  // A share deleted in Settings: back home.
   useEffect(() => {
-    if (place && (!right.path || !right.path.startsWith(place.path))) setRight(p => ({ ...p, path: place.path, cursor: 0 }))
-  }, [place?.id])
-
+    setPanes(
+      ps =>
+        ps.map(p => (p.where.kind === 'smb' && !sources.some(s => s.id === (p.where as { id: string }).id) ? { ...start, path: homeDir } : p)) as [
+          PaneMem,
+          PaneMem,
+        ],
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sources])
   useEffect(() => {
-    memory.panes = [left, right]
+    memory.panes = panes
     memory.active = active
-  }, [left, right, active])
+  }, [panes, active])
 
-  const srcList = useListing(isLocal ? (left.path ? `l:${left.path}` : null) : source ? `r:${source.id}:${left.path}` : null, async () => {
-    if (isLocal) {
-      const r = await api.listLocal(left.path)
-      return { entries: r.entries, free: r.free }
+  const keyOf = (p: PaneMem) => (p.where.kind === 'local' ? (p.path ? `l:${p.path}` : null) : `r:${p.where.id}:${p.path}`)
+  const loader = (p: PaneMem) => async (): Promise<Listing> => {
+    if (p.where.kind === 'local') {
+      const r = await api.listLocal(p.path)
+      return { entries: r.entries, free: r.free, total: r.total }
     }
-    const r = await api.listRemote(source!.id, left.path)
+    const r = await api.listRemote(p.where.id, p.path)
     return { entries: r.entries }
-  })
-  const local = useListing(place ? `l:${right.path}` : null, async () => {
-    const r = await api.listLocal(right.path)
-    return { entries: r.entries, free: r.free }
-  })
+  }
+  const listings = [useListing(keyOf(panes[0]), loader(panes[0])), useListing(keyOf(panes[1]), loader(panes[1]))] as const
 
-  const leftRows = useMemo(
-    () => rowsFor(srcList.data?.entries, filters[0], isLocal ? !!left.path && left.path !== '/' : left.path !== ''),
-    [srcList.data, filters, left.path, isLocal],
-  )
-  const rightRows = useMemo(
-    () => rowsFor(local.data?.entries, filters[1], !!place && right.path !== place.path),
-    [local.data, filters, right.path, place?.path],
-  )
+  const atRoot = (p: PaneMem) => (p.where.kind === 'local' ? !p.path || p.path === '/' : p.path === '')
+  const rows = [
+    useMemo(() => rowsFor(listings[0].data?.entries, filters[0], !atRoot(panes[0])), [listings[0].data, filters, panes[0]]),
+    useMemo(() => rowsFor(listings[1].data?.entries, filters[1], !atRoot(panes[1])), [listings[1].data, filters, panes[1]]),
+  ] as const
 
   // Clamp cursors when listings change size.
   useEffect(() => {
-    setLeft(p => (p.cursor >= leftRows.length && leftRows.length ? { ...p, cursor: leftRows.length - 1 } : p))
-  }, [leftRows.length])
-  useEffect(() => {
-    setRight(p => (p.cursor >= rightRows.length && rightRows.length ? { ...p, cursor: rightRows.length - 1 } : p))
-  }, [rightRows.length])
+    setPanes(ps =>
+      ps.map((p, i) => (p.cursor >= rows[i].length && rows[i].length ? { ...p, cursor: rows[i].length - 1 } : p)) as [PaneMem, PaneMem],
+    )
+  }, [rows[0].length, rows[1].length])
 
   const visibleRows = useRef(10)
+  const clearFilter = (side: 0 | 1) => setFilters(f => (side === 0 ? ['', f[1]] : [f[0], '']))
+  const clearMarks = () => setMarked(m => ({ side: m.side, names: new Set() }))
+
+  const goTo = (side: 0 | 1, where: Where, path: string, cursor = 0) => {
+    setPane(side, () => ({ where, path, cursor }))
+    clearFilter(side)
+    if (marked.side === side) clearMarks()
+  }
 
   const enter = (side: 0 | 1, row: Row | undefined) => {
     if (!row) return
-    const set = side === 0 ? setLeft : setRight
-    const cur = side === 0 ? left : right
     if (row.kind === 'up') {
       goUp(side)
       return
     }
     const e = row.entry!
-    if (e.dir) {
-      set({ ...cur, path: joinPath(cur.path, e.name), cursor: 0 })
-      setFilters(f => (side === 0 ? ['', f[1]] : [f[0], '']))
-      if (side === 0) setMarked(new Set())
-    } else if (side === 0) {
-      toggleMark(e.name)
-    }
+    const p = panes[side]
+    if (e.dir) goTo(side, p.where, joinPath(p.path, e.name))
+    else toggleMark(side, e.name)
   }
 
   const goUp = (side: 0 | 1) => {
-    if (side === 0) {
-      if (!left.path || (isLocal && left.path === '/')) return false
-      const from = left.path.split('/').pop() ?? ''
-      const parent = parentPath(left.path)
-      if (isLocal) {
-        const rows = cache.get(`l:${parent}`)?.entries ?? []
-        const idx = rows.findIndex(e => e.name === from)
-        setLeft({ ...left, path: parent, cursor: idx >= 0 ? idx + (parent !== '/' ? 1 : 0) : 0 })
-      } else {
-        const rows = cache.get(`r:${source?.id}:${parent}`)?.entries ?? []
-        const idx = rows.findIndex(e => e.name === from)
-        setLeft({ ...left, path: parent === '/' ? '' : parent, cursor: idx >= 0 ? idx + (parent ? 1 : 0) : 0 })
-      }
-      setMarked(new Set())
-      setFilters(f => ['', f[1]])
-      return true
-    }
-    if (!place || right.path === place.path) return false
-    const from = right.path.split('/').pop() ?? ''
-    const parent = parentPath(right.path)
-    const rows = cache.get(`l:${parent}`)?.entries ?? []
-    const idx = rows.findIndex(e => e.name === from)
-    setRight({ ...right, path: parent, cursor: idx >= 0 ? idx + (parent !== place.path ? 1 : 0) : 0 })
-    setFilters(f => [f[0], ''])
+    const p = panes[side]
+    if (atRoot(p)) return false
+    const from = p.path.split('/').pop() ?? ''
+    const parent = parentPath(p.path)
+    const to = p.where.kind === 'smb' && parent === '/' ? '' : parent || '/'
+    const key = p.where.kind === 'local' ? `l:${to}` : `r:${p.where.id}:${to}`
+    const idx = (cache.get(key)?.entries ?? []).findIndex(e => e.name === from)
+    const hasUp = !atRoot({ ...p, path: to })
+    goTo(side, p.where, to, idx >= 0 ? idx + (hasUp ? 1 : 0) : 0)
     return true
   }
 
-  const toggleMark = (name: string) =>
+  const toggleMark = (side: 0 | 1, name: string) =>
     setMarked(m => {
-      const n = new Set(m)
-      if (n.has(name)) n.delete(name)
-      else n.add(name)
-      return n
+      const names = new Set(m.side === side ? m.names : [])
+      if (names.has(name)) names.delete(name)
+      else names.add(name)
+      return { side, names }
     })
 
+  /** L2/R2 or the header: the previous/next quick location for a pane. */
   const cycle = (side: 0 | 1, d: number) => {
-    if (side === 0 && leftSources.length > 1) {
-      const next = (left.selected + d + leftSources.length) % leftSources.length
-      const to = leftSources[next]
-      setLeft({ selected: next, path: to.kind === 'smb' ? to.source.base_path : localStart, cursor: 0 })
-      setMarked(new Set())
-    } else if (side === 1 && places.length) {
-      const next = (right.selected + d + places.length) % places.length
-      setRight({ selected: next, path: places[next].path, cursor: 0 })
-    }
-    setFilters(f => (side === 0 ? ['', f[1]] : [f[0], '']))
+    if (!locs.length) return
+    const p = panes[side]
+    const cur = locFor(locs, p.where, p.path)
+    const i = cur ? locs.indexOf(cur) : -1
+    const next = locs[(i + d + locs.length) % locs.length]
+    goTo(side, next.where, next.path)
   }
 
-  // Transfers → Explore: the download is selected in its folder; Y copies it.
+  // Another tab → Explore: that folder open on the left (a file: selected in its folder).
   useEffect(() => {
     if (!request || request.n === memory.handled) return
     memory.handled = request.n
     const target = request.path.replace(/\/+$/, '') || '/'
-    const parent = parentPath(target) || '/'
-    const name = target.split('/').pop() ?? ''
     setActive(0)
     setHead(h => [false, h[1]])
-    setFilters(f => ['', f[1]])
+    clearFilter(0)
     api
-      .listLocal(parent)
+      .listLocal(target)
       .then(r => {
-        cache.set(`l:${parent}`, { entries: r.entries, free: r.free })
-        const idx = r.entries.findIndex(e => e.name === name)
-        setLeft({ selected: sources.length, path: parent, cursor: idx >= 0 ? idx + (parent !== '/' ? 1 : 0) : 0 })
-        setMarked(idx >= 0 ? new Set([name]) : new Set())
-        if (idx < 0) toast(tr('Not found'), target, 'error')
+        cache.set(`l:${target}`, { entries: r.entries, free: r.free, total: r.total })
+        goTo(0, { kind: 'local' }, target)
       })
-      .catch(e => toast(tr("Couldn't open {path}", { path: parent }), String((e as Error).message), 'error'))
-  }, [request, sources.length])
+      .catch(() => {
+        // Not a folder: open the one around it with the file selected.
+        const parent = parentPath(target) || '/'
+        const name = target.split('/').pop() ?? ''
+        api
+          .listLocal(parent)
+          .then(r => {
+            cache.set(`l:${parent}`, { entries: r.entries, free: r.free, total: r.total })
+            const idx = r.entries.findIndex(e => e.name === name)
+            goTo(0, { kind: 'local' }, parent, idx >= 0 ? idx + (parent !== '/' ? 1 : 0) : 0)
+            if (idx >= 0) setMarked({ side: 0, names: new Set([name]) })
+            else toast(tr('Not found'), target, 'error')
+          })
+          .catch(e => toast(tr("Couldn't open {path}", { path: parent }), String((e as Error).message), 'error'))
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request])
 
-  const copyItems = () => {
-    if (marked.size) {
-      return srcList.data?.entries.filter(e => marked.has(e.name)) ?? []
-    }
-    const row = leftRows[left.cursor]
+  const copyItems = (side: 0 | 1) => {
+    const entries = listings[side].data?.entries ?? []
+    if (marked.side === side && marked.names.size) return entries.filter(e => marked.names.has(e.name))
+    const row = rows[side][panes[side].cursor]
     return row?.kind === 'entry' ? [row.entry!] : []
+  }
+  const other = (side: 0 | 1) => (side === 0 ? 1 : 0) as 0 | 1
+  const startCopy = () => {
+    const to = panes[other(active)]
+    if (to.where.kind !== 'local') {
+      toast(tr("Can't copy to network storage"), tr('Open a folder of this device on the other side.'), 'error')
+      return
+    }
+    if (copyItems(active).length) setDialog('copy')
   }
 
   // ---------- controller ----------
   const handlerRef = useRef<(a: Action) => boolean>(() => false)
   handlerRef.current = (a: Action) => {
     const side = active
-    const cur = side === 0 ? left : right
-    const set = side === 0 ? setLeft : setRight
-    const rows = side === 0 ? leftRows : rightRows
-    const page = Math.max(1, visibleRows.current - 1)
-    const move = (to: number) => set({ ...cur, cursor: Math.max(0, Math.min(rows.length - 1, to)) })
+    const cur = panes[side]
+    const list = rows[side]
+    const move = (to: number) => setPane(side, p => ({ ...p, cursor: Math.max(0, Math.min(list.length - 1, to)) }))
 
+    if (a === 'lt' || a === 'rt') {
+      cycle(side, a === 'lt' ? -1 : 1)
+      return true
+    }
     if (head[side]) {
       switch (a) {
         case 'left':
@@ -277,9 +331,7 @@ export default function Explorer({
           setHead(h => (side === 0 ? [false, h[1]] : [h[0], false]))
           return true
         case 'confirm':
-          // Only "This device" on the left: A sets up a network share instead.
-          if (side === 0 && !sources.length) onGoSettings()
-          else cycle(side, 1)
+          setDialog('goto')
           return true
         default:
           return a === 'up'
@@ -294,12 +346,6 @@ export default function Explorer({
       case 'down':
         move(cur.cursor + 1)
         return true
-      case 'lt':
-        move(cur.cursor - page)
-        return true
-      case 'rt':
-        move(cur.cursor + page)
-        return true
       case 'left':
         setActive(0)
         return true
@@ -307,42 +353,36 @@ export default function Explorer({
         setActive(1)
         return true
       case 'confirm':
-        enter(side, rows[cur.cursor])
+        enter(side, list[cur.cursor])
         return true
       case 'back':
         if (filters[side]) {
-          setFilters(f => (side === 0 ? ['', f[1]] : [f[0], '']))
+          clearFilter(side)
           return true
         }
-        if (side === 0 && marked.size) {
-          setMarked(new Set())
+        if (marked.side === side && marked.names.size) {
+          clearMarks()
           return true
         }
         return goUp(side)
-      case 'x':
-        if (side === 0) {
-          const row = rows[cur.cursor]
-          if (row?.kind === 'entry') {
-            toggleMark(row.entry!.name)
-            move(cur.cursor + 1)
-          }
+      case 'x': {
+        const row = list[cur.cursor]
+        if (row?.kind === 'entry') {
+          toggleMark(side, row.entry!.name)
+          move(cur.cursor + 1)
         }
         return true
-      case 'view':
-        if (side === 0) {
-          const all = (srcList.data?.entries ?? []).filter(e => !filters[0] || e.name.toLowerCase().includes(filters[0].toLowerCase()))
-          setMarked(marked.size ? new Set() : new Set(all.map(e => e.name)))
-        }
+      }
+      case 'view': {
+        const all = (listings[side].data?.entries ?? []).filter(e => !filters[side] || e.name.toLowerCase().includes(filters[side].toLowerCase()))
+        setMarked(m => (m.side === side && m.names.size ? { side, names: new Set() } : { side, names: new Set(all.map(e => e.name)) }))
         return true
+      }
       case 'y':
-        if (side === 0) {
-          if (copyItems().length) setDialog('copy')
-        } else if (place) {
-          setDialog('mkdir')
-        }
+        startCopy()
         return true
       case 'menu':
-        setDialog('filter')
+        setDialog('menu')
         return true
       default:
         return false
@@ -369,125 +409,206 @@ export default function Explorer({
     })
   }, [dialog])
 
+  const markedHere = marked.side === active ? marked.names.size : 0
   const hints: Hint[] = head[active]
-    ? active === 0 && !sources.length
-      ? [
-          { glyph: 'A', label: tr('Add network storage') },
-          { glyph: 'B', label: tr('List') },
-        ]
-      : [
-          { glyph: 'DPAD', label: active === 0 ? tr('Switch source') : tr('Switch location') },
-          { glyph: 'B', label: tr('List') },
-        ]
-    : active === 0
-      ? [
-          { glyph: 'A', label: tr('Open') },
-          { glyph: 'X', label: tr('Mark') },
-          { glyph: 'Y', label: marked.size ? tr('Copy {n}', { n: marked.size }) : tr('Copy') },
-          { glyph: 'MENU', label: tr('Search') },
-          { glyph: 'B', label: tr('Back') },
-        ]
-      : [
-          { glyph: 'A', label: tr('Open') },
-          { glyph: 'Y', label: tr('New folder') },
-          { glyph: 'MENU', label: tr('Search') },
-          { glyph: 'B', label: tr('Back') },
-        ]
+    ? [
+        { glyph: 'A', label: tr('Go to…') },
+        { glyph: 'DPAD', label: tr('Switch location') },
+        { glyph: 'B', label: tr('List') },
+      ]
+    : [
+        { glyph: 'A', label: tr('Open') },
+        { glyph: 'X', label: tr('Mark') },
+        { glyph: 'Y', label: markedHere ? tr('Copy {n}', { n: markedHere }) : tr('Copy') },
+        { glyph: ['L2', 'R2'], label: tr('Location') },
+        { glyph: 'MENU', label: tr('Options') },
+        { glyph: 'B', label: tr('Back') },
+      ]
   useHints(dialog ? null : hints)
 
-  const freeRight = local.data?.free ?? place?.free ?? 0
+  const pane = (side: 0 | 1) => {
+    const p = panes[side]
+    const l = listings[side]
+    const here = locFor(locs, p.where, p.path)
+    const src = p.where.kind === 'smb' ? sources.find(s => s.id === (p.where as { id: string }).id) : null
+    const name = p.path.split('/').filter(Boolean).pop()
+    return (
+      <Pane
+        side={side}
+        active={active === side}
+        headFocused={head[side]}
+        title={src ? src.name : here && here.path === p.path ? here.label : (name ?? '/')}
+        subtitle={src ? `\\\\${src.host}\\${src.share}` : here && here.path !== p.path ? here.label : groupLabel(here?.group)}
+        icon={src ? 'network' : (here?.icon ?? 'folder')}
+        path={src ? `/${p.path}` : homePath(p.path)}
+        local={p.where.kind === 'local'}
+        free={l.data?.free}
+        total={l.data?.total}
+        disk={here?.disk}
+        rows={rows[side]}
+        cursor={p.cursor}
+        marked={marked.side === side ? marked.names : new Set()}
+        loading={l.loading && !l.data}
+        refreshing={l.loading && !!l.data}
+        error={l.error}
+        filter={filters[side]}
+        status={statusLine(l.data?.entries, marked.side === side ? marked.names : new Set(), filters[side])}
+        visibleRows={visibleRows}
+        onRowClick={i => {
+          setActive(side)
+          if (i === p.cursor) enter(side, rows[side][i])
+          else setPane(side, q => ({ ...q, cursor: i }))
+        }}
+        onHeadClick={() => {
+          setActive(side)
+          setDialog('goto')
+        }}
+        onRetry={l.reload}
+      />
+    )
+  }
 
+  const to = panes[other(active)]
+  const toListing = listings[other(active)]
+  const from = panes[active]
   return (
     <div className="explorer">
-      <Pane
-        side={0}
-        active={active === 0}
-        headFocused={head[0]}
-        kind={tr('FROM')}
-        title={isLocal ? tr('This device') : (source?.name ?? '')}
-        subtitle={isLocal ? tr('Files on this device') : `\\\\${source?.host}\\${source?.share}`}
-        icon={isLocal ? 'home' : 'network'}
-        canCycle={leftSources.length > 1}
-        path={isLocal ? left.path : `/${left.path}`}
-        rows={leftRows}
-        cursor={left.cursor}
-        marked={marked}
-        loading={srcList.loading && !srcList.data}
-        refreshing={srcList.loading && !!srcList.data}
-        error={srcList.error}
-        filter={filters[0]}
-        status={statusLine(srcList.data?.entries, marked, filters[0])}
-        visibleRows={visibleRows}
-        onRowClick={i => {
-          setActive(0)
-          if (i === left.cursor) enter(0, leftRows[i])
-          else setLeft({ ...left, cursor: i })
-        }}
-        onHeadClick={() => (sources.length ? cycle(0, 1) : onGoSettings())}
-        onRetry={srcList.reload}
-      />
-      <Pane
-        side={1}
-        active={active === 1}
-        headFocused={head[1]}
-        kind={tr('TO')}
-        title={place?.label ?? ''}
-        subtitle={place ? tr('{size} free', { size: formatBytes(freeRight) }) : ''}
-        icon={place?.icon ?? 'folder'}
-        canCycle={places.length > 1}
-        path={right.path}
-        rows={rightRows}
-        cursor={right.cursor}
-        marked={new Set()}
-        loading={local.loading && !local.data}
-        refreshing={local.loading && !!local.data}
-        error={local.error}
-        filter={filters[1]}
-        status={statusLine(local.data?.entries, new Set(), filters[1])}
-        visibleRows={visibleRows}
-        onRowClick={i => {
-          setActive(1)
-          if (i === right.cursor) enter(1, rightRows[i])
-          else setRight({ ...right, cursor: i })
-        }}
-        onHeadClick={() => cycle(1, 1)}
-        onRetry={local.reload}
-      />
+      {pane(0)}
+      {pane(1)}
 
-      {dialog === 'copy' && (source || isLocal) && place && (
+      {dialog === 'copy' && to.where.kind === 'local' && (
         <CopyDialog
-          sourceId={isLocal ? 'local' : source!.id}
-          remotePath={left.path}
-          items={copyItems()}
-          destPath={right.path}
-          destFree={freeRight}
+          sourceId={from.where.kind === 'local' ? 'local' : from.where.id}
+          remotePath={from.path}
+          items={copyItems(active)}
+          destPath={to.path}
+          destFree={toListing.data?.free}
+          destTotal={toListing.data?.total}
+          destDisk={locFor(locs, to.where, to.path)?.disk}
           romsRoot={places.find(p => p.icon === 'roms')?.path}
           onClose={() => setDialog(null)}
           onQueued={n => {
             setDialog(null)
-            setMarked(new Set())
-            toast(trn(n, '{n} item added to the queue', '{n} items added to the queue'), tr('Track it in Transfers (R1)'), 'ok')
+            clearMarks()
+            toast(trn(n, '{n} item added to the queue', '{n} items added to the queue'), tr('Track it in Transfers'), 'ok')
           }}
         />
       )}
+      {dialog === 'goto' && (
+        <Dialog title={tr('Go to…')} onClose={() => setDialog(null)} wide>
+          <div className="inst-list scroll goto-list">
+            {(['place', 'library', 'prefix', 'network'] as const).map(g => {
+              const items = locs.filter(l => l.group === g)
+              if (!items.length) return null
+              const cur = locFor(locs, panes[active].where, panes[active].path)
+              return (
+                <div key={g} className="goto-group">
+                  <h4 className="inst-sub">
+                    {g === 'place' ? tr('This device') : g === 'library' ? tr('Steam libraries') : g === 'prefix' ? tr('Game prefixes (C:)') : tr('Network storage')}
+                  </h4>
+                  {items.map(l =>
+                    l.group === 'network' ? (
+                      <button
+                        key={l.id}
+                        data-nav
+                        data-nav-default={cur?.id === l.id ? '' : undefined}
+                        className="dest-option"
+                        onClick={() => {
+                          setDialog(null)
+                          goTo(active, l.where, l.path)
+                        }}
+                      >
+                        <Icon name="network" size={26} />
+                        <div>
+                          <b>{l.label}</b>
+                          <small>{l.disk}</small>
+                        </div>
+                      </button>
+                    ) : (
+                      <StorageCard
+                        key={l.id}
+                        icon={l.icon}
+                        title={l.label}
+                        path={l.path}
+                        free={l.free}
+                        total={l.total}
+                        disk={l.disk}
+                        selected={cur?.id === l.id}
+                        navDefault={cur?.id === l.id}
+                        onClick={() => {
+                          setDialog(null)
+                          goTo(active, l.where, l.path)
+                        }}
+                      />
+                    ),
+                  )}
+                </div>
+              )
+            })}
+            {!sources.length && (
+              <button
+                data-nav
+                className="dest-option"
+                onClick={() => {
+                  setDialog(null)
+                  onGoSettings()
+                }}
+              >
+                <Icon name="plus" size={26} />
+                <div>
+                  <b>{tr('Add network storage')}</b>
+                  <small>{tr('Settings → Game sources')}</small>
+                </div>
+              </button>
+            )}
+          </div>
+        </Dialog>
+      )}
+      {dialog === 'menu' && (
+        <Dialog title={tr('Options')} onClose={() => setDialog(null)}>
+          <div className="menu-list">
+            <button data-nav data-nav-default className="menu-item" onClick={() => setDialog('goto')}>
+              {tr('Go to…')}
+              <small>{tr('Folders, cards, Steam libraries, game prefixes, network storage')}</small>
+            </button>
+            <button data-nav className="menu-item" onClick={() => setDialog('filter')}>
+              {tr('Search this folder')}
+            </button>
+            {panes[active].where.kind === 'local' && (
+              <button data-nav className="menu-item" onClick={() => setDialog('mkdir')}>
+                {tr('New folder')}
+              </button>
+            )}
+            <button
+              data-nav
+              className="menu-item"
+              onClick={() => {
+                setDialog(null)
+                handlerRef.current('view')
+              }}
+            >
+              {markedHere ? tr('Unmark all') : tr('Mark all')}
+            </button>
+          </div>
+        </Dialog>
+      )}
       {dialog === 'filter' && (
         <TextPrompt
-          title={active === 0 ? tr('Search the source') : tr('Search the destination')}
+          title={tr('Search this folder')}
           placeholder={tr('Part of the name…')}
           initial={filters[active]}
           submitLabel={tr('Filter')}
           onCancel={() => setDialog(null)}
           onSubmit={v => {
             setFilters(f => (active === 0 ? [v, f[1]] : [f[0], v]))
-            if (active === 0) setLeft(p => ({ ...p, cursor: 0 }))
-            else setRight(p => ({ ...p, cursor: 0 }))
+            setPane(active, p => ({ ...p, cursor: 0 }))
             setDialog(null)
           }}
         />
       )}
       {dialog === 'mkdir' && (
         <TextPrompt
-          title={tr('New folder in {path}', { path: right.path })}
+          title={tr('New folder in {path}', { path: homePath(panes[active].path) })}
           placeholder={tr('Folder name')}
           submitLabel={tr('Create')}
           validate={v => v.length > 0 && !v.includes('/')}
@@ -495,8 +616,8 @@ export default function Explorer({
           onSubmit={async v => {
             setDialog(null)
             try {
-              await api.mkdir(joinPath(right.path, v))
-              local.reload()
+              await api.mkdir(joinPath(panes[active].path, v))
+              listings[active].reload()
               toast(tr('Folder created'), v, 'ok')
             } catch (e) {
               toast(tr("Couldn't create the folder"), String((e as Error).message), 'error')
@@ -506,6 +627,20 @@ export default function Explorer({
       )}
     </div>
   )
+}
+
+/** What kind of place a location is, under its name in a pane's header. */
+function groupLabel(g?: Loc['group']) {
+  switch (g) {
+    case 'library':
+      return tr('Steam library')
+    case 'prefix':
+      return tr('Game prefix (C:)')
+    case 'network':
+      return tr('Network storage')
+    default:
+      return tr('This device')
+  }
 }
 
 function rowsFor(entries: Entry[] | undefined, filter: string, withUp: boolean): Row[] {
@@ -535,12 +670,14 @@ function Pane(props: {
   side: 0 | 1
   active: boolean
   headFocused: boolean
-  kind: string
   title: string
   subtitle: string
   icon: string
-  canCycle: boolean
   path: string
+  local: boolean
+  free?: number | null
+  total?: number | null
+  disk?: string
   rows: Row[]
   cursor: number
   marked: Set<string>
@@ -587,11 +724,7 @@ function Pane(props: {
 
   return (
     <section className={`pane ${active ? 'active' : ''}`}>
-      <header
-        className={`pane-head ${props.headFocused && active ? 'focused' : ''}`}
-        onClick={props.onHeadClick}
-      >
-        <span className="pane-kind">{props.kind}</span>
+      <header className={`pane-head ${props.headFocused && active ? 'focused' : ''}`} onClick={props.onHeadClick}>
         <div className="pane-title">
           <Icon name={props.icon} size={26} />
           <div>
@@ -599,11 +732,13 @@ function Pane(props: {
             <small>{props.subtitle}</small>
           </div>
         </div>
-        {props.canCycle && <span className="pane-cycle">◀ ▶</span>}
+        {props.local ? <StorageStatus free={props.free} total={props.total} disk={props.disk} /> : <span className="pane-cycle">L2 ◀ ▶ R2</span>}
       </header>
       <div className="pane-path" title={props.path}>
         {props.refreshing && <Spinner />}
-        <span>{props.path}</span>
+        {/* Left-to-right marks: the line is right-aligned (long paths keep their
+            end), which would otherwise move a leading "~/" or "/" to the end. */}
+        <span>{`\u200E${props.path}\u200E`}</span>
       </div>
       <div className="pane-list" ref={listRef}>
         {props.loading && (
@@ -644,9 +779,7 @@ function Pane(props: {
                   </>
                 ) : (
                   <>
-                    {props.side === 0 && (
-                      <span className={`check ${isMarked ? 'on' : ''}`}>{isMarked && <Icon name="check" size={16} />}</span>
-                    )}
+                    <span className={`check ${isMarked ? 'on' : ''}`}>{isMarked && <Icon name="check" size={16} />}</span>
                     <Icon name={e!.dir ? 'folder' : 'file'} />
                     <span className="frow-name">{e!.name}</span>
                     <span className="frow-meta">{e!.dir ? '' : formatBytes(e!.size)}</span>
@@ -670,6 +803,8 @@ function CopyDialog({
   items,
   destPath,
   destFree,
+  destTotal,
+  destDisk,
   romsRoot,
   onClose,
   onQueued,
@@ -679,7 +814,9 @@ function CopyDialog({
   remotePath: string
   items: Entry[]
   destPath: string
-  destFree: number
+  destFree?: number | null
+  destTotal?: number | null
+  destDisk?: string
   romsRoot?: string
   onClose: () => void
   onQueued: (n: number) => void
@@ -710,6 +847,7 @@ function CopyDialog({
 
   const knownSize = items.reduce((s, e) => s + e.size, 0)
   const hasDirs = items.some(e => e.dir)
+  const tight = destFree != null && knownSize > 0 && destFree < knownSize
 
   const queue = useCallback(
     async (dest: string) => {
@@ -751,9 +889,6 @@ function CopyDialog({
             {tr('Size:')} <b>{knownSize ? formatBytes(knownSize) : '—'}</b>
             {hasDirs && ` ${tr('+ folder contents')}`}
           </span>
-          <span>
-            {tr('Free at destination:')} <b>{formatBytes(destFree)}</b>
-          </span>
         </div>
       </div>
       <div className="dest-options">
@@ -763,28 +898,32 @@ function CopyDialog({
           </div>
         )}
         {ready && suggested && (
-          <button data-nav data-nav-default className="dest-option suggested" disabled={busy} onClick={() => queue(suggested)}>
-            <Icon name="roms" size={26} />
-            <div>
-              <b>{tr('Copy to roms/{system}', { system: system ?? '' })}</b>
-              <small>{tr('Suggested — emulator folder detected')}</small>
-            </div>
-          </button>
+          <StorageCard
+            icon="roms"
+            title={tr('Copy to roms/{system}', { system: system ?? '' })}
+            path={suggested}
+            note={tr('Suggested — emulator folder detected')}
+            free={destFree}
+            total={destTotal}
+            disk={destDisk}
+            disabled={busy}
+            navDefault
+            onClick={() => void queue(suggested)}
+          />
         )}
         {ready && (
-        <button
-          data-nav
-          data-nav-default={suggested ? undefined : ''}
-          className="dest-option"
-          disabled={busy}
-          onClick={() => queue(destPath)}
-        >
-          <Icon name="folder" size={26} />
-          <div>
-            <b>{tr('Copy to the folder open on the destination')}</b>
-            <small>{destPath}</small>
-          </div>
-        </button>
+          <StorageCard
+            icon="folder"
+            title={tr('Copy to the folder open on the other side')}
+            path={destPath}
+            warn={tight ? tr('Not enough free space there.') : null}
+            free={destFree}
+            total={destTotal}
+            disk={destDisk}
+            disabled={busy}
+            navDefault={!suggested}
+            onClick={() => void queue(destPath)}
+          />
         )}
       </div>
       <div className="dialog-actions">

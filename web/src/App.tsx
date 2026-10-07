@@ -3,6 +3,7 @@ import { type Job, type Place, type Source, api, formatBytes } from './api'
 import { locale, setLang, tr, useLang } from './i18n'
 import { focusFirst, input } from './input'
 import Explorer, { type ExplorerRequest } from './screens/Explorer'
+import Games, { type GamesRequest } from './screens/Games'
 import Jobs from './screens/Jobs'
 import Settings, { type SettingsSection } from './screens/Settings'
 import Discover from './screens/Discover'
@@ -11,14 +12,16 @@ import { useEngineState } from './screens/Torrents'
 import { setTorrentApi } from './torrent'
 import { Dialog, Footer, Glyph, Spinner, Toasts, toast } from './ui'
 
-export type Tab = 'discover' | 'store' | 'explorer' | 'jobs' | 'settings'
+export type Tab = 'discover' | 'store' | 'jobs' | 'games' | 'explorer' | 'settings'
 
-// Labels are functions so they follow the current language.
+// Labels are functions so they follow the current language. In the order a
+// game goes: found, downloaded, installed; then files and settings.
 const TABS: Array<[Tab, () => string]> = [
   ['discover', () => tr('Discover')],
   ['store', () => tr('Store')],
-  ['explorer', () => tr('Explore')],
   ['jobs', () => tr('Transfers')],
+  ['games', () => tr('Games')],
+  ['explorer', () => tr('Explore')],
   ['settings', () => tr('Settings')],
 ]
 
@@ -58,6 +61,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('discover')
   const [storeRequest, setStoreRequest] = useState<StoreRequest | null>(null)
   const [explorerRequest, setExplorerRequest] = useState<ExplorerRequest | null>(null)
+  const [gamesRequest, setGamesRequest] = useState<GamesRequest | null>(null)
   const [sources, setSources] = useState<Source[]>([])
   const [places, setPlaces] = useState<Place[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
@@ -121,6 +125,16 @@ export default function App() {
   const goSettings = (s: SettingsSection) => {
     go('settings')
     setSettingsAt(s)
+  }
+  /** Explore, with a folder open on the left. */
+  const explore = (path: string) => {
+    setExplorerRequest({ path, n: Date.now() })
+    go('explorer')
+  }
+  /** Games, on a game's page. */
+  const openGame = (appid: number) => {
+    setGamesRequest({ appid, n: Date.now() })
+    go('games')
   }
 
   useEffect(() => {
@@ -220,16 +234,9 @@ export default function App() {
           <Explorer sources={sources} places={places} request={explorerRequest} onGoSettings={() => go('settings')} />
         )}
         {tab === 'jobs' && (
-          <Jobs
-            jobs={jobs}
-            refresh={loadJobs}
-            downloadDir={info?.download_dir}
-            onExplore={path => {
-              setExplorerRequest({ path, n: Date.now() })
-              go('explorer')
-            }}
-          />
+          <Jobs jobs={jobs} refresh={loadJobs} downloadDir={info?.download_dir} onExplore={explore} onOpenGame={openGame} />
         )}
+        {tab === 'games' && <Games request={gamesRequest} onExplore={explore} />}
         {tab === 'settings' && <Settings sources={sources} reloadSources={loadSources} info={info} initialSection={settingsAt} />}
       </main>
 

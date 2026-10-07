@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { type Art, type DiscoverGame, type GameHint, type LibraryGame, type Place, type Release, type ReleaseDetails, api, formatBytes, imgUrl } from '../api'
 import { locale, tr, trn } from '../i18n'
 import { ensureVisible, focusFirst, input } from '../input'
+import DirPicker from './DirPicker'
+import { StorageCard, useSpace } from '../storage'
 import { Dialog, type Hint, Icon, Spinner, TextPrompt, toast, useHints } from '../ui'
 
 export type Kind = 'console' | 'pc'
@@ -752,22 +754,12 @@ function DownloadDialog({
   onClose: () => void
 }) {
   const [busy, setBusy] = useState(false)
-  const [romsDirs, setRomsDirs] = useState<string[] | null>(null)
-  const romsRoot = places.find(p => p.icon === 'roms')?.path
-  const sys = r.parsed.platform
-
-  useEffect(() => {
-    if (!romsRoot) return setRomsDirs([])
-    api
-      .listLocal(romsRoot)
-      .then(x => setRomsDirs(x.entries.filter(e => e.dir).map(e => e.name)))
-      .catch(() => setRomsDirs([]))
-  }, [romsRoot])
-  useEffect(() => {
-    if (romsDirs) requestAnimationFrame(focusFirst)
-  }, [romsDirs])
-
-  const romsTarget = romsRoot && sys && romsDirs?.includes(sys) ? `${romsRoot}/${sys}` : null
+  const [custom, setCustom] = useState<string | null>(null)
+  const [picking, setPicking] = useState(false)
+  const downloads = places.find(p => p.id === 'downloads')
+  const customSpace = useSpace(custom)
+  // Not enough room: the release's size plus a little headroom.
+  const tight = (free?: number | null) => free != null && free < r.size + (256 << 20)
 
   const go = async (dest?: string) => {
     setBusy(true)
@@ -781,6 +773,20 @@ function DownloadDialog({
     }
   }
 
+  if (picking) {
+    return (
+      <DirPicker
+        title={tr('Where to download')}
+        start={custom ?? downloads?.path ?? '/'}
+        confirmLabel={tr('Download here')}
+        onClose={() => setPicking(false)}
+        onPick={p => {
+          setCustom(p)
+          setPicking(false)
+        }}
+      />
+    )
+  }
   return (
     <Dialog title={tr('Download')} onClose={onClose} wide>
       <div className="copy-facts">
@@ -797,29 +803,41 @@ function DownloadDialog({
         </span>
       </div>
       <div className="dest-options">
-        {!romsDirs && (
-          <div className="muted">
-            <Spinner /> {tr("Looking for the emulator's folder…")}
+        {downloads && (
+          <StorageCard
+            icon="download"
+            title={tr('Save to Downloads')}
+            path={`${downloads.path}/piShop/<${tr('torrent name')}>`}
+            free={downloads.free}
+            total={downloads.total}
+            disk={downloads.disk}
+            warn={tight(downloads.free) ? tr('Not enough free space there.') : null}
+            disabled={busy}
+            navDefault={!custom}
+            onClick={() => void go()}
+          />
+        )}
+        {custom && (
+          <StorageCard
+            icon="folder"
+            title={tr('Save to the folder you picked')}
+            path={custom}
+            free={customSpace?.free}
+            total={customSpace?.total}
+            disk={customSpace?.disk}
+            warn={tight(customSpace?.free) ? tr('Not enough free space there.') : null}
+            disabled={busy}
+            navDefault
+            onClick={() => void go(custom)}
+          />
+        )}
+        <button data-nav className="dest-option" disabled={busy} onClick={() => setPicking(true)}>
+          <Icon name="folder" size={26} />
+          <div>
+            <b>{custom ? tr('Pick another folder…') : tr('Custom…')}</b>
+            <small>{tr('Any folder: a card, a drive, another place on this device')}</small>
           </div>
-        )}
-        {romsDirs && romsTarget && (
-          <button data-nav data-nav-default className="dest-option suggested" disabled={busy} onClick={() => go(romsTarget)}>
-            <Icon name="roms" size={26} />
-            <div>
-              <b>{tr('Download straight into roms/{sys}', { sys: sys ?? '' })}</b>
-              <small>{tr("Suggested — the files go to the emulator's folder")}</small>
-            </div>
-          </button>
-        )}
-        {romsDirs && (
-          <button data-nav data-nav-default={romsTarget ? undefined : ''} className="dest-option" disabled={busy} onClick={() => go()}>
-            <Icon name="download" size={26} />
-            <div>
-              <b>{tr('Save to Downloads')}</b>
-              <small>~/Downloads/piShop/&lt;{tr('torrent name')}&gt;</small>
-            </div>
-          </button>
-        )}
+        </button>
       </div>
       <div className="dialog-actions">
         <button data-nav className="btn" onClick={onClose}>

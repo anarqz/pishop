@@ -51,9 +51,6 @@
   "Download started": "Download iniciado",
   "{name} · follow it in Transfers": "{name} · acompanhe em Transferências",
   "Couldn't download": "Não foi possível baixar",
-  "Looking for the emulator's folder…": "Procurando a pasta do emulador…",
-  "Download straight into roms/{sys}": "Baixar direto em roms/{sys}",
-  "Suggested — the files go to the emulator's folder": "Sugerido — os arquivos vão para a pasta do emulador",
   "Save to Downloads": "Baixar em Downloads",
   "torrent name": "nome do torrent",
   "Cancel": "Cancelar",
@@ -62,5 +59,11 @@
   "Search by name. Results come from your Prowlarr indexers.": "Busque pelo nome. Os resultados vêm dos seus indexadores do Prowlarr.",
   "Search by name. Results come from The Pirate Bay.": "Busque pelo nome. Os resultados vêm do The Pirate Bay.",
   "Have Prowlarr? Add it in Settings → Services for more sources.": "Tem Prowlarr? Adicione em Configurações → Serviços para ter mais fontes.",
-  "Set up Prowlarr": "Configurar o Prowlarr"
+  "Set up Prowlarr": "Configurar o Prowlarr",
+  "Where to download": "Onde baixar",
+  "Download here": "Baixar aqui",
+  "Save to the folder you picked": "Salvar na pasta que você escolheu",
+  "Pick another folder…": "Escolher outra pasta…",
+  "Custom…": "Personalizado…",
+  "Any folder: a card, a drive, another place on this device": "Qualquer pasta: um cartão, um disco, outro lugar deste aparelho"
 }

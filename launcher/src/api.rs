@@ -23,6 +23,7 @@ pub fn router() -> Router {
         .route("/api/local/places", get(|| async { Json(localfs::places()) }))
         .route("/api/local/list", get(list_local))
         .route("/api/local/mkdir", post(mkdir))
+        .route("/api/local/space", get(local_space))
         .route("/api/jobs", get(|| async { Json(jobs::list()) }).post(create_jobs))
         .route("/api/jobs/clear", post(|| async { jobs::remove(None); StatusCode::NO_CONTENT }))
         .route("/api/jobs/{id}/{action}", post(job_action))
@@ -48,6 +49,8 @@ pub fn router() -> Router {
         .merge(crate::winetricks::router())
         .merge(crate::update::router())
         .merge(crate::vpn::router())
+        .merge(crate::games::router())
+        .merge(crate::patches::router())
         .route("/api/library", get(|| async { Json(crate::library::all()) }))
         .route("/api/focus", get(|| async { Json(json!({ "focused": crate::focus::focused() })) }))
         .route("/api/settings", get(|| async { Json(crate::settings::get()) }).post(save_settings))
@@ -57,7 +60,7 @@ pub fn router() -> Router {
         .route(
             "/api/library/{hash}",
             delete(|Path(hash): Path<String>| async move {
-                crate::library::remove(&hash);
+                crate::library::forget_download(&hash);
                 StatusCode::NO_CONTENT
             }),
         )
@@ -147,6 +150,24 @@ async fn list_local(Query(q): Query<PathQuery>) -> Response {
         Ok(Err(e)) => err(StatusCode::BAD_REQUEST, tr!("couldn't open {}: {e}", "não foi possível abrir {}: {e}", q.path)),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
+}
+
+/// Free and total space of the disk a path is on (the nearest folder that
+/// exists, for one about to be created), and that disk's name.
+async fn local_space(Query(q): Query<PathQuery>) -> Response {
+    let path = PathBuf::from(&q.path);
+    if !path.is_absolute() {
+        return err(StatusCode::BAD_REQUEST, tr!("invalid path", "caminho inválido"));
+    }
+    let existing = path.ancestors().find(|a| a.exists()).unwrap_or(std::path::Path::new("/")).to_path_buf();
+    let space = localfs::disk_space(&existing);
+    Json(json!({
+        "path": q.path,
+        "free": space.map(|s| s.0),
+        "total": space.map(|s| s.1),
+        "disk": crate::install::disk_label(&existing),
+    }))
+    .into_response()
 }
 
 #[derive(Deserialize)]

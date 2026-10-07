@@ -33,9 +33,13 @@ export interface Place {
   id: string
   label: string
   path: string
-  icon: 'roms' | 'sd' | 'folder' | 'download' | 'home'
+  icon: 'roms' | 'sd' | 'folder' | 'download' | 'home' | 'library' | 'prefix'
   free: number
   total: number
+  /** "place" (folders and cards), "library" (a Steam library), "prefix" (a game's drive C:). */
+  group: 'place' | 'library' | 'prefix'
+  /** The disk it's on ("Internal storage", a card's label). */
+  disk: string
 }
 
 export type JobStatus = 'queued' | 'scanning' | 'running' | 'done' | 'failed' | 'canceled'
@@ -192,6 +196,8 @@ export interface MoveTarget {
   here: boolean
   same_disk: boolean
   free: number | null
+  total: number | null
+  disk: string
   blocked: string | null
 }
 /** Where each piece of a shortcut's artwork came from. */
@@ -218,8 +224,8 @@ export interface InstallInfo {
   tool: string
   tools: InstallTool[]
   exe: { path: string; windows: string } | null
-  game_dir: { path: string; windows: string; size: number; disk: string } | null
-  prefix: { path: string; exists: boolean; disk: string; free: number | null }
+  game_dir: { path: string; windows: string; size: number; disk: string; free: number | null; total: number | null } | null
+  prefix: { path: string; exists: boolean; disk: string; free: number | null; total: number | null }
   in_prefix: boolean
   targets: MoveTarget[]
   moving: MoveJob | null
@@ -228,6 +234,57 @@ export interface InstallInfo {
   running: boolean
   /** The game, an installer, winetricks or a move is using the prefix. */
   busy: boolean
+  /** The game runs from its download's own files. */
+  is_download: boolean
+  /** The download's folder, while the transfer is there. */
+  download_dir: string | null
+  /** A shortcut piShop didn't create. */
+  external: boolean
+  stage: InstallStage
+}
+
+/** A non-Steam shortcut in Games (launcher's games.rs). */
+export interface GameItem {
+  appid: number
+  /** The key the install routes take; null for other shortcuts until opened. */
+  key: string | null
+  name: string
+  origin: 'pishop' | 'shortcut'
+  stage: InstallStage | null
+  exe: string
+  tool: string
+  windows: boolean
+  prefix: boolean
+  running: boolean
+  last_played: number
+  /** Installed through piShop, but the shortcut is gone from Steam. */
+  missing: boolean
+  art: { cover: string | null; wide: string | null; hero: string | null; logo: string | null }
+  game: LibraryGame | null
+}
+export interface GamesList {
+  steam_api: boolean
+  games: GameItem[]
+  tools: Array<{ name: string; display: string }>
+}
+/** Games → Find artwork. */
+export interface ArtSearch {
+  steam: Array<{ appid: string; name: string; image: string | null }>
+  sgdb: Array<{ id: number; name: string; year: number | null; verified: boolean; cover: string | null }>
+  sgdb_error: string | null
+}
+/** Games → Patches: launch-option workarounds, on or off as the shortcut has them. */
+export interface PatchList {
+  launch_options: string
+  patches: Array<{ id: string; title: string; about: string; applied: boolean }>
+  /** An installer has the shortcut: patches wait. */
+  busy: boolean
+}
+export interface Space {
+  path: string
+  free: number | null
+  total: number | null
+  disk: string
 }
 /** Components for a prefix: Steam's redistributables and winetricks verbs. */
 export interface ComponentsStatus {
@@ -427,6 +484,23 @@ export const api = {
       `/api/local/list?path=${encodeURIComponent(path)}`,
     ),
   mkdir: (path: string) => post<void>('/api/local/mkdir', { path }),
+  /** Free/total space of the disk a path is on. */
+  space: (path: string) => call<Space>(`/api/local/space?path=${encodeURIComponent(path)}`),
+  games: () => call<GamesList>('/api/games'),
+  /** The key to manage a game by (creates other shortcuts' own entry). */
+  gameManage: (appid: number) => post<{ key: string }>(`/api/games/${appid}/manage`),
+  artSearch: (q: string) => call<ArtSearch>(`/api/artwork/search?q=${encodeURIComponent(q)}`),
+  artApply: (key: string, source: 'steam' | 'sgdb', id: string, name: string) =>
+    post<ArtResult>(`/api/install/${key}/artwork/apply`, { source, id, name }),
+  gameFolder: (key: string, path: string) => post<{ game_dir: string }>(`/api/install/${key}/folder`, { path }),
+  gameRemove: (key: string, r: { shortcut: boolean; prefix: boolean; files: boolean }) =>
+    post<{ removed: string[]; freed: number }>(`/api/install/${key}/remove`, r),
+  patches: (appid: number) => call<PatchList>(`/api/games/${appid}/patches`),
+  setPatch: (appid: number, id: string, on: boolean) => post<PatchList>(`/api/games/${appid}/patches/${id}`, { on }),
+  gameReadd: (key: string) => post<{ appid: number }>(`/api/install/${key}/readd`),
+  gameForget: (key: string) => post<object>(`/api/install/${key}/forget`),
+  /** Transfers: the download's files (and what was extracted), once installed. */
+  installDeleteDownload: (hash: string) => post<{ deleted: number; freed: number }>(`/api/install/${hash}/delete-download`),
   jobs: () => call<Job[]>('/api/jobs'),
   enqueue: (source_id: string, dest: string, items: { path: string; name: string; dir: boolean }[]) =>
     post<{ ids: number[] }>('/api/jobs', { source_id, dest, items }),

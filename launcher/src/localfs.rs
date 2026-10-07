@@ -23,6 +23,11 @@ pub struct Place {
     pub icon: &'static str,
     pub free: u64,
     pub total: u64,
+    /// "place" (folders and cards), "library" (a Steam library) or
+    /// "prefix" (a non-Steam game's drive C:).
+    pub group: &'static str,
+    /// The disk it's on ("Internal storage", a card's label).
+    pub disk: String,
 }
 
 pub fn home() -> PathBuf {
@@ -97,13 +102,28 @@ pub fn places() -> Vec<Place> {
     }
     list.push(("downloads".into(), "Downloads".into(), home.join("Downloads"), "download"));
     list.push(("home".into(), tr!("Home folder", "Pasta pessoal"), home.clone(), "home"));
+    let place = |(id, label, path, icon): (String, String, PathBuf, &'static str), group: &'static str| {
+        let (free, total) = disk_space(&path).unwrap_or((0, 0));
+        Place { id, label, disk: crate::install::disk_label(&path), path: path.display().to_string(), icon, free, total, group }
+    };
+    let mut out: Vec<Place> = list.into_iter().map(|p| place(p, "place")).collect();
 
-    list.into_iter()
-        .map(|(id, label, path, icon)| {
-            let (free, total) = disk_space(&path).unwrap_or((0, 0));
-            Place { id, label, path: path.display().to_string(), icon, free, total }
+    // Steam's libraries (internal storage, SD card, other drives).
+    for lib in crate::proton::library_paths() {
+        let label = tr!("Steam library · {}", "Biblioteca Steam · {}", crate::install::disk_label(&lib));
+        out.push(place((format!("lib:{}", lib.display()), label, lib, "library"), "library"));
+    }
+    // Each non-Steam game's drive C:, by the game's name.
+    let mut prefixes: Vec<Place> = crate::steam::read_shortcuts()
+        .into_iter()
+        .filter_map(|s| {
+            let c = crate::proton::compatdata(s.appid).join("pfx/drive_c");
+            c.is_dir().then(|| place((format!("pfx:{}", s.appid), s.name, c, "prefix"), "prefix"))
         })
-        .collect()
+        .collect();
+    prefixes.sort_by_key(|p| p.label.to_lowercase());
+    out.extend(prefixes);
+    out
 }
 
 /// Directories first, then case-insensitive natural order ("Disc 2" < "Disc 10").

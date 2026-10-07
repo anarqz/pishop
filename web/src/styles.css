@@ -111,7 +111,9 @@ button { font: inherit; color: inherit; }
 .glyph.g-menu, .glyph.g-view, .glyph.g-dpad { border-radius: 6px; font-size: 14px; }
 
 /* ---------- buttons & fields ---------- */
+/* Icon and text centered on one line, whatever the button holds. */
 .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   border: 0; border-radius: 4px; padding: 0 22px; height: 44px; cursor: pointer;
   background: rgba(255,255,255,.1); color: var(--text); font-size: 15px; font-weight: 500;
   outline: none; transition: background .08s, color .08s, box-shadow .08s;
@@ -865,3 +867,101 @@ button { font: inherit; color: inherit; }
 .vpn-status small { margin-left: auto; font-family: ui-monospace, 'Noto Sans Mono', monospace; }
 .vpn-list { margin-bottom: 14px; gap: 6px; }
 .vpn-row { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 10px; background: rgba(255,255,255,.03); max-width: 720px; }
+
+/* ---------- storage status: a card with a small ring of how full the disk is ---------- */
+.scard {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 16px; text-align: left; border: 0; border-radius: 8px;
+  background: rgba(255,255,255,.06); color: var(--text); font: inherit; outline: none;
+}
+button.scard { cursor: pointer; }
+button.scard:disabled { opacity: .5; cursor: default; }
+.scard.selected { box-shadow: inset 3px 0 0 var(--blue); }
+.scard-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.scard-main b { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scard-main small { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scard-main small.mono { font-family: ui-monospace, 'Noto Sans Mono', monospace; }
+.scard-main .scard-warn { color: #ff8a8d; }
+button.scard:focus { background: var(--focus-bg); color: var(--focus-ink); box-shadow: 0 0 0 2px rgba(255,255,255,.25); }
+button.scard:focus .scard-main small, button.scard:focus .sstatus small { color: #4a525d; }
+button.scard:focus .scard-main .scard-warn { color: #b3261e; }
+.sstatus { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
+.sstatus-text { display: grid; justify-items: end; gap: 1px; }
+.sstatus-text b { font-size: 14px; font-weight: 700; white-space: nowrap; }
+.sstatus-text small { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.sring { position: relative; width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center; }
+.sring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.sring-track { fill: none; stroke: rgba(255,255,255,.14); stroke-width: 4.5; }
+.sring-bar { fill: none; stroke: var(--blue); stroke-width: 4.5; stroke-linecap: round; transition: stroke-dashoffset .6s ease; }
+.sring.low .sring-bar { stroke: var(--amber); }
+.sring.full .sring-bar { stroke: var(--red); }
+.sring small { position: relative; font-size: 10.5px; font-weight: 700; color: var(--muted); }
+button.scard:focus .sring-track { stroke: rgba(0,0,0,.15); }
+button.scard:focus .sring small { color: #39414b; }
+.dirpick-list { max-height: 46vh; }
+
+/* ---------- games: every non-Steam shortcut ---------- */
+.muted.small, .small { font-size: 13px; }
+.game-tile.missing .dl-cover { opacity: .45; filter: grayscale(.8); }
+.game-badge {
+  position: absolute; top: 8px; left: 8px; z-index: 2; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; background: rgba(5,9,14,.75); color: #fff;
+}
+.game-badge.run { background: #3c8f2a; }
+.games .dl-section + .dl-section { margin-top: 18px; }
+.games .transfers-scroll { padding-top: 8px; }
+/* Find artwork: Steam's capsules and SteamGridDB's covers to pick from. */
+.art-results { max-height: 62vh; }
+.art-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.art-pick {
+  display: grid; gap: 4px; align-content: start; padding: 8px; border: 0; border-radius: 8px; text-align: left;
+  background: rgba(255,255,255,.05); color: var(--text); font: inherit; cursor: pointer; outline: none;
+}
+.art-pick img, .art-pick .art-ph { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 6px; background: var(--panel); display: grid; place-items: center; color: var(--muted); }
+.art-pick.wide img, .art-pick.wide .art-ph { aspect-ratio: 231 / 87; }
+.art-pick b { font-size: 13px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.art-pick small { font-size: 11.5px; color: var(--muted); }
+.art-pick:focus { background: var(--focus-bg); color: var(--focus-ink); box-shadow: 0 0 0 2px rgba(255,255,255,.3); }
+.art-pick:focus small { color: #4a525d; }
+.art-pick:disabled { opacity: .5; }
+
+/* ---------- explore: both panes alike, each with its disk's storage status ---------- */
+.pane-head .sstatus { margin-left: auto; }
+.pane-head .sring { width: 36px; height: 36px; flex-basis: 36px; }
+.pane-head.focused .sstatus small, .pane-head.focused .sring small { color: #39414b; }
+.pane-head.focused .sring-track { stroke: rgba(0,0,0,.15); }
+.goto-list { max-height: 64vh; }
+.goto-group { display: grid; gap: 6px; }
+.goto-group + .goto-group { margin-top: 10px; }
+
+/* ---------- aside: a panel from the right (Games → Patches) ---------- */
+.aside-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(5,8,12,.55); animation: fade .15s ease; }
+.aside {
+  position: absolute; top: 0; right: 0; bottom: 0; width: min(560px, 46vw); display: grid; align-content: start; gap: 14px;
+  padding: 28px 28px 24px; overflow-y: auto; background: linear-gradient(180deg, #252b35, #191d24); box-shadow: -24px 0 60px rgba(0,0,0,.55);
+  animation: slide-in .18s ease-out;
+}
+@keyframes slide-in { from { transform: translateX(40px); opacity: 0 } }
+.aside h2 { margin: -6px 0 0; font-size: 26px; color: var(--text-strong); }
+.aside p { margin: 0; line-height: 1.5; }
+.patch-opts { display: grid; gap: 4px; padding: 10px 12px; border-radius: 8px; background: rgba(0,0,0,.25); }
+.patch-opts small { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.patch-opts code { font-family: ui-monospace, 'Noto Sans Mono', monospace; font-size: 13.5px; color: var(--text-strong); overflow-wrap: anywhere; }
+.patch-list { display: grid; gap: 8px; }
+.patch {
+  display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 0; border-radius: 10px; text-align: left;
+  background: rgba(255,255,255,.06); color: var(--text); font: inherit; cursor: pointer; outline: none;
+}
+.patch:disabled { opacity: .55; cursor: default; }
+.patch-main { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.patch-main b { font-size: 16px; }
+.patch-main small { font-size: 13px; line-height: 1.45; color: var(--muted); }
+.patch-state { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.patch.on .patch-state { color: #7fdc66; }
+.patch-switch { flex: 0 0 44px; height: 24px; border-radius: 12px; background: rgba(255,255,255,.18); position: relative; transition: background .15s; }
+.patch-switch span { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.patch.on .patch-switch { background: var(--green); }
+.patch.on .patch-switch span { transform: translateX(20px); }
+.patch:focus { background: var(--focus-bg); color: var(--focus-ink); box-shadow: 0 0 0 2px rgba(255,255,255,.3); }
+.patch:focus .patch-main small, .patch:focus .patch-state { color: #4a525d; }
+.patch.on:focus .patch-state { color: #2f7d1f; }
+.pane-head .sring small { font-size: 9.5px; }

@@ -121,6 +121,33 @@ pub async fn find_appid(name: &str) -> Option<String> {
     found
 }
 
+/// Games → Find artwork: the store's matches for a name (id, name, capsule).
+pub async fn search(term: &str) -> Vec<Value> {
+    let Some(c) = client() else { return Vec::new() };
+    let v: Value = match c
+        .get("https://store.steampowered.com/api/storesearch/")
+        .query(&[("term", term.trim()), ("cc", "br"), ("l", "english")])
+        .send()
+        .await
+    {
+        Ok(r) => r.json().await.unwrap_or_default(),
+        Err(_) => return Vec::new(),
+    };
+    v["items"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .take(8)
+        .filter_map(|it| {
+            Some(serde_json::json!({
+                "appid": it["id"].as_u64()?.to_string(),
+                "name": it["name"].as_str()?,
+                "image": it["tiny_image"].as_str(),
+            }))
+        })
+        .collect()
+}
+
 pub async fn details(appid: &str) -> Option<StoreInfo> {
     let appid = appid.trim();
     if appid.is_empty() || !appid.chars().all(|c| c.is_ascii_digit()) {

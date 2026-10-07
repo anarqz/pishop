@@ -2,7 +2,7 @@
 // of game covers (the focused one detailed on top), then network copies.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { type ArtJob, type Job, api, formatBytes, formatEta } from '../api'
+import { type Job, api, formatBytes, formatEta } from '../api'
 import { tr, trn } from '../i18n'
 import { focusFirst, input, keepFocus } from '../input'
 import { type TorrentInfo, addMagnet, pause, resume } from '../torrent'
@@ -27,12 +27,15 @@ export default function Jobs({
   refresh,
   downloadDir,
   onExplore,
+  onOpenGame,
 }: {
   jobs: Job[]
   refresh: () => void
   downloadDir?: string
-  /** Opens a local folder in Explore (left pane), to copy it anywhere. */
+  /** Opens a local folder in Explore (left pane). */
   onExplore?: (path: string) => void
+  /** Games, on an installed game's page. */
+  onOpenGame?: (appid: number) => void
 }) {
   const current = jobs.find(j => (ACTIVE as readonly string[]).includes(j.status))
   const queued = jobs.filter(j => j.status === 'queued')
@@ -45,22 +48,6 @@ export default function Jobs({
   const downloads = useMemo(() => sortDownloads(engine.torrents, lib), [engine.torrents, lib])
   const [dialog, setDialog] = useState<{ kind: 'details' | 'delete'; id: number } | null>(null)
   const [prompt, setPrompt] = useState(false)
-  // Refreshing the Steam artwork of every installed game.
-  const installedCount = Object.values(lib).filter(e => e?.install?.stage === 'installed' && e.install.appid).length
-  const [art, setArt] = useState<ArtJob | null>(null)
-  useEffect(() => {
-    if (!art?.running) return
-    const id = setInterval(() => {
-      api
-        .libraryArtworkStatus()
-        .then(j => {
-          setArt(j)
-          if (!j.running) toast(tr('Artwork updated'), trn(j.done, '{n} game', '{n} games'), 'ok')
-        })
-        .catch(() => {})
-    }, 1500)
-    return () => clearInterval(id)
-  }, [art?.running])
   const restoreFocus = useRef<(() => void) | null>(null)
   const [cap, setCap] = useState<number | null>(null)
   useEffect(() => {
@@ -184,22 +171,6 @@ export default function Jobs({
                 tr('Starting the torrent engine…')
               )}
             </span>
-            {installedCount > 0 && (
-              <button
-                data-nav
-                className="btn small"
-                disabled={!!art?.running}
-                onClick={() =>
-                  void api
-                    .libraryArtwork()
-                    .then(setArt)
-                    .catch(e => toast(tr('Something went wrong'), (e as Error).message, 'error'))
-                }
-              >
-                <Icon name="display" size={18} />{' '}
-                {art?.running ? tr('Artwork {done}/{total}…', { done: art.done, total: art.total }) : tr('Refresh artwork')}
-              </button>
-            )}
             <button data-nav data-nav-default={downloads.length ? undefined : ''} className="btn small" onClick={() => setPrompt(true)}>
               <Icon name="plus" size={18} /> {tr('Magnet link')}
             </button>
@@ -234,7 +205,7 @@ export default function Jobs({
       </div>
 
       {dialog?.kind === 'details' && dialogT && (
-        <InstallPage t={dialogT} entry={lib[dialogT.infoHash]} onClose={closeDialog} onExplore={onExplore} />
+        <InstallPage t={dialogT} entry={lib[dialogT.infoHash]} onClose={closeDialog} onExplore={onExplore} onOpenGame={onOpenGame} />
       )}
       {dialog?.kind === 'delete' && dialogT && <DeleteDialog t={dialogT} entry={lib[dialogT.infoHash]} onClose={closeDialog} />}
       {prompt && (

@@ -34,6 +34,8 @@ mod tpb;
 mod trailer;
 mod update;
 mod vpn;
+mod games;
+mod patches;
 mod vdf;
 mod winetricks;
 

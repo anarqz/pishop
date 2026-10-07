@@ -182,6 +182,38 @@ pub async fn shortcut(appid: u32) -> anyhow::Result<Option<Shortcut>> {
     Ok(serde_json::from_value(v).ok())
 }
 
+/// A non-Steam shortcut as Steam lists it, with what it runs.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ShortcutInfo {
+    pub appid: u32,
+    pub name: String,
+    pub exe: String,
+    pub start_dir: String,
+    pub launch_options: String,
+    /// Compatibility tool's internal name ("" when none).
+    pub tool: String,
+    /// Unix seconds (0: never played).
+    #[serde(default)]
+    pub last_played: i64,
+}
+
+/// Every non-Steam shortcut in the library (the Big Picture "Non-Steam"
+/// collection), each with its fields, in one round trip.
+pub async fn shortcuts() -> anyhow::Result<Vec<ShortcutInfo>> {
+    let v = eval(
+        "Promise.all((collectionStore.deckDesktopApps?.allApps ?? []).map(a => new Promise(res => { \
+         let h, done = false; \
+         const out = d => { if (done) return; done = true; \
+           res({ appid: a.appid, name: a.display_name ?? '', exe: d?.strShortcutExe ?? '', \
+             start_dir: d?.strShortcutStartDir ?? '', launch_options: d?.strShortcutLaunchOptions ?? '', \
+             tool: d?.strCompatToolName ?? '', last_played: a.rt_last_time_played ?? 0 }); \
+           setTimeout(() => h?.unregister?.(), 0) }; \
+         h = SteamClient.Apps.RegisterForAppDetails(a.appid, out); setTimeout(() => out(null), 4000) })))",
+    )
+    .await?;
+    Ok(serde_json::from_value(v)?)
+}
+
 /// Library artwork slots, as SetCustomArtworkForApp numbers them.
 #[derive(Clone, Copy, Debug)]
 pub enum Art {
@@ -245,6 +277,26 @@ pub fn running(appid: u32) -> bool {
                 .map(|c| c.split(|b| *b == 0).any(|arg| arg == needle.as_bytes()))
                 .unwrap_or(false)
     })
+}
+
+/// Every appid Steam has running now (one pass over the processes).
+pub fn running_appids() -> std::collections::HashSet<u32> {
+    let mut out = std::collections::HashSet::new();
+    for e in std::fs::read_dir("/proc").into_iter().flatten().flatten() {
+        if !e.file_name().to_string_lossy().chars().all(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        let Ok(cmd) = std::fs::read(e.path().join("cmdline")) else { continue };
+        if !cmd.starts_with(b"/") || !cmd.windows(8).any(|w| w == b"SteamLau") {
+            continue;
+        }
+        for arg in cmd.split(|b| *b == 0) {
+            if let Some(id) = arg.strip_prefix(b"AppId=").and_then(|v| std::str::from_utf8(v).ok()?.parse().ok()) {
+                out.insert(id);
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]

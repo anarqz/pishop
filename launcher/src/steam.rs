@@ -30,6 +30,46 @@ fn userdata_configs() -> io::Result<Vec<PathBuf>> {
     Ok(out)
 }
 
+/// Every account's Steam grid folder (where the library artwork lives).
+pub fn grid_dirs() -> Vec<PathBuf> {
+    userdata_configs().unwrap_or_default().into_iter().map(|c| c.join("grid")).collect()
+}
+
+/// A non-Steam shortcut as `shortcuts.vdf` has it (when Steam's live API is off).
+pub struct VdfShortcut {
+    pub appid: u32,
+    pub name: String,
+    pub exe: String,
+    pub start_dir: String,
+    pub launch_options: String,
+}
+
+/// The shortcuts of every local account, read from disk (appid → first seen).
+pub fn read_shortcuts() -> Vec<VdfShortcut> {
+    let mut out: Vec<VdfShortcut> = Vec::new();
+    for config in userdata_configs().unwrap_or_default() {
+        let Ok(mut root) = load(&config.join("shortcuts.vdf")) else { continue };
+        let Ok(list) = shortcuts_mut(&mut root) else { continue };
+        for (_, e) in list.iter() {
+            let text = |k: &str| e.get(k).and_then(Value::as_str).map(|b| String::from_utf8_lossy(b).into_owned()).unwrap_or_default();
+            let appid = match e.get("appid") {
+                Some(Value::Int(n)) => *n as u32,
+                _ => continue,
+            };
+            if !out.iter().any(|s| s.appid == appid) {
+                out.push(VdfShortcut {
+                    appid,
+                    name: text("AppName"),
+                    exe: text("Exe"),
+                    start_dir: text("StartDir"),
+                    launch_options: text("LaunchOptions"),
+                });
+            }
+        }
+    }
+    out
+}
+
 fn crc32(data: &[u8]) -> u32 {
     let mut crc = 0xFFFF_FFFFu32;
     for &b in data {

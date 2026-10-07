@@ -2,6 +2,11 @@
 //! Transfers shows the game (cover, name, details) instead of the torrent
 //! name. Stored in `<data>/library.json`.
 //!
+//! Non-Steam shortcuts piShop didn't install get an entry of their own the
+//! first time they're managed in Games, keyed `sc-<appid>` (`shortcut_key`),
+//! so their state (Proton, game folder, a borrowed shortcut, the artwork the
+//! user picked) lives in the same place and the install routes work for them.
+//!
 //! Each field comes from the first source that has it, in this order:
 //! Steam (when the game has an appid) → TheGamesDB (when its key is set) →
 //! SteamGridDB (public) → isitcracked (when configured; also the crack info).
@@ -47,6 +52,15 @@ pub struct Game {
     /// Services the data came from, in priority order (e.g. ["Steam", "isitcracked"]).
     #[serde(default)]
     pub sources: Vec<String>,
+    /// SteamGridDB game picked by hand for the artwork (Games → Find artwork).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sgdb_id: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sgdb_name: Option<String>,
+    /// Where the shortcut's artwork comes from when picked by hand: "steam"
+    /// (the appid above) or "sgdb" (the SteamGridDB game above).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub art_source: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -163,9 +177,13 @@ pub fn add(mut e: Entry) {
 
 /// Replaces the game data of an entry that still exists (it may have been
 /// deleted while the lookups ran).
-pub fn update_game(info_hash: &str, game: Game) {
+pub fn update_game(info_hash: &str, mut game: Game) {
     with(|m| {
         if let Some(e) = m.get_mut(info_hash) {
+            // Artwork picked by hand survives a new lookup.
+            game.sgdb_id = game.sgdb_id.or(e.game.sgdb_id);
+            game.sgdb_name = game.sgdb_name.take().or_else(|| e.game.sgdb_name.clone());
+            game.art_source = game.art_source.take().or_else(|| e.game.art_source.clone());
             e.game = game;
             e.resolved = true;
             persist(m);
@@ -189,6 +207,40 @@ pub fn set_install(info_hash: &str, state: Option<crate::install::InstallState>)
 
 pub fn all() -> BTreeMap<String, Entry> {
     with(|m| m.clone())
+}
+
+/// The key of a non-Steam shortcut's own entry (one piShop didn't install).
+pub fn shortcut_key(appid: u32) -> String {
+    format!("sc-{appid}")
+}
+
+/// Whether a key is a shortcut's own entry rather than a download's.
+pub fn is_shortcut_key(key: &str) -> bool {
+    key.starts_with("sc-")
+}
+
+/// Changes an entry in place; false if there is none.
+pub fn update(key: &str, f: impl FnOnce(&mut Entry)) -> bool {
+    with(|m| match m.get_mut(&key.trim().to_lowercase()) {
+        Some(e) => {
+            f(e);
+            persist(m);
+            true
+        }
+        None => false,
+    })
+}
+
+/// Transfers deleted a download: its entry goes too, unless the game was
+/// installed from it (Games still shows it).
+pub fn forget_download(info_hash: &str) {
+    with(|m| {
+        let key = info_hash.trim().to_lowercase();
+        let installed = m.get(&key).is_some_and(|e| e.install.as_ref().is_some_and(|s| s.appid.is_some()));
+        if !installed && m.remove(&key).is_some() {
+            persist(m);
+        }
+    });
 }
 
 pub fn remove(info_hash: &str) {
@@ -327,6 +379,9 @@ fn merge(
             .unwrap_or_default(),
         release_date,
         sources,
+        sgdb_id: None,
+        sgdb_name: None,
+        art_source: None,
     }
 }
 

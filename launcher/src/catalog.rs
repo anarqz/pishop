@@ -472,6 +472,29 @@ async fn sgdb_search(term: &str, asset_type: &str) -> anyhow::Result<Value> {
     sgdb_search_with(term, asset_type, filters).await
 }
 
+/// Games → Find artwork: SteamGridDB's games for a name, each with a cover
+/// to recognise it by (best match first, as the site orders them).
+pub async fn sgdb_games(term: &str) -> anyhow::Result<Vec<Value>> {
+    let v = sgdb_search(term, "grid").await?;
+    Ok(v["data"]["games"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .take(12)
+        .filter_map(|g| {
+            let game = &g["game"];
+            let cover = pick_asset(&g["assets"]).map(|(_, thumb)| thumb);
+            Some(json!({
+                "id": game["id"].as_u64()?,
+                "name": game["name"].as_str()?,
+                "year": game["release_date"].as_i64().map(|ts| 1970 + ts / 31_556_952),
+                "verified": game["verified"].as_bool().unwrap_or(false),
+                "cover": cover,
+            }))
+        })
+        .collect())
+}
+
 async fn sgdb_search_with(term: &str, asset_type: &str, filters: Value) -> anyhow::Result<Value> {
     let _slot = SGDB_SLOTS.acquire().await?;
     let r = HTTP
@@ -622,8 +645,9 @@ fn pick_for_steam(assets: &Value, style: Option<&str>, wide: bool, icon: bool) -
 }
 
 /// SteamGridDB's art for exactly this game — nothing when it only has
-/// look-alikes — one search per kind.
-pub async fn sgdb_pack(name: &str) -> SgdbPack {
+/// look-alikes — one search per kind. `id`: the SteamGridDB game picked by
+/// hand (searched by its own name), instead of matching on the name.
+pub async fn sgdb_pack(name: &str, id: Option<u64>) -> SgdbPack {
     let kinds = [
         ("grid", json!({ "dimensions": ["600x900", "660x930"] }), None, false),
         ("grid", json!({ "dimensions": ["920x430", "460x215"] }), None, false),
@@ -636,7 +660,10 @@ pub async fn sgdb_pack(name: &str) -> SgdbPack {
         let pick = async {
             let v = sgdb_search_with(name, kind, filters).await.ok()?;
             let games = v["data"]["games"].as_array()?;
-            let g = games.iter().find(|g| same_game(name, g["game"]["name"].as_str().unwrap_or("")))?;
+            let g = games.iter().find(|g| match id {
+                Some(id) => g["game"]["id"].as_u64() == Some(id),
+                None => same_game(name, g["game"]["name"].as_str().unwrap_or("")),
+            })?;
             pick_for_steam(&g["assets"], style, wide, kind == "icon")
         };
         found.push(pick.await);

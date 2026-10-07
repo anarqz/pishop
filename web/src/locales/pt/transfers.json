@@ -68,5 +68,7 @@
   "Refresh artwork": "Atualizar arte",
   "Artwork updated": "Arte atualizada",
   "{n} game": "{n} jogo",
-  "{n} games": "{n} jogos"
+  "{n} games": "{n} jogos",
+  "In Games": "Em Jogos",
+  "Erases the {size} downloaded and what was extracted from it; the game stays in Games": "Apaga os {size} baixados e o que foi extraído deles; o jogo continua em Jogos"
 }

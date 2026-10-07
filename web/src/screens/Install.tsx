@@ -1,8 +1,10 @@
-// A download's install page (Transfers → A). Compressed downloads are
-// extracted first; then the game's installer runs under Proton through a
-// Steam shortcut, and once it's done that same shortcut is pointed at the
-// game's executable (guessed, or picked in a file browser). Games that need no
-// installer go straight to Steam. Or hand the files to Explore and copy them.
+// A download's install page (Transfers → A). Transfers only takes a download
+// as far as its first install: compressed downloads are extracted, then the
+// game's installer runs under Proton through a new Steam shortcut (which
+// creates the game's prefix) and, once it closes, that shortcut is pointed at
+// the game's executable. From then on the game lives in Games (Proton,
+// components, moving it, artwork…); here the download's files can be deleted
+// or shown in Explore. Games that need no installer go straight to Steam.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -11,13 +13,13 @@ import {
 } from '../api'
 import { tr, trb } from '../i18n'
 import { focusFirst, input, keepFocus } from '../input'
-import type { TorrentInfo } from '../torrent'
+import { StorageCard, homePath, useSpace } from '../storage'
+import { type TorrentInfo, pause } from '../torrent'
 import { Dialog, Icon, Progress, Spinner, toast, useHints } from '../ui'
 import { CompatPanel, ProtonBadge } from './Compat'
 import FilePicker from './FilePicker'
-import GameSetup, { ChooseDialog, Choice } from './GameSetup'
+import { ChooseDialog, Choice } from './GameSetup'
 
-const home = (p: string) => p.replace(/^\/home\/[^/]+/, '~')
 const dirOf = (p: string) => p.replace(/\/[^/]+$/, '') || '/'
 const baseName = (p: string) => p.split('/').pop() ?? p
 
@@ -26,11 +28,14 @@ export default function InstallPage({
   entry,
   onClose,
   onExplore,
+  onOpenGame,
 }: {
   t: TorrentInfo
   entry?: LibraryEntry
   onClose: () => void
   onExplore?: (path: string) => void
+  /** Games, on this game's page. */
+  onOpenGame?: (appid: number) => void
 }) {
   const hash = t.infoHash
   const game = entry?.game
@@ -48,6 +53,7 @@ export default function InstallPage({
   const [choose, setChoose] = useState<null | 'installer' | 'library' | 'tool'>(null)
   const [picker, setPicker] = useState<null | { start: string; then: 'finish' | 'portable' }>(null)
   const [compat, setCompat] = useState(false)
+  const [wipe, setWipe] = useState(false)
   const restore = useRef<(() => void) | null>(null)
 
   const load = useCallback(async () => {
@@ -112,7 +118,7 @@ export default function InstallPage({
     }
   }, [stage, hash])
 
-  const modal = choose || picker || compat
+  const modal = choose || picker || compat || wipe
   const close = useRef(onClose)
   close.current = onClose
   useEffect(() => {
@@ -147,12 +153,41 @@ export default function InstallPage({
     setChoose(null)
     restore.current?.()
   }
+  // Installing takes the download's files over: the transfer stops.
+  const stopTransfer = () => {
+    if (t.state !== 'paused') pause(t.id).catch(() => {})
+  }
 
   const lib = opts?.libraries.find(l => l.path === library)
   const toolName = opts?.tools.find(x => x.name === tool)
   const candidates: ExeCandidate[] = status?.candidates ?? []
   const contentRoot = opts?.download_dir ?? ''
   const needsApi = opts && !opts.steam_api
+  const appid = status?.state?.appid ?? null
+  const installerRunning = stage === 'installing' && status?.running !== false
+
+  // Once the shortcut exists the download can go (not while its installer runs).
+  const downloadCard = appid && (
+    <section className="inst-card">
+      <h3>{tr('The download')}</h3>
+      <p className="muted">
+        {stage === 'installed'
+          ? tr('The game is installed: the files it was installed from can go. Keep them if you may need to install it again.')
+          : tr('If the installation went wrong you may want to keep them and try again.')}
+      </p>
+      <div className="row">
+        <button data-nav className="btn danger" disabled={busy || installerRunning} onClick={() => setWipe(true)}>
+          <Icon name="trash" /> {tr('Delete downloaded files…')}
+        </button>
+        {contentRoot && onExplore && (
+          <button data-nav className="btn" onClick={() => onExplore(contentRoot)}>
+            <Icon name="folder" /> {tr('Show on Explore')}
+          </button>
+        )}
+      </div>
+      {installerRunning && <p className="muted small">{tr('The installer is still running from these files.')}</p>}
+    </section>
+  )
 
   const body = (() => {
     if (error) return <p className="inst-error">{error}</p>
@@ -163,7 +198,7 @@ export default function InstallPage({
         </p>
       )
     }
-    if (!t.finished) {
+    if (!t.finished && !appid) {
       return (
         <section className="inst-card">
           <h3>{tr('Waiting for the download')}</h3>
@@ -177,116 +212,109 @@ export default function InstallPage({
         <>
           <section className="inst-card ok">
             <h3>
-              <Icon name="check" /> {tr('Ready to play')}
+              <Icon name="check" /> {tr('Installed')}
             </h3>
-            <p className="muted">{trb('**{name}** is in your Steam library.', { name })}</p>
+            <p className="muted">
+              {trb('**{name}** is in your Steam library and in Games, where its Proton, components, files and artwork are managed.', { name })}
+            </p>
             <div className="row">
-              <button data-nav data-nav-default className="btn primary big" disabled={busy} onClick={() => void run(() => api.installPlay(hash))}>
-                <Icon name="pad" /> {tr('Play')}
-              </button>
-              <button data-nav className="btn big" onClick={() => setPicker({ start: dirOf(status?.state?.exe ?? contentRoot), then: 'finish' })}>
-                {tr('Change executable…')}
-              </button>
-              <button
-                data-nav
-                className="btn big danger"
-                disabled={busy}
-                onClick={() =>
-                  void run(async () => {
-                    await api.installReset(hash)
-                    setStatus({ state: null })
-                    await load()
-                  }, tr('Shortcut removed'))
-                }
-              >
-                {tr('Remove from Steam')}
-              </button>
+              {appid && onOpenGame && (
+                <button data-nav data-nav-default className="btn primary big" onClick={() => onOpenGame(appid)}>
+                  <Icon name="pad" /> {tr('Open in Games')}
+                </button>
+              )}
             </div>
           </section>
-          <GameSetup
-            key={status?.state?.exe ?? ''}
-            hash={hash}
-            downloadDir={contentRoot}
-            onChanged={() => void api.installStatus(hash).then(setStatus).catch(() => {})}
-          />
+          {downloadCard}
         </>
       )
     }
     if (stage === 'installing') {
       if (status?.running !== false) {
         return (
-          <section className="inst-card">
-            <h3>
-              <Spinner /> {tr('The installer is running')}
-            </h3>
-            <p>{tr('Follow it on screen. When it closes, piShop comes back here to pick the game’s executable.')}</p>
-            <p className="muted">{trb('Install folder: **{dir}**', { dir: home(status?.state?.target ?? '') })}</p>
-            <div className="row">
-              <button data-nav data-nav-default className="btn big" onClick={() => void run(() => api.installStatus(hash).then(setStatus))}>
-                {tr('Check again')}
-              </button>
-            </div>
-          </section>
+          <>
+            <section className="inst-card">
+              <h3>
+                <Spinner /> {tr('The installer is running')}
+              </h3>
+              <p>{tr('Follow it on screen. When it closes, piShop comes back here to pick the game’s executable.')}</p>
+              <p className="muted">{trb('Install folder: **{dir}**', { dir: homePath(status?.state?.target ?? '') })}</p>
+              <div className="row">
+                <button data-nav data-nav-default className="btn big" onClick={() => void run(() => api.installStatus(hash).then(setStatus))}>
+                  {tr('Check again')}
+                </button>
+              </div>
+            </section>
+            {downloadCard}
+          </>
         )
       }
       return (
-        <section className="inst-card">
-          <h3>{tr('Which file starts the game?')}</h3>
-          <p className="muted">{tr('The installer has closed. Pick the game’s executable; the Steam shortcut will open it from now on.')}</p>
-          <div className="inst-list">
-            {candidates.map((c, i) => (
-              <button
-                key={c.path}
-                data-nav
-                data-nav-default={i === 0 ? '' : undefined}
-                className="inst-row"
-                disabled={busy}
-                onClick={() => void run(() => api.installFinish(hash, c.path).then(s => setStatus({ state: s })), tr('Installed'))}
-              >
-                <Icon name="file" />
-                <span className="inst-row-main">
-                  <b>{baseName(c.path)}</b>
-                  <small>{home(dirOf(c.path))}</small>
-                </span>
-                <span className="inst-row-side">
-                  {c.registered ? tr('Registered by the installer') : i === 0 ? tr('Best guess') : formatBytes(c.size)}
-                </span>
+        <>
+          <section className="inst-card">
+            <h3>{tr('Which file starts the game?')}</h3>
+            <p className="muted">{tr('The installer has closed. Pick the game’s executable; the Steam shortcut will open it from now on.')}</p>
+            <div className="inst-list">
+              {candidates.map((c, i) => (
+                <button
+                  key={c.path}
+                  data-nav
+                  data-nav-default={i === 0 ? '' : undefined}
+                  className="inst-row"
+                  disabled={busy}
+                  onClick={() => void run(() => api.installFinish(hash, c.path).then(s => setStatus({ state: s })), tr('Installed'))}
+                >
+                  <Icon name="file" />
+                  <span className="inst-row-main">
+                    <b>{baseName(c.path)}</b>
+                    <small>{homePath(dirOf(c.path))}</small>
+                  </span>
+                  <span className="inst-row-side">
+                    {c.registered ? tr('Registered by the installer') : i === 0 ? tr('Best guess') : formatBytes(c.size)}
+                  </span>
+                </button>
+              ))}
+              {!candidates.length && <p className="muted">{tr('No executable found where the installer usually puts games.')}</p>}
+            </div>
+            <div className="row">
+              <button data-nav className="btn" onClick={() => setPicker({ start: status?.state?.target ?? contentRoot, then: 'finish' })}>
+                {tr('Browse…')}
               </button>
-            ))}
-            {!candidates.length && <p className="muted">{tr('No executable found where the installer usually puts games.')}</p>}
-          </div>
-          <div className="row">
-            <button data-nav className="btn" onClick={() => setPicker({ start: status?.state?.target ?? contentRoot, then: 'finish' })}>
-              {tr('Browse…')}
-            </button>
-            <button
-              data-nav
-              className="btn"
-              disabled={busy}
-              onClick={() => void run(() => api.installStart(hash, { installer, library, tool }).then(s => setStatus({ state: s, running: true })))}
-            >
-              {tr('Run the installer again')}
-            </button>
-          </div>
-        </section>
+              <button
+                data-nav
+                className="btn"
+                disabled={busy}
+                onClick={() => void run(() => api.installStart(hash, { installer, library, tool }).then(s => setStatus({ state: s, running: true })))}
+              >
+                {tr('Run the installer again')}
+              </button>
+            </div>
+          </section>
+          {downloadCard}
+        </>
       )
     }
     if (opts.installers.length) {
       return (
         <section className="inst-card">
           <h3>{tr('Install')}</h3>
-          <p className="muted">{tr('The installer runs under Proton from a Steam shortcut. When it’s done, the same shortcut opens the game.')}</p>
+          <p className="muted">
+            {tr('The installer runs under Proton from a new Steam shortcut, which creates the game’s prefix; the game then shows up in Games. The transfer stops while it installs.')}
+          </p>
           <div className="inst-list">
-            {opts.installers.length > 1 && (
-              <Choice label={tr('Installer')} value={baseName(installer)} onOpen={() => open('installer')} />
-            )}
-            <Choice
-              label={tr('Install to')}
-              value={lib ? `${lib.label} · ${tr('{free} free', { free: formatBytes(lib.free ?? 0) })}` : '—'}
-              onOpen={() => open('library')}
-            />
+            {opts.installers.length > 1 && <Choice label={tr('Installer')} value={baseName(installer)} onOpen={() => open('installer')} />}
             <Choice label={tr('Compatibility')} value={toolName?.display ?? '—'} onOpen={() => open('tool')} />
           </div>
+          {lib && (
+            <StorageCard
+              icon="library"
+              title={tr('Install to {place}', { place: lib.label })}
+              path={`${lib.path}/piShop`}
+              free={lib.free}
+              total={lib.total}
+              onClick={() => open('library')}
+            />
+          )}
           <div className="row">
             <button
               data-nav
@@ -294,7 +322,10 @@ export default function InstallPage({
               className="btn primary big"
               disabled={busy || !installer || !library || !tool || !!needsApi}
               onClick={() =>
-                void run(() => api.installStart(hash, { installer, library, tool }).then(s => setStatus({ state: s, running: true })))
+                void run(() => {
+                  stopTransfer()
+                  return api.installStart(hash, { installer, library, tool }).then(s => setStatus({ state: s, running: true }))
+                })
               }
             >
               <Icon name="download" /> {tr('Start installation')}
@@ -316,12 +347,17 @@ export default function InstallPage({
                 data-nav-default={i === 0 ? '' : undefined}
                 className="inst-row"
                 disabled={busy || !!needsApi}
-                onClick={() => void run(() => api.installPortable(hash, c.path, tool).then(s => setStatus({ state: s })), tr('Added to Steam'))}
+                onClick={() =>
+                  void run(() => {
+                    stopTransfer()
+                    return api.installPortable(hash, c.path, tool).then(s => setStatus({ state: s }))
+                  }, tr('Added to Steam'))
+                }
               >
                 <Icon name="file" />
                 <span className="inst-row-main">
                   <b>{baseName(c.path)}</b>
-                  <small>{home(dirOf(c.path))}</small>
+                  <small>{homePath(dirOf(c.path))}</small>
                 </span>
                 <span className="inst-row-side">{i === 0 ? tr('Best guess') : formatBytes(c.size)}</span>
               </button>
@@ -341,7 +377,7 @@ export default function InstallPage({
       return (
         <section className="inst-card">
           <h3>{tr('Extract first')}</h3>
-          <p className="muted">{tr('This download is compressed. Extract it next to the archive, then install.')}</p>
+          <p className="muted">{tr('This download is compressed. Extract it next to the archive, then install. The transfer stops while it extracts.')}</p>
           <div className="inst-list">
             {archives.map(a => {
               const j = myJobs.find(x => x.archive === a.path)
@@ -364,6 +400,7 @@ export default function InstallPage({
           {archives.some(a => a.complete === false) && (
             <p className="inst-error">{tr('A part of this archive is missing. Wait for the download to finish or check the files.')}</p>
           )}
+          <ExtractSpace dir={contentRoot} need={archives.reduce((s, a) => s + a.size, 0)} />
           <button data-nav className={`inst-check ${deleteAfter ? 'on' : ''}`} onClick={() => setDeleteAfter(d => !d)}>
             <span className="box">{deleteAfter && <Icon name="check" size={16} />}</span>
             {tr('Delete the archive after extracting')}
@@ -379,7 +416,12 @@ export default function InstallPage({
                 data-nav-default
                 className="btn primary big"
                 disabled={busy || archives.some(a => a.complete === false)}
-                onClick={() => void run(() => Promise.all(archives.map(a => api.archiveExtract(a.path, deleteAfter))))}
+                onClick={() =>
+                  void run(() => {
+                    stopTransfer()
+                    return Promise.all(archives.map(a => api.archiveExtract(a.path, deleteAfter)))
+                  })
+                }
               >
                 {tr('Extract')}
               </button>
@@ -409,7 +451,7 @@ export default function InstallPage({
           </button>
           {contentRoot && onExplore && (
             <button data-nav className="btn" onClick={() => onExplore(contentRoot)}>
-              <Icon name="folder" /> {tr('Copy with Explore')}
+              <Icon name="folder" /> {tr('Show on Explore')}
             </button>
           )}
         </aside>
@@ -445,20 +487,27 @@ export default function InstallPage({
         />
       )}
       {choose === 'library' && opts && (
-        <ChooseDialog
-          title={tr('Install to')}
-          options={opts.libraries.map(l => ({
-            value: l.path,
-            label: l.label,
-            detail: `${home(l.path)} · ${tr('{free} free', { free: formatBytes(l.free ?? 0) })}`,
-          }))}
-          value={library}
-          onPick={v => {
-            setLibrary(v)
-            closeChooser()
-          }}
-          onClose={closeChooser}
-        />
+        <Dialog title={tr('Install to')} onClose={closeChooser} wide>
+          <p className="muted">{tr('The game goes into a piShop folder in the Steam library you pick.')}</p>
+          <div className="inst-list scroll">
+            {opts.libraries.map(l => (
+              <StorageCard
+                key={l.path}
+                icon="library"
+                title={l.label}
+                path={`${l.path}/piShop`}
+                free={l.free}
+                total={l.total}
+                selected={l.path === library}
+                navDefault={l.path === library}
+                onClick={() => {
+                  setLibrary(l.path)
+                  closeChooser()
+                }}
+              />
+            ))}
+          </div>
+        </Dialog>
       )}
       {choose === 'tool' && opts && (
         <ChooseDialog
@@ -483,15 +532,95 @@ export default function InstallPage({
             setPicker(null)
             void run(
               () =>
-                (then === 'finish' ? api.installFinish(hash, path) : api.installPortable(hash, path, tool)).then(s => setStatus({ state: s })),
+                (then === 'finish'
+                  ? api.installFinish(hash, path)
+                  : (stopTransfer(), api.installPortable(hash, path, tool))
+                ).then(s => setStatus({ state: s })),
               then === 'finish' ? tr('Installed') : tr('Added to Steam'),
             )
           }}
         />
       )}
-      {compat && (
-        <CompatPanel appid={game?.steam_appid ? Number(game.steam_appid) : null} name={name} onClose={() => setCompat(false)} />
+      {compat && <CompatPanel appid={game?.steam_appid ? Number(game.steam_appid) : null} name={name} onClose={() => setCompat(false)} />}
+      {wipe && (
+        <DeleteDownloadDialog
+          hash={hash}
+          name={name}
+          dir={contentRoot}
+          size={t.totalBytes}
+          onClose={() => setWipe(false)}
+          onDone={() => {
+            setWipe(false)
+            onClose()
+          }}
+        />
       )}
     </div>
+  )
+}
+
+/** Where the archive extracts to, and whether it fits there. */
+function ExtractSpace({ dir, need }: { dir: string; need: number }) {
+  const s = useSpace(dir || null)
+  if (!dir) return null
+  return (
+    <StorageCard
+      icon="folder"
+      title={tr('Extracts next to the archive')}
+      path={dir}
+      free={s?.free}
+      total={s?.total}
+      disk={s?.disk}
+      warn={s?.free != null && s.free < need ? tr('Not enough free space there.') : null}
+    />
+  )
+}
+
+/** Transfers → Delete downloaded files: the torrent's files and what was extracted from them. */
+export function DeleteDownloadDialog({
+  hash,
+  name,
+  dir,
+  size,
+  onDone,
+  onClose,
+}: {
+  hash: string
+  name: string
+  dir: string
+  size: number
+  onDone: () => void
+  onClose: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const s = useSpace(dir || null)
+  const go = async () => {
+    setBusy(true)
+    try {
+      const r = await api.installDeleteDownload(hash)
+      toast(tr('Downloaded files deleted'), tr('{size} freed', { size: formatBytes(r.freed) }), 'ok')
+      onDone()
+    } catch (e) {
+      setBusy(false)
+      toast(tr("Couldn't delete the download"), (e as Error).message, 'error')
+    }
+  }
+  return (
+    <Dialog title={tr('Delete the download of {name}?', { name })} onClose={onClose} wide>
+      <p className="muted">
+        {tr('The torrent’s files and what was extracted from them go; the installed game stays in Games. The transfer leaves Transfers.')}
+      </p>
+      {dir && (
+        <StorageCard icon="download" title={tr('About {size} to free', { size: formatBytes(size) })} path={dir} free={s?.free} total={s?.total} disk={s?.disk} />
+      )}
+      <div className="dialog-actions">
+        <button data-nav className="btn danger" disabled={busy} onClick={() => void go()}>
+          {busy ? <Spinner /> : <Icon name="trash" size={18} />} {tr('Delete')}
+        </button>
+        <button data-nav data-nav-default className="btn" onClick={onClose}>
+          {tr('Cancel')}
+        </button>
+      </div>
+    </Dialog>
   )
 }

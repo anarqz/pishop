@@ -14,5 +14,8 @@
   "Quit": "Sair",
   "Downloads stop until you open piShop again.": "Os downloads param até você abrir o piShop de novo.",
   "piShop {v} is ready": "O piShop {v} está pronto",
-  "It installs the next time piShop starts. To update now: Settings → About → Restart now.": "Ele se instala na próxima vez que o piShop abrir. Para atualizar agora: Configurações → Sobre → Reiniciar agora."
+  "It installs the next time piShop starts. To update now: Settings → About → Restart now.": "Ele se instala na próxima vez que o piShop abrir. Para atualizar agora: Configurações → Sobre → Reiniciar agora.",
+  "Games": "Jogos",
+  "Free space unknown": "Espaço livre desconhecido",
+  "of {total}": "de {total}"
 }
