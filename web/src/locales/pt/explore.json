@@ -9,8 +9,6 @@
   "Search": "Buscar",
   "Back": "Voltar",
   "New folder": "Nova pasta",
-  "No sources set up": "Nenhuma fonte configurada",
-  "Add a network storage (SMB) to browse your games.": "Adicione um armazenamento de rede (SMB) para navegar pelos seus jogos.",
   "Add network storage": "Adicionar armazenamento de rede",
   "FROM": "ORIGEM",
   "TO": "DESTINO",
@@ -51,5 +49,9 @@
   "Copy to roms/{system}": "Copiar para roms/{system}",
   "Suggested — emulator folder detected": "Sugerido — pasta do emulador detectada",
   "Copy to the folder open on the destination": "Copiar para a pasta aberta no destino",
-  "Cancel": "Cancelar"
+  "Cancel": "Cancelar",
+  "This device": "Este aparelho",
+  "Files on this device": "Arquivos deste aparelho",
+  "Not found": "Não encontrado",
+  "Couldn't open {path}": "Não foi possível abrir {path}"
 }

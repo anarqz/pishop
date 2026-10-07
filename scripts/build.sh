@@ -32,6 +32,16 @@ if [[ ! -f "$CACHE/yt-dlp_linux" ]] || [[ -n "$(find "$CACHE/yt-dlp_linux" -mtim
   curl -fsSL -o "$CACHE/yt-dlp_linux" https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux
 fi
 
+echo "› winetricks"
+# The latest release's script (LGPL-2.1); refreshed when older than 30 days.
+# It runs inside the game's Proton runtime; piShop itself is its cabextract/unzip.
+if [[ ! -f "$CACHE/winetricks" ]] || [[ -n "$(find "$CACHE/winetricks" -mtime +30)" ]]; then
+  WT_TAG=$(curl -fsSL https://api.github.com/repos/Winetricks/winetricks/releases/latest | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
+  curl -fsSL -o "$CACHE/winetricks.tmp" "https://raw.githubusercontent.com/Winetricks/winetricks/${WT_TAG:-master}/src/winetricks"
+  head -1 "$CACHE/winetricks.tmp" | grep -q '^#!/bin/sh' || { echo "winetricks: download inesperado"; exit 1; }
+  mv "$CACHE/winetricks.tmp" "$CACHE/winetricks"
+fi
+
 echo "› bundle"
 mkdir -p "$OUT/art"
 rsync -a --delete --exclude '.version-*' "$CACHE/chrome-linux64/" "$OUT/chromium/"
@@ -39,6 +49,7 @@ cp launcher/target/x86_64-unknown-linux-musl/release/pishop "$OUT/pishop"
 cp art/*.png "$OUT/art/"
 mkdir -p "$OUT/bin"
 cp "$CACHE/yt-dlp_linux" "$OUT/bin/yt-dlp"
-chmod +x "$OUT/bin/yt-dlp"
+cp "$CACHE/winetricks" "$OUT/bin/winetricks"
+chmod +x "$OUT/bin/yt-dlp" "$OUT/bin/winetricks"
 chmod +x "$OUT/pishop"
 du -sh "$OUT"

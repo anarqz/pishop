@@ -1,6 +1,8 @@
-// Two-pane, FTP-style explorer: network source on the left, Deck storage on
-// the right. Driven entirely by the controller (custom list navigation, so
-// folders with tens of thousands of entries stay instant via virtualization).
+// Two-pane, FTP-style explorer: a network share or this device's own storage
+// on the left, the device's places on the right. Driven entirely by the
+// controller (custom list navigation, so folders with tens of thousands of
+// entries stay instant via virtualization). Transfers can open a finished
+// download here (request), already selected and ready to copy anywhere.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { type Entry, type Place, type Source, api, formatBytes, joinPath, parentPath } from '../api'
@@ -55,12 +57,23 @@ interface PaneMem {
   path: string
   cursor: number
 }
-const memory: { panes: [PaneMem, PaneMem]; active: 0 | 1 } = {
+const memory: { panes: [PaneMem, PaneMem]; active: 0 | 1; handled: number } = {
   panes: [
     { selected: 0, path: '', cursor: 0 },
     { selected: 0, path: '', cursor: 0 },
   ],
   active: 0,
+  /** Last request already applied (so coming back to the tab doesn't redo it). */
+  handled: 0,
+}
+
+/** Left pane: a network share, or this device (absolute paths, after the shares). */
+type LeftSource = { kind: 'smb'; source: Source } | { kind: 'local' }
+
+/** Opens a local file or folder in the left pane, selected and ready to copy. */
+export interface ExplorerRequest {
+  path: string
+  n: number
 }
 
 interface Row {
@@ -68,9 +81,15 @@ interface Row {
   entry?: Entry
 }
 
-export default function Explorer({ sources, places, onGoSettings }: {
+export default function Explorer({
+  sources,
+  places,
+  request,
+  onGoSettings,
+}: {
   sources: Source[]
   places: Place[]
+  request?: ExplorerRequest | null
   onGoSettings: () => void
 }) {
   const [active, setActive] = useState<0 | 1>(memory.active)
@@ -81,13 +100,22 @@ export default function Explorer({ sources, places, onGoSettings }: {
   const [marked, setMarked] = useState<Set<string>>(new Set())
   const [dialog, setDialog] = useState<null | 'copy' | 'filter' | 'mkdir'>(null)
 
-  const source = sources[Math.min(left.selected, sources.length - 1)]
+  const leftSources = useMemo<LeftSource[]>(
+    () => [...sources.map(source => ({ kind: 'smb' as const, source })), { kind: 'local' as const }],
+    [sources],
+  )
+  const leftSrc = leftSources[Math.min(left.selected, leftSources.length - 1)]
+  const isLocal = leftSrc.kind === 'local'
+  const source = leftSrc.kind === 'smb' ? leftSrc.source : null
   const place = places[Math.min(right.selected, places.length - 1)]
+  // Where "This device" starts: Downloads, where finished torrents land.
+  const localStart = places.find(p => p.id === 'downloads')?.path ?? places.find(p => p.id === 'home')?.path ?? '/'
 
   // First visit / changed selection: start at the source's base folder / place root.
   useEffect(() => {
     if (source && !left.path && source.base_path) setLeft(p => ({ ...p, path: source.base_path }))
-  }, [source?.id])
+    if (isLocal && !left.path && places.length) setLeft(p => ({ ...p, path: localStart }))
+  }, [source?.id, isLocal, places.length])
   useEffect(() => {
     if (place && (!right.path || !right.path.startsWith(place.path))) setRight(p => ({ ...p, path: place.path, cursor: 0 }))
   }, [place?.id])
@@ -97,7 +125,11 @@ export default function Explorer({ sources, places, onGoSettings }: {
     memory.active = active
   }, [left, right, active])
 
-  const remote = useListing(source ? `r:${source.id}:${left.path}` : null, async () => {
+  const srcList = useListing(isLocal ? (left.path ? `l:${left.path}` : null) : source ? `r:${source.id}:${left.path}` : null, async () => {
+    if (isLocal) {
+      const r = await api.listLocal(left.path)
+      return { entries: r.entries, free: r.free }
+    }
     const r = await api.listRemote(source!.id, left.path)
     return { entries: r.entries }
   })
@@ -107,8 +139,8 @@ export default function Explorer({ sources, places, onGoSettings }: {
   })
 
   const leftRows = useMemo(
-    () => rowsFor(remote.data?.entries, filters[0], left.path !== ''),
-    [remote.data, filters, left.path],
+    () => rowsFor(srcList.data?.entries, filters[0], isLocal ? !!left.path && left.path !== '/' : left.path !== ''),
+    [srcList.data, filters, left.path, isLocal],
   )
   const rightRows = useMemo(
     () => rowsFor(local.data?.entries, filters[1], !!place && right.path !== place.path),
@@ -145,12 +177,18 @@ export default function Explorer({ sources, places, onGoSettings }: {
 
   const goUp = (side: 0 | 1) => {
     if (side === 0) {
-      if (!left.path) return false
+      if (!left.path || (isLocal && left.path === '/')) return false
       const from = left.path.split('/').pop() ?? ''
       const parent = parentPath(left.path)
-      const rows = cache.get(`r:${source?.id}:${parent}`)?.entries ?? []
-      const idx = rows.findIndex(e => e.name === from)
-      setLeft({ ...left, path: parent === '/' ? '' : parent, cursor: idx >= 0 ? idx + (parent ? 1 : 0) : 0 })
+      if (isLocal) {
+        const rows = cache.get(`l:${parent}`)?.entries ?? []
+        const idx = rows.findIndex(e => e.name === from)
+        setLeft({ ...left, path: parent, cursor: idx >= 0 ? idx + (parent !== '/' ? 1 : 0) : 0 })
+      } else {
+        const rows = cache.get(`r:${source?.id}:${parent}`)?.entries ?? []
+        const idx = rows.findIndex(e => e.name === from)
+        setLeft({ ...left, path: parent === '/' ? '' : parent, cursor: idx >= 0 ? idx + (parent ? 1 : 0) : 0 })
+      }
       setMarked(new Set())
       setFilters(f => ['', f[1]])
       return true
@@ -174,9 +212,10 @@ export default function Explorer({ sources, places, onGoSettings }: {
     })
 
   const cycle = (side: 0 | 1, d: number) => {
-    if (side === 0 && sources.length) {
-      const next = (left.selected + d + sources.length) % sources.length
-      setLeft({ selected: next, path: sources[next].base_path, cursor: 0 })
+    if (side === 0 && leftSources.length > 1) {
+      const next = (left.selected + d + leftSources.length) % leftSources.length
+      const to = leftSources[next]
+      setLeft({ selected: next, path: to.kind === 'smb' ? to.source.base_path : localStart, cursor: 0 })
       setMarked(new Set())
     } else if (side === 1 && places.length) {
       const next = (right.selected + d + places.length) % places.length
@@ -185,9 +224,31 @@ export default function Explorer({ sources, places, onGoSettings }: {
     setFilters(f => (side === 0 ? ['', f[1]] : [f[0], '']))
   }
 
+  // Transfers → Explore: the download is selected in its folder; Y copies it.
+  useEffect(() => {
+    if (!request || request.n === memory.handled) return
+    memory.handled = request.n
+    const target = request.path.replace(/\/+$/, '') || '/'
+    const parent = parentPath(target) || '/'
+    const name = target.split('/').pop() ?? ''
+    setActive(0)
+    setHead(h => [false, h[1]])
+    setFilters(f => ['', f[1]])
+    api
+      .listLocal(parent)
+      .then(r => {
+        cache.set(`l:${parent}`, { entries: r.entries, free: r.free })
+        const idx = r.entries.findIndex(e => e.name === name)
+        setLeft({ selected: sources.length, path: parent, cursor: idx >= 0 ? idx + (parent !== '/' ? 1 : 0) : 0 })
+        setMarked(idx >= 0 ? new Set([name]) : new Set())
+        if (idx < 0) toast(tr('Not found'), target, 'error')
+      })
+      .catch(e => toast(tr("Couldn't open {path}", { path: parent }), String((e as Error).message), 'error'))
+  }, [request, sources.length])
+
   const copyItems = () => {
     if (marked.size) {
-      return remote.data?.entries.filter(e => marked.has(e.name)) ?? []
+      return srcList.data?.entries.filter(e => marked.has(e.name)) ?? []
     }
     const row = leftRows[left.cursor]
     return row?.kind === 'entry' ? [row.entry!] : []
@@ -216,7 +277,9 @@ export default function Explorer({ sources, places, onGoSettings }: {
           setHead(h => (side === 0 ? [false, h[1]] : [h[0], false]))
           return true
         case 'confirm':
-          cycle(side, 1)
+          // Only "This device" on the left: A sets up a network share instead.
+          if (side === 0 && !sources.length) onGoSettings()
+          else cycle(side, 1)
           return true
         default:
           return a === 'up'
@@ -267,7 +330,7 @@ export default function Explorer({ sources, places, onGoSettings }: {
         return true
       case 'view':
         if (side === 0) {
-          const all = (remote.data?.entries ?? []).filter(e => !filters[0] || e.name.toLowerCase().includes(filters[0].toLowerCase()))
+          const all = (srcList.data?.entries ?? []).filter(e => !filters[0] || e.name.toLowerCase().includes(filters[0].toLowerCase()))
           setMarked(marked.size ? new Set() : new Set(all.map(e => e.name)))
         }
         return true
@@ -307,10 +370,15 @@ export default function Explorer({ sources, places, onGoSettings }: {
   }, [dialog])
 
   const hints: Hint[] = head[active]
-    ? [
-        { glyph: 'DPAD', label: active === 0 ? tr('Switch source') : tr('Switch location') },
-        { glyph: 'B', label: tr('List') },
-      ]
+    ? active === 0 && !sources.length
+      ? [
+          { glyph: 'A', label: tr('Add network storage') },
+          { glyph: 'B', label: tr('List') },
+        ]
+      : [
+          { glyph: 'DPAD', label: active === 0 ? tr('Switch source') : tr('Switch location') },
+          { glyph: 'B', label: tr('List') },
+        ]
     : active === 0
       ? [
           { glyph: 'A', label: tr('Open') },
@@ -327,19 +395,6 @@ export default function Explorer({ sources, places, onGoSettings }: {
         ]
   useHints(dialog ? null : hints)
 
-  if (!sources.length) {
-    return (
-      <div className="empty-state" data-nav-scope>
-        <Icon name="network" size={56} />
-        <h2>{tr('No sources set up')}</h2>
-        <p>{tr('Add a network storage (SMB) to browse your games.')}</p>
-        <button data-nav data-nav-default className="btn primary" onClick={onGoSettings}>
-          {tr('Add network storage')}
-        </button>
-      </div>
-    )
-  }
-
   const freeRight = local.data?.free ?? place?.free ?? 0
 
   return (
@@ -349,27 +404,27 @@ export default function Explorer({ sources, places, onGoSettings }: {
         active={active === 0}
         headFocused={head[0]}
         kind={tr('FROM')}
-        title={source?.name ?? ''}
-        subtitle={`\\\\${source?.host}\\${source?.share}`}
-        icon="network"
-        canCycle={sources.length > 1}
-        path={`/${left.path}`}
+        title={isLocal ? tr('This device') : (source?.name ?? '')}
+        subtitle={isLocal ? tr('Files on this device') : `\\\\${source?.host}\\${source?.share}`}
+        icon={isLocal ? 'home' : 'network'}
+        canCycle={leftSources.length > 1}
+        path={isLocal ? left.path : `/${left.path}`}
         rows={leftRows}
         cursor={left.cursor}
         marked={marked}
-        loading={remote.loading && !remote.data}
-        refreshing={remote.loading && !!remote.data}
-        error={remote.error}
+        loading={srcList.loading && !srcList.data}
+        refreshing={srcList.loading && !!srcList.data}
+        error={srcList.error}
         filter={filters[0]}
-        status={statusLine(remote.data?.entries, marked, filters[0])}
+        status={statusLine(srcList.data?.entries, marked, filters[0])}
         visibleRows={visibleRows}
         onRowClick={i => {
           setActive(0)
           if (i === left.cursor) enter(0, leftRows[i])
           else setLeft({ ...left, cursor: i })
         }}
-        onHeadClick={() => cycle(0, 1)}
-        onRetry={remote.reload}
+        onHeadClick={() => (sources.length ? cycle(0, 1) : onGoSettings())}
+        onRetry={srcList.reload}
       />
       <Pane
         side={1}
@@ -399,9 +454,9 @@ export default function Explorer({ sources, places, onGoSettings }: {
         onRetry={local.reload}
       />
 
-      {dialog === 'copy' && source && place && (
+      {dialog === 'copy' && (source || isLocal) && place && (
         <CopyDialog
-          source={source}
+          sourceId={isLocal ? 'local' : source!.id}
           remotePath={left.path}
           items={copyItems()}
           destPath={right.path}
@@ -610,7 +665,7 @@ function Pane(props: {
 // ---------- copy confirmation ----------
 
 function CopyDialog({
-  source,
+  sourceId,
   remotePath,
   items,
   destPath,
@@ -619,7 +674,8 @@ function CopyDialog({
   onClose,
   onQueued,
 }: {
-  source: Source
+  /** A share's id, or "local" for this device (absolute paths). */
+  sourceId: string
   remotePath: string
   items: Entry[]
   destPath: string
@@ -660,7 +716,7 @@ function CopyDialog({
       setBusy(true)
       try {
         await api.enqueue(
-          source.id,
+          sourceId,
           dest,
           items.map(e => ({ path: joinPath(remotePath, e.name), name: e.name, dir: e.dir })),
         )
@@ -670,7 +726,7 @@ function CopyDialog({
         toast(tr("Couldn't add to the queue"), String((e as Error).message), 'error')
       }
     },
-    [items, onQueued, remotePath, source.id],
+    [items, onQueued, remotePath, sourceId],
   )
 
   return (

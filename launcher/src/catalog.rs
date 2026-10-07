@@ -451,11 +451,12 @@ pub async fn art(name: &str) -> Option<Art> {
 }
 
 async fn sgdb_search(term: &str, asset_type: &str) -> anyhow::Result<Value> {
+    let filters = if asset_type == "grid" { json!({ "dimensions": ["600x900", "660x930", "342x482"] }) } else { json!({}) };
+    sgdb_search_with(term, asset_type, filters).await
+}
+
+async fn sgdb_search_with(term: &str, asset_type: &str, filters: Value) -> anyhow::Result<Value> {
     let _slot = SGDB_SLOTS.acquire().await?;
-    let mut filters = json!({});
-    if asset_type == "grid" {
-        filters = json!({ "dimensions": ["600x900", "660x930", "342x482"] });
-    }
     let r = HTTP
         .post("https://www.steamgriddb.com/api/public/search/main/games")
         .json(&json!({ "asset_type": asset_type, "term": term, "offset": 0, "filters": filters }))
@@ -534,6 +535,100 @@ async fn fetch_art(name: &str) -> anyhow::Result<Option<Art>> {
     Ok(best.filter(|b| b.score >= MIN_SCORE))
 }
 
+/// Whether two titles name the same game: close names and the same sequel
+/// numbers ("Minecraft Dungeons II" is not "Minecraft Dungeons"; "2" = "II").
+pub fn same_game(a: &str, b: &str) -> bool {
+    const ROMAN: [&str; 9] = ["ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"];
+    let number = |w: &str| -> Option<u32> {
+        let w = w.to_ascii_lowercase();
+        if !w.is_empty() && w.chars().all(|c| c.is_ascii_digit()) {
+            return w.parse().ok();
+        }
+        ROMAN.iter().position(|r| *r == w).map(|i| i as u32 + 2)
+    };
+    // Words, with sequel numbers written one way.
+    let words = |s: &str| -> Vec<String> {
+        s.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(|w| number(w).map(|n| n.to_string()).unwrap_or_else(|| w.to_lowercase())).collect()
+    };
+    let sequels = |s: &str| -> Vec<u32> {
+        let mut v: Vec<u32> = s.split(|c: char| !c.is_ascii_alphanumeric()).filter_map(number).collect();
+        v.sort_unstable();
+        v
+    };
+    sequels(a) == sequels(b) && titles::similarity(&words(a).join(" "), &words(b).join(" ")) >= 0.8
+}
+
+/// What SteamGridDB has for one game, for the Steam library.
+#[derive(Default, Debug, Clone)]
+pub struct SgdbPack {
+    pub cover: Option<String>,
+    pub wide: Option<String>,
+    pub hero: Option<String>,
+    pub logo: Option<String>,
+    pub icon: Option<String>,
+}
+
+/// The best static asset Steam can show: PNG/JPEG (icons may be .ico),
+/// nothing NSFW/joke/animated, English first, the preferred style, and for
+/// logos a wide shape.
+fn pick_for_steam(assets: &Value, style: Option<&str>, wide: bool, icon: bool) -> Option<String> {
+    let mut best: Option<(i32, String)> = None;
+    for a in assets.as_array()? {
+        let flag = |k: &str| a[k].as_bool().unwrap_or(false);
+        if flag("nsfw") || flag("humor") || flag("epilepsy") || flag("is_animated") {
+            continue;
+        }
+        let mime = a["mime"].as_str().unwrap_or("");
+        if !(matches!(mime, "image/png" | "image/jpeg") || (icon && mime.contains("icon"))) {
+            continue;
+        }
+        let Some(url) = a["url"].as_str() else { continue };
+        let mut score = 0;
+        if a["language"].as_str().is_none_or(|l| l == "en") {
+            score += 4;
+        }
+        if style.is_some() && a["style"].as_str() == style {
+            score += 2;
+        }
+        if wide && a["width"].as_f64().unwrap_or(0.0) / a["height"].as_f64().unwrap_or(1.0).max(1.0) >= 1.6 {
+            score += 3;
+        }
+        if icon && mime == "image/png" {
+            score += 1;
+        }
+        // The site's order (votes) breaks ties.
+        if best.as_ref().is_none_or(|b| score > b.0) {
+            best = Some((score, url.to_string()));
+        }
+    }
+    best.map(|(_, url)| url)
+}
+
+/// SteamGridDB's art for exactly this game — nothing when it only has
+/// look-alikes — one search per kind.
+pub async fn sgdb_pack(name: &str) -> SgdbPack {
+    let kinds = [
+        ("grid", json!({ "dimensions": ["600x900", "660x930"] }), None, false),
+        ("grid", json!({ "dimensions": ["920x430", "460x215"] }), None, false),
+        ("hero", json!({}), Some("alternate"), false),
+        ("logo", json!({}), Some("official"), true),
+        ("icon", json!({}), Some("official"), false),
+    ];
+    let mut found: Vec<Option<String>> = Vec::new();
+    for (kind, filters, style, wide) in kinds {
+        let pick = async {
+            let v = sgdb_search_with(name, kind, filters).await.ok()?;
+            let games = v["data"]["games"].as_array()?;
+            let g = games.iter().find(|g| same_game(name, g["game"]["name"].as_str().unwrap_or("")))?;
+            pick_for_steam(&g["assets"], style, wide, kind == "icon")
+        };
+        found.push(pick.await);
+    }
+    let mut it = found.into_iter();
+    let mut next = || it.next().flatten();
+    SgdbPack { cover: next(), wide: next(), hero: next(), logo: next(), icon: next() }
+}
+
 static HEROES: LazyLock<Mutex<HashMap<u64, Option<String>>>> = LazyLock::new(|| {
     Mutex::new(std::fs::read(data_dir().join(".cache").join("heroes.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default())
 });
@@ -602,6 +697,7 @@ pub async fn image(url: &str) -> anyhow::Result<(Vec<u8>, String)> {
         "png" => "image/png",
         "jpg" | "jpeg" => "image/jpeg",
         "webp" => "image/webp",
+        "ico" => "image/x-icon",
         _ => "application/octet-stream",
     }
     .to_string();
@@ -753,6 +849,7 @@ pub async fn download(id: &str, dest: Option<String>, hint: Option<library::Hint
         dest,
         added: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0),
         resolved: false,
+        install: None,
     });
     let hash = info_hash.clone();
     tokio::spawn(async move {
@@ -761,4 +858,32 @@ pub async fn download(id: &str, dest: Option<String>, hint: Option<library::Hint
         library::update_game(&hash, game);
     });
     Ok(json!({ "torrent_id": v["id"], "name": v["details"]["name"], "info_hash": info_hash }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sequels_must_match() {
+        assert!(same_game("Minecraft Dungeons II", "Minecraft Dungeons II"));
+        assert!(!same_game("Minecraft Dungeons II", "Minecraft Dungeons"));
+        assert!(same_game("Dark Souls 2", "Dark Souls II"));
+        assert!(!same_game("Cyberpunk 2077", "Cyberpunk"));
+        assert!(same_game("The Walking Dead: Streets of Survival", "The Walking Dead Streets of Survival"));
+    }
+
+    #[test]
+    fn steam_needs_static_pictures() {
+        let assets = serde_json::json!([
+            { "url": "a.webp", "mime": "image/webp", "language": "en" },
+            { "url": "b.png", "mime": "image/png", "language": "ru", "style": "official" },
+            { "url": "c.png", "mime": "image/png", "language": "en", "is_animated": true },
+            { "url": "d.png", "mime": "image/png", "language": "en", "style": "official", "width": 900, "height": 300 },
+        ]);
+        assert_eq!(pick_for_steam(&assets, Some("official"), true, false).as_deref(), Some("d.png"));
+        let icons = serde_json::json!([{ "url": "i.ico", "mime": "image/vnd.microsoft.icon", "language": "en" }]);
+        assert_eq!(pick_for_steam(&icons, None, false, true).as_deref(), Some("i.ico"));
+        assert_eq!(pick_for_steam(&icons, None, false, false), None);
+    }
 }

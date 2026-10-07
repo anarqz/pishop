@@ -47,6 +47,23 @@ fn store<T: Serialize>(name: &str, v: &T) {
 pub struct LibraryArt {
     pub cover: Option<String>,
     pub hero: Option<String>,
+    /// Wide capsule (460×215 header), for the library's horizontal slot.
+    #[serde(default)]
+    pub wide: Option<String>,
+    /// Square community icon.
+    #[serde(default)]
+    pub icon: Option<String>,
+    /// The same art at twice the size (1200×1800, 3840×1240, 920×430), for
+    /// the Steam library.
+    #[serde(default)]
+    pub cover_2x: Option<String>,
+    #[serde(default)]
+    pub hero_2x: Option<String>,
+    #[serde(default)]
+    pub wide_2x: Option<String>,
+    /// Hash of the app's icon (also names its .ico on Steam's CDN).
+    #[serde(default)]
+    pub icon_hash: Option<String>,
 }
 
 static DETAILS: LazyLock<Mutex<HashMap<String, Option<StoreInfo>>>> = LazyLock::new(|| Mutex::new(load("steam-store.json")));
@@ -169,7 +186,7 @@ pub async fn library_art(appid: &str) -> Option<LibraryArt> {
     }
     // Some games localize their capsules; cached per language.
     let lang = crate::settings::lang().steam();
-    let key = format!("{appid}:{lang}");
+    let key = format!("{appid}:{lang}:3");
     if let Some(hit) = ART.lock().unwrap().get(&key).cloned() {
         return hit;
     }
@@ -198,12 +215,96 @@ pub async fn library_art(appid: &str) -> Option<LibraryArt> {
         let fmt = a["asset_url_format"].as_str()?;
         Some(format!("https://shared.akamai.steamstatic.com/store_item_assets/{}", fmt.replace("${FILENAME}", file)))
     };
-    let found = Some(LibraryArt { cover: url("library_capsule"), hero: url("library_hero") })
-        .filter(|a| a.cover.is_some() || a.hero.is_some());
+    let icon_hash = a["community_icon"].as_str().map(String::from);
+    let icon = icon_hash.as_ref().map(|h| format!("https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/{appid}/{h}.jpg"));
+    let found = Some(LibraryArt {
+        cover: url("library_capsule"),
+        hero: url("library_hero"),
+        wide: url("header"),
+        icon,
+        cover_2x: url("library_capsule_2x"),
+        hero_2x: url("library_hero_2x"),
+        wide_2x: url("header_2x"),
+        icon_hash,
+    })
+    .filter(|a| a.cover.is_some() || a.hero.is_some());
     let mut m = ART.lock().unwrap();
     m.insert(key, found.clone());
     store("steam-art.json", &*m);
     found
+}
+
+/// Steam's own placement of a game's logo over its hero.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct LogoPosition {
+    /// "BottomLeft", "UpperCenter", "CenterCenter"…
+    pub pinned: String,
+    pub width_pct: f64,
+    pub height_pct: f64,
+}
+
+/// What the store's item API leaves out: the library logo (newer apps keep
+/// it under a hashed name), where Steam places it, and the client icon.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct AppInfoArt {
+    /// Logo files under store_item_assets, best first (2× first).
+    pub logos: Vec<String>,
+    pub logo_position: Option<LogoPosition>,
+    pub clienticon: Option<String>,
+}
+
+static APPINFO: LazyLock<Mutex<HashMap<String, Option<AppInfoArt>>>> = LazyLock::new(|| Mutex::new(load("steam-appinfo.json")));
+
+/// The image for the user's language in a library_assets_full entry, else English.
+fn asset_file(entry: &Value, size: &str, lang: &str) -> Option<String> {
+    let images = &entry[size];
+    images[lang].as_str().or_else(|| images["english"].as_str()).map(String::from)
+}
+
+/// Pure: the logo set from an app's PICS "common" section.
+fn parse_appinfo(common: &Value, lang: &str) -> AppInfoArt {
+    let logo = &common["library_assets_full"]["library_logo"];
+    let logos = ["image2x", "image"].iter().filter_map(|size| asset_file(logo, size, lang)).collect();
+    let pos = &logo["logo_position"];
+    let pct = |k: &str| pos[k].as_str().and_then(|v| v.parse().ok()).or_else(|| pos[k].as_f64());
+    let logo_position = match (pos["pinned_position"].as_str(), pct("width_pct"), pct("height_pct")) {
+        (Some(p), Some(w), Some(h)) => Some(LogoPosition { pinned: p.to_string(), width_pct: w, height_pct: h }),
+        _ => None,
+    };
+    AppInfoArt { logos, logo_position, clienticon: common["clienticon"].as_str().map(String::from) }
+}
+
+/// Steam's app info (PICS) for an app — what the Steam client itself reads
+/// for the library — through a public PICS mirror, since the store API
+/// doesn't carry logos. `fresh` skips the cache.
+pub async fn appinfo_art(appid: &str, fresh: bool) -> Option<AppInfoArt> {
+    let appid = appid.trim();
+    if appid.is_empty() || !appid.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    if !fresh {
+        if let Some(hit) = APPINFO.lock().unwrap().get(appid).cloned() {
+            return hit;
+        }
+    }
+    let v: Value = async {
+        client()?.get(format!("https://api.steamcmd.net/v1/info/{appid}")).send().await.ok()?.json().await.ok()
+    }
+    .await?;
+    let common = &v["data"][appid]["common"];
+    if !common.is_object() {
+        return None;
+    }
+    let found = Some(parse_appinfo(common, crate::settings::lang().steam()));
+    let mut m = APPINFO.lock().unwrap();
+    m.insert(appid.to_string(), found.clone());
+    store("steam-appinfo.json", &*m);
+    found
+}
+
+/// A file from an app's store assets on Steam's CDN.
+pub fn asset_url(appid: &str, file: &str) -> String {
+    format!("https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{appid}/{file}")
 }
 
 pub fn open_store_page(appid: &str) -> std::io::Result<()> {
@@ -220,4 +321,26 @@ pub fn open_store_page(appid: &str) -> std::io::Result<()> {
         let _ = child.wait();
     });
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn appinfo_logo_and_icon() {
+        let common = serde_json::json!({
+            "clienticon": "0b360a7c",
+            "library_assets_full": { "library_logo": {
+                "image": { "english": "d963/logo.png" },
+                "image2x": { "english": "d963/logo_2x.png", "brazilian": "aa/logo_2x.png" },
+                "logo_position": { "height_pct": "65.57", "pinned_position": "BottomLeft", "width_pct": "47.9" }
+            }}
+        });
+        let a = parse_appinfo(&common, "brazilian");
+        assert_eq!(a.logos, ["aa/logo_2x.png", "d963/logo.png"]);
+        assert_eq!(a.logo_position, Some(LogoPosition { pinned: "BottomLeft".into(), width_pct: 47.9, height_pct: 65.57 }));
+        assert_eq!(a.clienticon.as_deref(), Some("0b360a7c"));
+        assert!(parse_appinfo(&serde_json::json!({}), "english").logos.is_empty());
+    }
 }

@@ -1,8 +1,11 @@
-//! Copy queue: jobs run one at a time (FIFO); each file is fetched with
-//! several concurrent SMB reads. Jobs persist in `<data>/jobs.json`, and an
-//! interrupted job resumes on the next launch, skipping files already copied.
+//! Copy queue: jobs run one at a time (FIFO). Sources are network shares
+//! (each file fetched with several concurrent SMB reads) or this device's own
+//! storage (`source_id: "local"`, absolute paths), e.g. a finished download.
+//! Jobs persist in `<data>/jobs.json`, and an interrupted job resumes on the
+//! next launch, skipping files already copied.
 
 use std::collections::{HashMap, VecDeque};
+use std::io::{Read, Write};
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -21,6 +24,11 @@ const CHUNK: u64 = 1 << 20;
 const READERS: usize = 8;
 const FILE_ATTEMPTS: usize = 3;
 const SCAN_CONCURRENCY: usize = 8;
+/// Local copies: read/write buffer.
+const LOCAL_CHUNK: usize = 4 << 20;
+
+/// `source_id` of copies from this device's own storage.
+pub const LOCAL: &str = "local";
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -38,7 +46,8 @@ pub struct Job {
     pub id: u64,
     pub source_id: String,
     pub source_name: String,
-    /// Remote path relative to the share root ("/" separated).
+    /// Remote path relative to the share root ("/" separated), or an absolute
+    /// path for local copies.
     pub src_path: String,
     pub name: String,
     pub dir: bool,
@@ -112,21 +121,44 @@ pub fn list() -> Vec<Job> {
     STATE.lock().unwrap().jobs.clone()
 }
 
+/// What a job copies, resolved and checked before it's queued.
+struct Prepared {
+    source_id: String,
+    source_name: String,
+    src_path: String,
+    name: String,
+    dir: bool,
+}
+
 pub fn enqueue(source_id: &str, dest_dir: &str, items: Vec<NewItem>) -> anyhow::Result<Vec<u64>> {
-    let src = sources::get(source_id).ok_or_else(|| anyhow!(tr!("source not found", "fonte não encontrada")))?;
     if !Path::new(dest_dir).is_dir() {
         bail!(tr!("the destination folder doesn't exist", "a pasta de destino não existe"));
     }
+    let prepared: Vec<Prepared> = if source_id == LOCAL {
+        items.into_iter().map(|item| prepare_local(&item, Path::new(dest_dir))).collect::<anyhow::Result<_>>()?
+    } else {
+        let src = sources::get(source_id).ok_or_else(|| anyhow!(tr!("source not found", "fonte não encontrada")))?;
+        items
+            .into_iter()
+            .map(|item| Prepared {
+                source_id: src.id.clone(),
+                source_name: src.name.clone(),
+                src_path: item.path.trim_matches('/').to_string(),
+                name: item.name,
+                dir: item.dir,
+            })
+            .collect()
+    };
     let mut st = STATE.lock().unwrap();
     let mut ids = Vec::new();
-    for item in items {
+    for item in prepared {
         let id = st.next_id;
         st.next_id += 1;
         st.jobs.push(Job {
             id,
-            source_id: src.id.clone(),
-            source_name: src.name.clone(),
-            src_path: item.path.trim_matches('/').to_string(),
+            source_id: item.source_id,
+            source_name: item.source_name,
+            src_path: item.src_path,
             name: item.name,
             dir: item.dir,
             dest_dir: dest_dir.to_string(),
@@ -147,6 +179,32 @@ pub fn enqueue(source_id: &str, dest_dir: &str, items: Vec<NewItem>) -> anyhow::
     drop(st);
     WAKE.notify_one();
     Ok(ids)
+}
+
+/// A local item: must exist, can't land inside itself or onto itself. The
+/// name comes from the path, so it can't point outside the destination.
+fn prepare_local(item: &NewItem, dest: &Path) -> anyhow::Result<Prepared> {
+    let path = PathBuf::from(&item.path);
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    if !path.is_absolute() || name.is_empty() {
+        bail!(tr!("invalid path", "caminho inválido"));
+    }
+    let meta = std::fs::metadata(&path).map_err(|_| anyhow!(tr!("not found: {}", "não encontrado: {}", item.path)))?;
+    let (src, dst) = (path.canonicalize()?, dest.canonicalize()?);
+    if meta.is_dir() && dst.starts_with(&src) {
+        bail!(tr!("can't copy a folder into itself", "não é possível copiar uma pasta para dentro dela mesma"));
+    }
+    if src.parent() == Some(dst.as_path()) {
+        bail!(tr!("\"{}\" is already in this folder", "\"{}\" já está nesta pasta", name));
+    }
+    let home = localfs::home();
+    let parent = path.parent().unwrap_or(Path::new("/"));
+    let shown = match parent.strip_prefix(&home) {
+        Ok(rest) if rest.as_os_str().is_empty() => "~".to_string(),
+        Ok(rest) => format!("~/{}", rest.display()),
+        Err(_) => parent.display().to_string(),
+    };
+    Ok(Prepared { source_id: LOCAL.into(), source_name: shown, src_path: path.display().to_string(), name, dir: meta.is_dir() })
 }
 
 pub fn cancel(id: u64) {
@@ -242,59 +300,41 @@ async fn worker() {
 }
 
 struct FileTask {
+    /// Share path, or absolute path for local copies.
     remote: String,
     local: PathBuf,
     size: u64,
 }
 
+/// Where a job reads from.
+#[derive(Clone)]
+enum Src {
+    Smb(sources::Source),
+    Local,
+}
+
 async fn run(job: &Job, cancel: &Arc<AtomicBool>) -> anyhow::Result<()> {
-    let src = sources::get(&job.source_id).ok_or_else(|| anyhow!(tr!("the source \"{}\" was removed", "a fonte \"{}\" foi removida", job.source_name)))?;
+    let src = if job.source_id == LOCAL {
+        Src::Local
+    } else {
+        Src::Smb(sources::get(&job.source_id).ok_or_else(|| anyhow!(tr!("the source \"{}\" was removed", "a fonte \"{}\" foi removida", job.source_name)))?)
+    };
     let root = Path::new(&job.dest_dir).join(&job.name);
     update(job.id, |j| {
         j.status = Status::Scanning;
         j.error = None;
     });
 
-    // 1. Scan: list folders breadth-first, several listings in flight at once
-    // (big collections have thousands of sub-folders).
-    let mut files = Vec::new();
-    let mut total = 0u64;
-    if job.dir {
-        let mut queue = VecDeque::from([(job.src_path.clone(), root.clone())]);
-        let mut inflight = tokio::task::JoinSet::new();
-        loop {
-            while inflight.len() < SCAN_CONCURRENCY {
-                let Some((remote, local)) = queue.pop_front() else { break };
-                let src = src.clone();
-                inflight.spawn(async move { (smbfs::list(&src, &remote).await, remote, local) });
-            }
-            let Some(done) = inflight.join_next().await else { break };
-            if cancel.load(Ordering::SeqCst) {
-                inflight.abort_all();
-                return Ok(());
-            }
-            let (listing, remote, local) = done.map_err(|e| anyhow!(tr!("scan failed: {e}", "varredura falhou: {e}")))?;
-            for e in listing? {
-                let r = format!("{remote}/{}", e.name);
-                let l = local.join(&e.name);
-                if e.dir {
-                    queue.push_back((r, l));
-                } else {
-                    total += e.size;
-                    files.push(FileTask { remote: r, local: l, size: e.size });
-                }
-            }
-            let (n, t) = (files.len() as u64, total);
-            update(job.id, |j| {
-                j.files_total = n;
-                j.total_bytes = t;
-                j.current = remote;
-            });
+    // 1. Scan.
+    let (mut files, total) = match &src {
+        Src::Smb(s) => scan_smb(job, s, &root, cancel).await?,
+        Src::Local => {
+            let (job, root, cancel) = (job.clone(), root.clone(), cancel.clone());
+            tokio::task::spawn_blocking(move || scan_local(&job, &root, &cancel)).await??
         }
-    } else {
-        let (_, size) = smbfs::open_read(&src, &job.src_path).await?;
-        total = size;
-        files.push(FileTask { remote: job.src_path.clone(), local: root.clone(), size });
+    };
+    if cancel.load(Ordering::SeqCst) {
+        return Ok(());
     }
 
     // 2. Resume: files already present with the right size count as done.
@@ -349,9 +389,96 @@ async fn run(job: &Job, cancel: &Arc<AtomicBool>) -> anyhow::Result<()> {
     result
 }
 
+/// Share listing, folders breadth-first with several listings in flight at
+/// once (big collections have thousands of sub-folders).
+async fn scan_smb(job: &Job, src: &sources::Source, root: &Path, cancel: &Arc<AtomicBool>) -> anyhow::Result<(Vec<FileTask>, u64)> {
+    let mut files = Vec::new();
+    let mut total = 0u64;
+    if job.dir {
+        let mut queue = VecDeque::from([(job.src_path.clone(), root.to_path_buf())]);
+        let mut inflight = tokio::task::JoinSet::new();
+        loop {
+            while inflight.len() < SCAN_CONCURRENCY {
+                let Some((remote, local)) = queue.pop_front() else { break };
+                let src = src.clone();
+                inflight.spawn(async move { (smbfs::list(&src, &remote).await, remote, local) });
+            }
+            let Some(done) = inflight.join_next().await else { break };
+            if cancel.load(Ordering::SeqCst) {
+                inflight.abort_all();
+                return Ok((files, total));
+            }
+            let (listing, remote, local) = done.map_err(|e| anyhow!(tr!("scan failed: {e}", "varredura falhou: {e}")))?;
+            for e in listing? {
+                let r = format!("{remote}/{}", e.name);
+                let l = local.join(&e.name);
+                if e.dir {
+                    queue.push_back((r, l));
+                } else {
+                    total += e.size;
+                    files.push(FileTask { remote: r, local: l, size: e.size });
+                }
+            }
+            let (n, t) = (files.len() as u64, total);
+            update(job.id, |j| {
+                j.files_total = n;
+                j.total_bytes = t;
+                j.current = remote;
+            });
+        }
+    } else {
+        let (_, size) = smbfs::open_read(src, &job.src_path).await?;
+        total = size;
+        files.push(FileTask { remote: job.src_path.clone(), local: root.to_path_buf(), size });
+    }
+    Ok((files, total))
+}
+
+
+/// Local tree walk (on a blocking thread). Symlinked folders are skipped so a
+/// link can't loop; linked files are copied as files.
+fn scan_local(job: &Job, root: &Path, cancel: &AtomicBool) -> anyhow::Result<(Vec<FileTask>, u64)> {
+    let src = PathBuf::from(&job.src_path);
+    let meta = std::fs::metadata(&src).map_err(|_| anyhow!(tr!("not found: {}", "não encontrado: {}", job.src_path)))?;
+    if !meta.is_dir() {
+        return Ok((vec![FileTask { remote: job.src_path.clone(), local: root.to_path_buf(), size: meta.len() }], meta.len()));
+    }
+    let mut files = Vec::new();
+    let mut total = 0u64;
+    let mut queue = VecDeque::from([(src, root.to_path_buf())]);
+    while let Some((dir, local)) = queue.pop_front() {
+        if cancel.load(Ordering::SeqCst) {
+            break;
+        }
+        for e in std::fs::read_dir(&dir)? {
+            let e = e?;
+            let path = e.path();
+            let link = e.file_type()?.is_symlink();
+            let Ok(m) = std::fs::metadata(&path) else { continue };
+            if m.is_dir() {
+                if !link {
+                    queue.push_back((path, local.join(e.file_name())));
+                }
+            } else {
+                total += m.len();
+                files.push(FileTask { remote: path.display().to_string(), local: local.join(e.file_name()), size: m.len() });
+            }
+        }
+        if files.len() % 256 == 0 {
+            let (n, t, cur) = (files.len() as u64, total, dir.display().to_string());
+            update(job.id, |j| {
+                j.files_total = n;
+                j.total_bytes = t;
+                j.current = cur;
+            });
+        }
+    }
+    Ok((files, total))
+}
+
 async fn copy_all(
     job: &Job,
-    src: &sources::Source,
+    src: &Src,
     files: Vec<FileTask>,
     progress: &Arc<AtomicU64>,
     cancel: &Arc<AtomicBool>,
@@ -366,7 +493,16 @@ async fn copy_all(
         let mut attempt = 0;
         loop {
             let before = progress.load(Ordering::SeqCst);
-            match copy_file(src, &f, progress, cancel).await {
+            let copied = match src {
+                Src::Smb(s) => copy_file(s, &f, progress, cancel).await,
+                Src::Local => {
+                    let (f, progress, cancel) = (FileTask { remote: f.remote.clone(), local: f.local.clone(), size: f.size }, progress.clone(), cancel.clone());
+                    tokio::task::spawn_blocking(move || copy_local_file(&f, &progress, &cancel))
+                        .await
+                        .unwrap_or_else(|e| Err(anyhow!(tr!("reader failed: {e}", "leitor falhou: {e}"))))
+                }
+            };
+            match copied {
                 Ok(()) => break,
                 Err(e) => {
                     // Roll back this file's partial progress before retrying.
@@ -398,10 +534,7 @@ async fn copy_file(
     if let Some(parent) = f.local.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let part = f.local.with_file_name(format!(
-        "{}.pishop-part",
-        f.local.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
-    ));
+    let part = part_path(&f.local);
     let (remote, len) = smbfs::open_read(src, &f.remote).await?;
     let out = std::fs::File::create(&part)?;
     out.set_len(len)?;
@@ -448,6 +581,54 @@ async fn copy_file(
     if result.is_err() || cancel.load(Ordering::SeqCst) {
         let _ = std::fs::remove_file(&part);
         return result;
+    }
+    std::fs::rename(&part, &f.local)?;
+    Ok(())
+}
+
+fn part_path(local: &Path) -> PathBuf {
+    local.with_file_name(format!("{}.pishop-part", local.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()))
+}
+
+/// Plain read/write into a `.pishop-part` file, renamed when complete; a
+/// cancel drops the partial file.
+fn copy_local_file(f: &FileTask, progress: &AtomicU64, cancel: &AtomicBool) -> anyhow::Result<()> {
+    if let Some(parent) = f.local.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let part = part_path(&f.local);
+    let mut input = std::fs::File::open(&f.remote)?;
+    let mut out = std::fs::File::create(&part)?;
+    let mut buf = vec![0u8; LOCAL_CHUNK];
+    let mut copied = 0u64;
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            drop(out);
+            let _ = std::fs::remove_file(&part);
+            return Ok(());
+        }
+        let n = match input.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => {
+                drop(out);
+                let _ = std::fs::remove_file(&part);
+                return Err(e.into());
+            }
+        };
+        if let Err(e) = out.write_all(&buf[..n]) {
+            drop(out);
+            let _ = std::fs::remove_file(&part);
+            return Err(e.into());
+        }
+        copied += n as u64;
+        progress.fetch_add(n as u64, Ordering::Relaxed);
+    }
+    drop(out);
+    if copied != f.size {
+        let _ = std::fs::remove_file(&part);
+        bail!(tr!("the file changed while it was being copied", "o arquivo mudou durante a cópia"));
     }
     std::fs::rename(&part, &f.local)?;
     Ok(())

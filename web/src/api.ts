@@ -111,6 +111,143 @@ export interface ServicesFile {
   services: string[]
 }
 
+/** Install wizard (launcher's install.rs). */
+export type InstallStage = 'ready' | 'installing' | 'installed'
+export interface InstallState {
+  stage: InstallStage
+  appid: number | null
+  tool: string
+  target: string
+  installer: string | null
+  exe: string | null
+  started: number
+  runner?: string
+  game_dir?: string | null
+}
+export interface ExeCandidate {
+  path: string
+  name: string
+  size: number
+  score: number
+  root?: string
+  /** The executable the installer registered as the game's icon. */
+  registered?: boolean
+}
+export interface InstallTool {
+  name: string
+  display: string
+  installed: boolean
+}
+/** Moving a game's files into its prefix. */
+export interface MoveJob {
+  state: 'running' | 'done' | 'failed' | 'canceled'
+  done: number
+  total: number
+  to: string
+  error: string | null
+}
+/** Where an installed game can move: its prefix, or a Steam library. */
+export interface MoveTarget {
+  /** "prefix" or the library's path */
+  id: string
+  kind: 'prefix' | 'library'
+  label: string
+  to: string
+  windows: string
+  /** The game is there now. */
+  here: boolean
+  same_disk: boolean
+  free: number | null
+  blocked: string | null
+}
+/** Where each piece of a shortcut's artwork came from. */
+export type ArtSource = 'steam' | 'steamgriddb' | 'piShop' | null
+export interface ArtResult {
+  cover: ArtSource
+  wide: ArtSource
+  hero: ArtSource
+  logo: ArtSource
+  icon: ArtSource
+}
+export interface ArtJob {
+  running: boolean
+  done: number
+  total: number
+  current: string | null
+}
+/** An installed game: its Steam shortcut, folders, prefix and Proton. */
+export interface InstallInfo {
+  appid: number
+  steam_api: boolean
+  /** As Steam has it now (paths quoted the way Steam stores them). */
+  shortcut: { exe: string; start_dir: string; launch_options: string; tool: string } | null
+  tool: string
+  tools: InstallTool[]
+  exe: { path: string; windows: string } | null
+  game_dir: { path: string; windows: string; size: number; disk: string } | null
+  prefix: { path: string; exists: boolean; disk: string; free: number | null }
+  in_prefix: boolean
+  targets: MoveTarget[]
+  moving: MoveJob | null
+  /** An installer from the download running in the prefix right now. */
+  borrowed: string | null
+  running: boolean
+  /** The game, an installer, winetricks or a move is using the prefix. */
+  busy: boolean
+}
+/** Components for a prefix: Steam's redistributables and winetricks verbs. */
+export interface ComponentsStatus {
+  /** winetricks is bundled */
+  available: boolean
+  prefix: boolean
+  steam: Array<{ id: string; title: string; installed: boolean }>
+  verbs: Array<{ verb: string; offline: boolean; installed: boolean }>
+  running: boolean
+  /** What the current (or last) run is about. */
+  current: string
+  log: string[]
+  exit: number | null
+}
+export interface InstallOptions {
+  game: LibraryGame
+  content: string[]
+  /** The download's own folder. */
+  download_dir: string
+  installers: Array<{ path: string; name: string; kind: string | null }>
+  portable: ExeCandidate[]
+  libraries: Array<{ path: string; label: string; free: number | null; total: number | null }>
+  default_library: string | null
+  tools: InstallTool[]
+  default_tool: string | null
+  steam_api: boolean
+  debugging_enabled: boolean
+  state: InstallState | null
+}
+export interface InstallStatus {
+  state: InstallState | null
+  running?: boolean
+  candidates?: ExeCandidate[]
+}
+
+/** Archives inside a download (launcher's archive.rs). */
+export interface ArchiveSet {
+  path: string
+  name: string
+  kind: string
+  parts: number
+  size: number
+  /** False when a part is missing from the numbering (still downloading?). */
+  complete?: boolean
+}
+export interface ArchiveJob {
+  id: number
+  archive: string
+  dest: string
+  state: 'running' | 'done' | 'failed' | 'canceled'
+  progress: number
+  error?: string | null
+}
+
 /** The game a Store download belongs to, as Transfers shows it. */
 export interface LibraryGame {
   name: string
@@ -152,6 +289,7 @@ export interface LibraryEntry {
   added: number
   /** False while Steam/TheGamesDB are still being asked. */
   resolved: boolean
+  install?: InstallState | null
 }
 
 export interface ReleaseDetails {
@@ -305,6 +443,33 @@ export const api = {
   exportServices: () => post<{ path: string }>('/api/services/export'),
   importCandidates: () => call<ServicesFile[]>('/api/services/import'),
   importServices: (path: string) => post<{ imported: string[] }>('/api/services/import', { path }),
+  installOptions: (hash: string) => call<InstallOptions>(`/api/install/${hash}`),
+  installStart: (hash: string, r: { installer: string; library: string; tool: string }) =>
+    post<InstallState>(`/api/install/${hash}/start`, r),
+  installStatus: (hash: string) => call<InstallStatus>(`/api/install/${hash}/status`),
+  installFinish: (hash: string, exe: string) => post<InstallState>(`/api/install/${hash}/finish`, { exe }),
+  installPortable: (hash: string, exe: string, tool: string) => post<InstallState>(`/api/install/${hash}/portable`, { exe, tool }),
+  installPlay: (hash: string) => post<{ appid: number }>(`/api/install/${hash}/play`),
+  installReset: (hash: string) => post<object>(`/api/install/${hash}/reset`),
+  installInfo: (hash: string) => call<InstallInfo>(`/api/install/${hash}/info`),
+  installTool: (hash: string, tool: string) => post<InstallState>(`/api/install/${hash}/tool`, { tool }),
+  installMove: (hash: string, to: string) => post<{ started: boolean }>(`/api/install/${hash}/move`, { to }),
+  installArtwork: (hash: string) => post<ArtResult>(`/api/install/${hash}/artwork`),
+  libraryArtwork: () => post<ArtJob>('/api/library/artwork'),
+  libraryArtworkStatus: () => call<ArtJob>('/api/library/artwork'),
+  installMoveStatus: (hash: string) => call<MoveJob | null>(`/api/install/${hash}/move`),
+  installMoveCancel: (hash: string) => post<object>(`/api/install/${hash}/move/cancel`),
+  components: (hash: string) => call<ComponentsStatus>(`/api/install/${hash}/components`),
+  componentsRun: (hash: string, r: { steam: string[]; verbs: string[] }) => post<{ running: boolean }>(`/api/install/${hash}/components`, r),
+  componentsCancel: (hash: string) => post<object>(`/api/install/${hash}/components/cancel`),
+  installRun: (hash: string, path: string) => post<{ running: boolean }>(`/api/install/${hash}/run`, { path }),
+  enableSteamApi: () => post<{ restarting: boolean }>('/api/steam/client-api'),
+  archiveInspect: (path: string) =>
+    call<{ archives: ArchiveSet[]; exe_count: number; has_installer: boolean }>(`/api/archive/inspect?path=${encodeURIComponent(path)}`),
+  archiveExtract: (path: string, deleteAfter: boolean, dest?: string) =>
+    post<{ id: number }>('/api/archive/extract', { path, delete_after: deleteAfter, dest: dest ?? null }),
+  archiveJobs: () => call<ArchiveJob[]>('/api/archive/jobs'),
+  archiveCancel: (id: number) => post<object>(`/api/archive/jobs/${id}/cancel`),
   /** Settings → Downloads: overall torrent speed cap (bytes/s, null = none). */
   torrentLimits: () => call<{ download_bps: number | null }>('/api/torrent/limits'),
   setTorrentLimits: (download_bps: number | null) => post<{ download_bps: number | null }>('/api/torrent/limits', { download_bps }),

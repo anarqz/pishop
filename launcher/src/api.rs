@@ -41,7 +41,13 @@ pub fn router() -> Router {
         .route("/api/catalog/release/{id}", get(catalog_details))
         .route("/api/catalog/release/{id}/files", get(catalog_files))
         .route("/api/catalog/release/{id}/download", post(catalog_download))
+        .merge(crate::archive::router())
+        .merge(crate::compat::router())
+        .merge(crate::exeguess::router())
+        .merge(crate::install::router())
+        .merge(crate::winetricks::router())
         .route("/api/library", get(|| async { Json(crate::library::all()) }))
+        .route("/api/focus", get(|| async { Json(json!({ "focused": crate::focus::focused() })) }))
         .route("/api/settings", get(|| async { Json(crate::settings::get()) }).post(save_settings))
         .route("/api/services/export", post(services_export))
         .route("/api/services/import", get(|| async { Json(crate::services_file::candidates()) }).post(services_import))
@@ -136,7 +142,7 @@ async fn list_local(Query(q): Query<PathQuery>) -> Response {
             }))
             .into_response()
         }
-        Ok(Err(e)) => err(StatusCode::BAD_REQUEST, format!("não foi possível abrir {}: {e}", q.path)),
+        Ok(Err(e)) => err(StatusCode::BAD_REQUEST, tr!("couldn't open {}: {e}", "não foi possível abrir {}: {e}", q.path)),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }

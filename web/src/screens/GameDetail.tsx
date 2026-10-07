@@ -7,6 +7,7 @@ import { type DiscoverGame, type GameMeta, type Trailer, api, imgUrl } from '../
 import { locale, tr } from '../i18n'
 import { focusFirst, input } from '../input'
 import { Glyph, Icon, Spinner, useHints } from '../ui'
+import { CompatPanel, ProtonBadge } from './Compat'
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return null
@@ -32,6 +33,8 @@ export default function GameDetail({
   const [meta, setMeta] = useState<GameMeta | null>(null)
   const [trailer, setTrailer] = useState<{ state: 'loading' | 'ok' | 'none' | 'error'; t?: Trailer; msg?: string }>({ state: 'loading' })
   const [view, setView] = useState<'details' | 'trailer'>('details')
+  const [compat, setCompat] = useState(false)
+  const compatBtn = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     let alive = true
@@ -178,6 +181,9 @@ export default function GameDetail({
                 <button data-nav className="btn big" onClick={() => setView('trailer')}>
                   ▲ {tr('Watch trailer')}
                 </button>
+                <button ref={compatBtn} data-nav className="btn big compat-btn" onClick={() => setCompat(true)}>
+                  ProtonDB <ProtonBadge appid={appid} name={meta?.art?.name ?? game.title} inline />
+                </button>
                 {appid && (
                   <button data-nav className="btn big" onClick={() => void api.openSteamStore(appid).catch(() => {})}>
                     {tr('Open in Steam')}
@@ -257,6 +263,16 @@ export default function GameDetail({
           </button>
         </div>
       </div>
+      {compat && (
+        <CompatPanel
+          appid={appid}
+          name={meta?.art?.name ?? game.title}
+          onClose={() => {
+            setCompat(false)
+            requestAnimationFrame(() => compatBtn.current?.focus())
+          }}
+        />
+      )}
     </div>
   )
 }

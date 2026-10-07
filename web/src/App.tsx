@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { type Job, type Place, type Source, api, formatBytes } from './api'
 import { locale, setLang, tr, useLang } from './i18n'
 import { focusFirst, input } from './input'
-import Explorer from './screens/Explorer'
+import Explorer, { type ExplorerRequest } from './screens/Explorer'
 import Jobs from './screens/Jobs'
 import Settings from './screens/Settings'
 import Discover from './screens/Discover'
 import Store, { type StoreRequest } from './screens/Store'
 import { useEngineState } from './screens/Torrents'
 import { setTorrentApi } from './torrent'
-import { Footer, Glyph, Spinner, Toasts } from './ui'
+import { Dialog, Footer, Glyph, Spinner, Toasts } from './ui'
 
 export type Tab = 'discover' | 'store' | 'explorer' | 'jobs' | 'settings'
 
@@ -57,11 +57,13 @@ export default function App() {
   useLang()
   const [tab, setTab] = useState<Tab>('discover')
   const [storeRequest, setStoreRequest] = useState<StoreRequest | null>(null)
+  const [explorerRequest, setExplorerRequest] = useState<ExplorerRequest | null>(null)
   const [sources, setSources] = useState<Source[]>([])
   const [places, setPlaces] = useState<Place[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
   const [info, setInfo] = useState<ServerInfo | null>(null)
   const [quitting, setQuitting] = useState(false)
+  const [askQuit, setAskQuit] = useState(false)
   const clock = useClock()
   const quitProgress = useQuitProgress()
 
@@ -120,7 +122,9 @@ export default function App() {
       const i = TABS.findIndex(([t]) => t === tabRef.current)
       if (a === 'lb') go(TABS[(i - 1 + TABS.length) % TABS.length][0])
       else if (a === 'rb') go(TABS[(i + 1) % TABS.length][0])
+      // B walks out: a tab's root goes back to Discover, Discover asks to quit.
       else if (a === 'back' && tabRef.current !== 'discover') go('discover')
+      else if (a === 'back') setAskQuit(true)
       else if (a === 'quit') {
         setQuitting(true)
         void api.quit().catch(() => {})
@@ -178,14 +182,48 @@ export default function App() {
           />
         )}
         {tab === 'store' && <Store places={places} request={storeRequest} onGoSettings={() => go('settings')} />}
-        {tab === 'explorer' && <Explorer sources={sources} places={places} onGoSettings={() => go('settings')} />}
-        {tab === 'jobs' && <Jobs jobs={jobs} refresh={loadJobs} downloadDir={info?.download_dir} />}
+        {tab === 'explorer' && (
+          <Explorer sources={sources} places={places} request={explorerRequest} onGoSettings={() => go('settings')} />
+        )}
+        {tab === 'jobs' && (
+          <Jobs
+            jobs={jobs}
+            refresh={loadJobs}
+            downloadDir={info?.download_dir}
+            onExplore={path => {
+              setExplorerRequest({ path, n: Date.now() })
+              go('explorer')
+            }}
+          />
+        )}
         {tab === 'settings' && <Settings sources={sources} reloadSources={loadSources} info={info} />}
       </main>
 
       <Footer quitProgress={quitProgress} />
       <Toasts />
 
+      {askQuit && !quitting && (
+        <Dialog title={tr('Quit piShop?')} onClose={() => setAskQuit(false)}>
+          {active > 0 && <p className="muted">{tr('Downloads stop until you open piShop again.')}</p>}
+          <div className="row">
+            <button
+              data-nav
+              data-nav-default
+              className="btn primary"
+              onClick={() => {
+                setAskQuit(false)
+                setQuitting(true)
+                void api.quit().catch(() => {})
+              }}
+            >
+              {tr('Quit')}
+            </button>
+            <button data-nav className="btn" onClick={() => setAskQuit(false)}>
+              {tr('Cancel')}
+            </button>
+          </div>
+        </Dialog>
+      )}
       {quitting && (
         <div className="quitting">
           <Spinner />

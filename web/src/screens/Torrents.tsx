@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from 'react'
 import { type LibraryEntry, api, formatEta, imgUrl } from '../api'
-import { locale, tr, trn } from '../i18n'
+import { tr, trn } from '../i18n'
 import { type TorrentInfo, destroy, forget, formatBytes, useEngineState } from '../torrent'
 import { Dialog, Icon, toast } from '../ui'
 
@@ -164,7 +164,8 @@ export function DownloadTile({
 }) {
   const name = entry?.game.name ?? t.name
   const state = dlState(t)
-  const [line1, line2] = tileLines(t, state)
+  const installed = entry?.install?.stage === 'installed'
+  const [line1, line2] = installed ? [tr('Installed'), tileLines(t, state)[1]] : tileLines(t, state)
   return (
     <div
       data-nav
@@ -253,59 +254,6 @@ export function DownloadHero({ t, entry }: { t: TorrentInfo; entry?: LibraryEntr
         )}
       </div>
     </section>
-  )
-}
-
-function fmtDate(secs: number) {
-  return new Date(secs * 1000).toLocaleDateString(locale(), { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
-/** A: "View details" — placeholder for the install flow that comes next. */
-export function DetailsDialog({ t, entry, onClose }: { t: TorrentInfo; entry?: LibraryEntry; onClose: () => void }) {
-  const name = entry?.game.name ?? t.name
-  const folder = (entry?.dest ?? t.outputFolder).replace(/^\/home\/[^/]+/, '~')
-  const g = entry?.game
-  const rows: Array<[string, string | null | undefined]> = [
-    [tr('Developer'), g?.developers?.join(', ')],
-    [tr('Publisher'), g?.publishers?.join(', ')],
-    [tr('Release date'), g?.release_date],
-    [tr('Genres'), g?.genres?.join(', ')],
-    [tr('Torrent'), entry?.release ?? t.name],
-    [tr('Found on'), entry?.indexer],
-    [tr('Size'), `${formatBytes(t.totalBytes)} · ${trn(t.files.length, '{n} file', '{n} files')}`],
-    [tr('Folder'), folder],
-    [tr('Added'), entry ? fmtDate(entry.added) : null],
-    [tr('Game data'), g?.sources?.length ? g.sources.join(' → ') : null],
-  ]
-  return (
-    <Dialog title={name} onClose={onClose} wide hints={[{ glyph: 'B', label: tr('Back') }]}>
-      <div className="dl-details">
-        <div className="dl-cover small" style={{ ['--h' as string]: hue(name) }}>
-          <Cover name={name} cover={entry?.game.cover} />
-        </div>
-        <div className="dl-details-main">
-          {g?.overview && <p className="dl-overview">{g.overview}</p>}
-          <dl className="dl-details-facts">
-          {rows
-            .filter(([, v]) => v)
-            .map(([k, v]) => (
-              <div key={k}>
-                <dt>{k}</dt>
-                <dd>{v}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </div>
-      <p className="dl-soon">
-        <Icon name="info" size={18} /> {tr('Coming soon: install the game and add it to Steam right from here.')}
-      </p>
-      <div className="dialog-actions">
-        <button data-nav data-nav-default className="btn" onClick={onClose}>
-          {tr('Close')}
-        </button>
-      </div>
-    </Dialog>
   )
 }
 

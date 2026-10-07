@@ -64,6 +64,9 @@ pub struct Entry {
     /// False while Steam/TheGamesDB are still being asked.
     #[serde(default = "yes")]
     pub resolved: bool,
+    /// The install wizard's progress for this download (see `install`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub install: Option<crate::install::InstallState>,
 }
 
 fn yes() -> bool {
@@ -165,6 +168,20 @@ pub fn update_game(info_hash: &str, game: Game) {
         if let Some(e) = m.get_mut(info_hash) {
             e.game = game;
             e.resolved = true;
+            persist(m);
+        }
+    });
+}
+
+pub fn get(info_hash: &str) -> Option<Entry> {
+    with(|m| m.get(&info_hash.trim().to_lowercase()).cloned())
+}
+
+/// Saves the install wizard's state for a download.
+pub fn set_install(info_hash: &str, state: Option<crate::install::InstallState>) {
+    with(|m| {
+        if let Some(e) = m.get_mut(&info_hash.trim().to_lowercase()) {
+            e.install = state;
             persist(m);
         }
     });

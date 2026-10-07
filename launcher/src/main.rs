@@ -3,13 +3,22 @@
 //! app behaves like a single game process for Steam.
 
 mod api;
+mod archive;
+mod archivetools;
 mod browser;
 mod catalog;
+mod compat;
 mod discover;
+mod exeguess;
+mod focus;
+mod install;
 mod jobs;
 mod library;
 mod localfs;
 mod log;
+mod proton;
+mod redist;
+mod relocate;
 mod server;
 mod services_file;
 mod settings;
@@ -17,12 +26,14 @@ mod smbfs;
 mod sources;
 mod steam;
 mod steam_store;
+mod steamclient;
 mod titles;
 mod tgdb;
 mod torrent;
 mod tpb;
 mod trailer;
 mod vdf;
+mod winetricks;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -90,6 +101,10 @@ pub fn data_dir() -> PathBuf {
 }
 
 fn main() {
+    // Called as `cabextract` or `unzip` (by winetricks): be that tool.
+    if let Some(code) = archivetools::multicall() {
+        std::process::exit(code);
+    }
     let args = parse_args();
     if args.install_steam || args.uninstall_steam {
         let result = if args.install_steam { steam::install() } else { steam::uninstall() };
@@ -154,7 +169,9 @@ async fn run(args: Args) -> i32 {
     tokio::spawn(server::serve(listener, quit.clone(), started));
     torrent::spawn(&data_dir());
     sources::load();
+    focus::start();
     jobs::start();
+    tokio::spawn(install::recover());
 
     let mut term = signal(SignalKind::terminate()).expect("SIGTERM handler");
     let mut int = signal(SignalKind::interrupt()).expect("SIGINT handler");

@@ -26,6 +26,8 @@ const FAST_AFTER = 1200
 const FAST_RATE = 30
 const STICK_THRESHOLD = 0.5
 const QUIT_HOLD_MS = 1000
+/** After piShop is back in front, ignore the pad this long. */
+const RESUME_GRACE_MS = 300
 /** Right stick: dead zone and top speed (design px per second). */
 const SCROLL_DEADZONE = 0.18
 const SCROLL_MAX_SPEED = 1800
@@ -62,6 +64,10 @@ class InputManager {
   private heldSince = new Map<string, number>()
   private lastRepeat = new Map<string, number>()
   private quitHoldStart = 0
+  /** False while another app (a game piShop started, Steam's menus) is in front. */
+  private appFocused = true
+  /** Input is ignored until then: the press that brought piShop back. */
+  private resumeAt = 0
   private quitFired = false
   private running = false
 
@@ -69,6 +75,13 @@ class InputManager {
     if (this.running) return
     this.running = true
     window.addEventListener('keydown', this.onKey)
+    // Whether piShop is the app on screen (the launcher follows gamescope).
+    const follow = () =>
+      fetch('/api/focus')
+        .then(r => r.json())
+        .then((j: { focused: boolean }) => (this.appFocused = j.focused))
+        .catch(() => {})
+    setInterval(follow, 400)
     const loop = () => {
       this.poll()
       requestAnimationFrame(loop)
@@ -169,6 +182,20 @@ class InputManager {
     const now = performance.now()
     const dt = Math.min(0.05, (now - (this.lastPoll || now)) / 1000)
     this.lastPoll = now
+
+    // Chromium reads the controller even when gamescope shows another app:
+    // while piShop isn't in front, the pad is the game's. Buttons and
+    // directions still held when piShop comes back don't fire.
+    if (!this.appFocused) this.resumeAt = now + RESUME_GRACE_MS
+    if (now < this.resumeAt) {
+      for (const p of pads) {
+        this.prevButtons.set(p.index, p.buttons.map(b => b.pressed))
+        for (const [a, test] of DIRECTIONS) if (test(p)) this.heldSince.set(`${p.index}:${a}`, Infinity)
+        for (const [a, i] of [['lt', 6], ['rt', 7]] as const) if (pressed(p, i)) this.heldSince.set(`${p.index}:${a}`, Infinity)
+      }
+      this.quitHoldStart = 0
+      return
+    }
 
     // Right stick vertical (axis 3): continuous, speed proportional to tilt.
     let stick = 0
