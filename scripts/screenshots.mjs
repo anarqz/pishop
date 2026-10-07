@@ -9,8 +9,9 @@
 //                  HOME back to /home/deck, a LAN address to a hostname).
 //   SHOTS_LANG     en | pt: the app's language for the captures (default: as set).
 //   SHOTS_DEMO=1   Transfers shows representative downloads of free, open-source
-//                  games (Steam art and data), served to the capture browser
-//                  only: nothing is downloaded.
+//                  games (Steam art and data), one of them installed (its page
+//                  and components are captured too), served to the capture
+//                  browser only: nothing is downloaded or installed.
 //   CHROME         path to a Chrome/Chromium binary.
 //
 // Output: <out>/<device>/<screen>.webp for ROG Ally (1920×1080) and Steam Deck (1280×800).
@@ -38,8 +39,6 @@ async function session(port) {
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${profile}`,
       '--hide-scrollbars',
-      // The trailer starts by itself on the device; let it here too.
-      '--autoplay-policy=no-user-gesture-required',
       'about:blank',
     ],
     { stdio: 'ignore' },
@@ -127,6 +126,104 @@ async function steamGame(appid) {
   }
 }
 
+/** The demo download shown as installed (DDraceNetwork): its install page,
+ * Game setup and Components, as the launcher would answer on a Steam Deck. */
+const INSTALLED = 412220
+
+function demoInstall(row, downloadDir) {
+  const pt = LANG === 'pt'
+  const appid = 3141592653
+  const pfx = `/home/deck/.local/share/Steam/steamapps/compatdata/${appid}/pfx`
+  const dir = `${pfx}/drive_c/Program Files/DDNet`
+  const exe = `${dir}/DDNet.exe`
+  const internal = pt ? 'Armazenamento interno' : 'Internal storage'
+  const state = {
+    stage: 'installed',
+    appid,
+    tool: 'proton_11',
+    target: '/run/media/deck/SN01T/piShop/DDNet',
+    installer: `${downloadDir}/${row.release}/setup.exe`,
+    exe,
+    started: 0,
+    runner: 'steam',
+    game_dir: dir,
+  }
+  const tools = [
+    { name: 'proton_11', display: 'Proton 11.0-2', installed: true },
+    { name: 'proton_experimental', display: 'Proton Experimental', installed: true },
+    { name: 'proton_10', display: 'Proton 10.0-3', installed: true },
+    { name: 'proton_9', display: 'Proton 9.0-4', installed: false },
+  ]
+  const libraries = [
+    { path: '/home/deck/.local/share/Steam', label: internal, free: 261e9, total: 1.9e12 },
+    { path: '/run/media/deck/SN01T', label: 'SN01T', free: 395e9, total: 1e12 },
+  ]
+  const steam = [
+    ['vcredist/2022', 'Visual C++ 2022', false],
+    ['vcredist/2019', 'Visual C++ 2019', false],
+    ['vcredist/2017', 'Visual C++ 2017', false],
+    ['vcredist/2015', 'Visual C++ 2015', false],
+    ['vcredist/2013', 'Visual C++ 2013', true],
+    ['vcredist/2012', 'Visual C++ 2012', false],
+    ['vcredist/2010', 'Visual C++ 2010', true],
+    ['vcredist/2008', 'Visual C++ 2008', false],
+    ['DirectX/Jun2010', 'DirectX (June 2010)', true],
+    ['DotNet/4.8', '.NET Framework 4.8', false],
+    ['PhysX/9.12.1031', 'PhysX 9.12.1031', false],
+  ]
+  const offline = ['vcrun2022', 'd3dx9', 'xact', 'xinput', 'd3dx11_43', 'vcrun2013', 'vcrun2012', 'vcrun2010', 'vcrun2008']
+  const verbs = ['vcrun2022', 'd3dx9', 'xact', 'xinput', 'd3dx11_43', 'd3dcompiler_47', 'vcrun2013', 'vcrun2012', 'vcrun2010', 'vcrun2008',
+    'vcrun2005', 'dotnet48', 'dotnetdesktop8', 'xna40', 'physx', 'openal', 'corefonts']
+  const win = p => p.replaceAll('/', '\\')
+  return {
+    state,
+    options: {
+      game: row.game,
+      content: [`${downloadDir}/${row.release}`],
+      download_dir: `${downloadDir}/${row.release}`,
+      installers: [],
+      portable: [],
+      libraries,
+      default_library: libraries[1].path,
+      tools,
+      default_tool: 'proton_11',
+      steam_api: true,
+      debugging_enabled: true,
+      state,
+    },
+    info: {
+      appid,
+      steam_api: true,
+      shortcut: { exe: `"${exe}"`, start_dir: `"${dir}"`, launch_options: '', tool: 'proton_11' },
+      tool: 'proton_11',
+      tools,
+      exe: { path: exe, windows: win('C:/Program Files/DDNet/DDNet.exe') },
+      game_dir: { path: dir, windows: win('C:/Program Files/DDNet'), size: 141e6, disk: internal },
+      prefix: { path: pfx, exists: true, disk: internal, free: 261e9 },
+      in_prefix: true,
+      targets: [
+        { id: 'prefix', kind: 'prefix', label: pt ? 'Dentro do prefixo' : 'Inside its prefix', to: dir, windows: win('C:/Program Files/DDNet'), here: true, same_disk: true, free: 261e9, blocked: null },
+        { id: libraries[0].path, kind: 'library', label: internal, to: `${libraries[0].path}/piShop/DDNet`, windows: win('Z:/home/deck/.local/share/Steam/piShop/DDNet'), here: false, same_disk: true, free: 261e9, blocked: null },
+        { id: libraries[1].path, kind: 'library', label: 'SN01T', to: '/run/media/deck/SN01T/piShop/DDNet', windows: win('D:/piShop/DDNet'), here: false, same_disk: false, free: 395e9, blocked: null },
+      ],
+      moving: null,
+      borrowed: null,
+      running: false,
+      busy: false,
+    },
+    components: {
+      available: true,
+      prefix: true,
+      steam: steam.map(([id, title, installed]) => ({ id, title, installed })),
+      verbs: verbs.map(verb => ({ verb, offline: offline.includes(verb), installed: verb === 'd3dx9' })),
+      running: false,
+      current: '',
+      log: [],
+      exit: null,
+    },
+  }
+}
+
 /** Mocked engine + library responses for the Transfers screen. */
 async function demoData(downloadDir) {
   const now = Math.floor(Date.now() / 1000)
@@ -160,13 +257,25 @@ async function demoData(downloadDir) {
   const files = Object.fromEntries(
     rows.map(r => [r.id, { files: Array.from({ length: r.files }, (_, k) => ({ name: `file-${k}`, length: Math.round(r.size / r.files) })) }]),
   )
+  const installed = rows.find(r => r.appid === INSTALLED)
+  const install = demoInstall(installed, downloadDir)
   const library = Object.fromEntries(
     rows.map((r, i) => [
       r.hash,
-      { info_hash: r.hash, game: r.game, release: r.release, indexer: r.indexer, size: r.size, dest: null, added: now - i * 600, resolved: true },
+      {
+        info_hash: r.hash,
+        game: r.game,
+        release: r.release,
+        indexer: r.indexer,
+        size: r.size,
+        dest: null,
+        added: now - i * 600,
+        resolved: true,
+        ...(r === installed ? { install: install.state } : {}),
+      },
     ]),
   )
-  return { torrents, stats, files, library }
+  return { torrents, stats, files, library, install, installed: { id: installed.id, hash: installed.hash } }
 }
 
 async function capture(device, port) {
@@ -217,14 +326,7 @@ async function capture(device, port) {
   await key('Enter') // "Ver jogo" on the featured game
   await sleep(8000)
   await shot('game')
-  await key('ArrowUp') // the trailer slides in, full screen
-  await sleep(9000)
-  await key('x') // any button brings the control bar back
-  await sleep(500)
-  await shot('trailer')
-  await key('ArrowDown')
-  await sleep(1200)
-  await key('Enter') // "Buscar torrents"
+  await key('Enter') // "Search torrents"
   await sleep(10000)
   await shot('store')
   await key('Enter') // first release: its details, with the matched game's art
@@ -250,16 +352,29 @@ async function capture(device, port) {
   if (process.env.SHOTS_DEMO) {
     const info = await val(`fetch('/api/info').then(r => r.json())`)
     const demo = await demoData(info.download_dir)
+    const h = demo.installed.hash
     on('Fetch.requestPaused', ({ requestId, request }) => {
-      const u = new URL(request.url)
+      const p = new URL(request.url).pathname
       const body =
-        u.pathname === '/api/library'
+        p === '/api/library'
           ? demo.library
-          : u.pathname === '/torrents'
-            ? demo.torrents
-            : u.pathname === '/stats'
-              ? demo.stats
-              : (demo.files[u.pathname.split('/')[2]] ?? {})
+          : p === `/api/install/${h}`
+            ? demo.install.options
+            : p === `/api/install/${h}/info`
+              ? demo.install.info
+              : p === `/api/install/${h}/components`
+                ? demo.install.components
+                : p.startsWith('/api/install/')
+                  ? {}
+                  : p === '/api/archive/inspect'
+                    ? { archives: [], exe_count: 0, has_installer: false }
+                    : p.startsWith('/api/archive/')
+                      ? []
+                      : p === '/torrents'
+                        ? demo.torrents
+                        : p === '/stats'
+                          ? demo.stats
+                          : (demo.files[p.split('/')[2]] ?? {})
       void send('Fetch.fulfillRequest', {
         requestId,
         responseCode: 200,
@@ -270,12 +385,33 @@ async function capture(device, port) {
         body: Buffer.from(JSON.stringify(body)).toString('base64'),
       })
     })
-    await send('Fetch.enable', { patterns: [{ urlPattern: `${info.torrent_api}/*` }, { urlPattern: '*/api/library' }] })
+    await send('Fetch.enable', {
+      patterns: [{ urlPattern: `${info.torrent_api}/*` }, { urlPattern: '*/api/library' }, { urlPattern: '*/api/install/*' }, { urlPattern: '*/api/archive/*' }],
+    })
+    await val(`window.__demoInstalled = ${demo.installed.id}`)
   }
   await key('e') // R1 → Transferências
   await sleep(8000)
   await shot('transfers')
-  if (process.env.SHOTS_DEMO) await send('Fetch.disable')
+  if (process.env.SHOTS_DEMO) {
+    // The installed demo game: A opens its page (Ready to play + Game setup),
+    // then its Components.
+    await val(`document.querySelector('[data-torrent-id="' + window.__demoInstalled + '"]')?.focus()`)
+    await sleep(600)
+    await key('Enter')
+    await sleep(6000)
+    await shot('install')
+    await val(`document.querySelectorAll('.inst-card')[1]?.querySelectorAll('.inst-row')[1]?.focus()`)
+    await sleep(300)
+    await key('Enter')
+    await sleep(2500)
+    await shot('components')
+    await key('Escape')
+    await sleep(500)
+    await key('Escape')
+    await sleep(800)
+    await send('Fetch.disable')
+  }
 
   await key('e') // R1 → Configurações
   await sleep(2000)

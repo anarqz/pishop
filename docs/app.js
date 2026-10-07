@@ -217,7 +217,7 @@
     },
     {
       icon: 'download',
-      shot: 'transfers',
+      shot: 'install',
       tags: ['Proton', 'Steam'],
       pt: [
         'Instale pelo controle',
@@ -242,6 +242,7 @@
     },
     {
       icon: 'layers',
+      shot: 'components',
       tags: ['Steam', 'winetricks'],
       pt: [
         'Componentes por jogo',
@@ -556,6 +557,16 @@
       id: 'transfers',
       pt: ['Transferências', 'Cada download com a capa do jogo, um anel de progresso, velocidade e tempo restante.'],
       en: ['Transfers', "Every download with the game's cover, a progress ring, speed and time left."],
+    },
+    {
+      id: 'install',
+      pt: ['Pronto para jogar', 'A página do jogo instalado: atalho da Steam, pasta, prefixo e Proton — e mover para outra biblioteca ou para dentro do prefixo.'],
+      en: ['Ready to play', "An installed game's page: its Steam shortcut, folder, prefix and Proton — and moving it to another library or into the prefix."],
+    },
+    {
+      id: 'components',
+      pt: ['Componentes', 'Visual C++, DirectX e .NET dos instaladores da própria Steam, offline, e o winetricks para o resto — por jogo.'],
+      en: ['Components', "Visual C++, DirectX and .NET from Steam's own installers, offline, and winetricks for the rest — per game."],
     },
     {
       id: 'settings',
