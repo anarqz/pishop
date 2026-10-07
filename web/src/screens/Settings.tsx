@@ -443,6 +443,21 @@ function IndexersSection() {
 /** The last link that didn't import: offered again, to fix or retry, until one does. */
 let failedLink = ''
 
+/** "From a link…" takes a Pastebin paste by its code alone, after this. */
+const PASTEBIN_RAW = 'https://pastebin.com/raw/'
+
+/** A Pastebin code on its own ("6t61yMKq"); "http"/"https" is a link being typed. */
+const isPasteCode = (s: string) => /^[A-Za-z0-9]*$/.test(s) && !/^https?$/i.test(s)
+
+/** What "From a link…" downloads for what was typed: a Pastebin code, or a whole link ("https://" optional). */
+function importLink(v: string): string | null {
+  const s = v.trim()
+  if (!s) return null
+  if (isPasteCode(s)) return PASTEBIN_RAW + s
+  const url = /^https?:\/\//i.test(s) ? s : `https://${s}`
+  return /^https?:\/\/\S+\.\S+$/i.test(url) ? url : null
+}
+
 /** Picks a piShop services file found on the device, or downloads one from a link, and applies it. */
 function ImportDialog({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
   const [files, setFiles] = useState<ServicesFile[] | null>(null)
@@ -454,11 +469,13 @@ function ImportDialog({ onClose, onImported }: { onClose: () => void; onImported
   const [linkBusy, setLinkBusy] = useState(false)
   const [linkError, setLinkError] = useState<string | null>(null)
   const fromLink = async (v: string) => {
+    const to = importLink(v)
+    if (!to) return
     setUrl(v)
     setLinkBusy(true)
     setLinkError(null)
     try {
-      const r = await api.importServicesUrl(v)
+      const r = await api.importServicesUrl(to)
       failedLink = ''
       toast(tr('Services imported'), r.imported.join(', '), 'ok')
       setLink(false)
@@ -493,10 +510,12 @@ function ImportDialog({ onClose, onImported }: { onClose: () => void; onImported
     return (
       <TextPrompt
         title={tr('Import from a link')}
-        placeholder="https://gist.github.com/… · https://pastebin.com/…"
+        placeholder={tr('code')}
+        prefix={v => (isPasteCode(v) ? PASTEBIN_RAW : null)}
+        hint={tr('Just the Pastebin code, or any link to the file (like a GitHub gist).')}
         initial={url}
         submitLabel={tr('Import')}
-        validate={v => /^https?:\/\/\S+\.\S+/.test(v)}
+        validate={v => importLink(v) !== null}
         busy={linkBusy}
         error={linkError}
         onCancel={() => {
@@ -541,7 +560,7 @@ function ImportDialog({ onClose, onImported }: { onClose: () => void; onImported
         <Icon name="globe" />
         <div className="settings-row-main">
           <b>{tr('From a link…')}</b>
-          <small>{tr('A GitHub gist, a Pastebin paste or any link to the file')}</small>
+          <small>{tr('A Pastebin code, a GitHub gist or any link to the file')}</small>
         </div>
       </button>
       <div className="dialog-actions">

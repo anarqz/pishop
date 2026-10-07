@@ -125,6 +125,8 @@
   "Import from a link": "Importar de um link",
   "Import": "Importar",
   "From a link…": "De um link…",
-  "A GitHub gist, a Pastebin paste or any link to the file": "Um gist do GitHub, um paste do Pastebin ou qualquer link para o arquivo",
-  "Couldn't import: {error}": "Não foi possível importar: {error}"
+  "Couldn't import: {error}": "Não foi possível importar: {error}",
+  "A Pastebin code, a GitHub gist or any link to the file": "Um código do Pastebin, um gist do GitHub ou qualquer link para o arquivo",
+  "code": "código",
+  "Just the Pastebin code, or any link to the file (like a GitHub gist).": "Só o código do Pastebin, ou um link para o arquivo (como um gist do GitHub)."
 }

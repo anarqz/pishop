@@ -186,6 +186,8 @@ export function TextPrompt({
   extra,
   busy,
   error,
+  prefix,
+  hint,
 }: {
   title: string
   placeholder?: string
@@ -198,42 +200,61 @@ export function TextPrompt({
   extra?: { label: string; onSubmit: (v: string) => void }
   /** Submitted and waiting: the text stays, the buttons wait. */
   busy?: boolean
-  /** Why the last submit failed, under the field (the text stays to fix). */
+  /** Why the last submit failed, under the field while it holds that text (the text stays to fix). */
   error?: string | null
+  /**
+   * Fixed text inside the field, before what's typed (e.g. the start of a
+   * link, so only its end needs typing), for the text so far; null shows
+   * none. Only shown: onSubmit gets what was typed.
+   */
+  prefix?: (v: string) => string | null
+  /** A line under the field on what to type (an error takes its place). */
+  hint?: string
 }) {
   const [value, setValue] = useState(initial)
+  // What was last submitted: an error is about that text, not an edit of it.
+  const [sent, setSent] = useState<string | null>(null)
   const field = useRef<HTMLInputElement>(null)
   const ok = validate ? validate(value.trim()) : true
+  const pre = prefix?.(value.trim()) ?? null
+  const failed = error && sent === value.trim() ? error : null
+  const submit = (to: (v: string) => void) => {
+    setSent(value.trim())
+    to(value.trim())
+  }
   useEffect(() => {
     const id = setTimeout(() => field.current && showKeyboard(field.current), 80)
     return () => clearTimeout(id)
   }, [])
   return (
     <Dialog title={title} onClose={onCancel} top>
-      <input
-        ref={field}
-        data-nav
-        className="field mono"
-        placeholder={placeholder}
-        value={value}
-        spellCheck={false}
-        autoComplete="off"
-        onChange={e => setValue(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Enter' && ok && !busy) onSubmit(value.trim())
-        }}
-      />
-      {error && <p className="prompt-error">{error}</p>}
+      <label className={`field-box ${pre ? 'prefixed' : ''}`}>
+        {pre && <span className="field-prefix">{pre}</span>}
+        <input
+          ref={field}
+          data-nav
+          className="field mono"
+          placeholder={placeholder}
+          value={value}
+          spellCheck={false}
+          autoComplete="off"
+          onChange={e => setValue(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && ok && !busy) submit(onSubmit)
+          }}
+        />
+      </label>
+      {failed ? <p className="prompt-error">{failed}</p> : hint && <p className="prompt-hint">{hint}</p>}
       <div className="dialog-actions">
         <button data-nav className="btn" onClick={onCancel}>
           {tr('Cancel')}
         </button>
         {extra && (
-          <button data-nav className="btn" disabled={!ok || busy} onClick={() => extra.onSubmit(value.trim())}>
+          <button data-nav className="btn" disabled={!ok || busy} onClick={() => submit(extra.onSubmit)}>
             {extra.label}
           </button>
         )}
-        <button data-nav className="btn primary" disabled={!ok || busy} onClick={() => onSubmit(value.trim())}>
+        <button data-nav className="btn primary" disabled={!ok || busy} onClick={() => submit(onSubmit)}>
           {busy && <Spinner />}
           {submitLabel}
         </button>

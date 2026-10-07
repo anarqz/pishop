@@ -972,3 +972,13 @@ button.scard:focus .sring small { color: #39414b; }
 .origin-note .icon { flex: none; color: #7cc3ff; }
 .origin-note b { color: var(--text); }
 .prompt-error { margin: -6px 0 0; color: #ff8a8d; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.prompt-hint { margin: -6px 0 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
+/* A field with a fixed start (e.g. "https://pastebin.com/raw/"): the box is the field, and the text typed carries on right after it, whatever the font. */
+.field-box { display: block; }
+.field-box.prefixed {
+  display: flex; align-items: center; height: 44px; padding: 0 14px; border-radius: 4px; border: 2px solid transparent;
+  background: rgba(0,0,0,.35); cursor: text;
+}
+.field-box.prefixed:focus-within { border-color: var(--text); background: rgba(0,0,0,.5); }
+.field-box.prefixed > .field { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; background: none; }
+.field-prefix { flex: none; font-family: ui-monospace, 'Noto Sans Mono', monospace; font-size: 15px; white-space: pre; color: var(--muted); }
