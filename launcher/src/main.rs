@@ -33,6 +33,7 @@ mod torrent;
 mod tpb;
 mod trailer;
 mod update;
+mod vpn;
 mod vdf;
 mod winetricks;
 

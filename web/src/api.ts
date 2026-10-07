@@ -146,6 +146,28 @@ export interface MoveJob {
   to: string
   error: string | null
 }
+/** VPN connections through SteamOS's NetworkManager (launcher's vpn.rs). */
+export interface VpnConn {
+  uuid: string
+  name: string
+  kind: 'wireguard' | 'openvpn' | 'vpn'
+  state: 'on' | 'connecting' | 'off'
+  device: string | null
+  ip: string | null
+  /** OpenVPN that asks for a username and password not stored yet. */
+  needs_login: boolean
+}
+export interface VpnStatus {
+  available: boolean
+  error?: string
+  connections: VpnConn[]
+}
+export interface VpnFile {
+  path: string
+  name: string
+  kind: 'wireguard' | 'openvpn'
+  modified: number
+}
 /** Updates from GitHub releases (launcher's update.rs). */
 export interface UpdateStatus {
   current: string
@@ -412,6 +434,14 @@ export const api = {
   clearJobs: () => post<void>('/api/jobs/clear'),
   openKeyboard: () => post<void>('/api/keyboard'),
   quit: () => post<void>('/api/quit'),
+  vpn: () => call<VpnStatus>('/api/vpn'),
+  vpnCandidates: () => call<{ downloads: string; files: VpnFile[] }>('/api/vpn/candidates'),
+  vpnImport: (path: string) => post<{ uuid: string; name: string; kind: string; needs_login: boolean }>('/api/vpn/import', { path }),
+  vpnLogin: (uuid: string, username: string, password: string) => post<object>(`/api/vpn/${uuid}/login`, { username, password }),
+  vpnUp: (uuid: string) => post<object>(`/api/vpn/${uuid}/up`),
+  vpnDown: (uuid: string) => post<object>(`/api/vpn/${uuid}/down`),
+  vpnRemove: (uuid: string) => post<object>(`/api/vpn/${uuid}/remove`),
+  vpnIp: () => call<{ ip: string; place: string; org: string | null }>('/api/vpn/ip'),
   update: () => call<UpdateStatus>('/api/update'),
   updateCheck: () => post<UpdateStatus>('/api/update/check'),
   updateApply: () => post<{ restarting: boolean }>('/api/update/apply'),

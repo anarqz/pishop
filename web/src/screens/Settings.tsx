@@ -2,12 +2,13 @@
 // on the right. "Game sources" manages where games are collected from.
 
 import { useEffect, useState } from 'react'
-import { type ServicesConfig, type ServicesFile, type Source, type SourceInput, type UpdateStatus, api } from '../api'
+import { type ServicesConfig, type ServicesFile, type Source, type SourceInput, type UpdateStatus, type VpnConn, type VpnFile, type VpnStatus, api } from '../api'
 import { type Lang, LANGS, locale, setLang, tr, trb, trn, useLang } from '../i18n'
 import { SCALE_CHOICES, type ScaleSetting, autoScale, getScaleSetting, setScaleSetting } from '../scale'
 import { Dialog, Icon, Progress, Spinner, toast, useHints } from '../ui'
+import FilePicker from './FilePicker'
 
-export type SettingsSection = 'sources' | 'indexers' | 'downloads' | 'display' | 'language' | 'about'
+export type SettingsSection = 'sources' | 'indexers' | 'downloads' | 'vpn' | 'display' | 'language' | 'about'
 type Section = SettingsSection
 
 export default function Settings({
@@ -35,6 +36,7 @@ export default function Settings({
             ['sources', 'network', tr('Game sources')],
             ['indexers', 'search', tr('Services')],
             ['downloads', 'download', tr('Downloads')],
+            ['vpn', 'shield', 'VPN'],
             ['display', 'display', tr('Display')],
             ['language', 'globe', tr('Language')],
             ['about', 'info', tr('About')],
@@ -77,6 +79,7 @@ export default function Settings({
         )}
         {section === 'indexers' && <IndexersSection />}
         {section === 'downloads' && <DownloadsSection />}
+        {section === 'vpn' && <VpnSection />}
         {section === 'display' && <DisplaySection />}
         {section === 'language' && <LanguageSection />}
         {section === 'about' && <AboutSection info={info} />}
@@ -720,5 +723,279 @@ function UpdateBox() {
         </button>
       </div>
     </div>
+  )
+}
+
+/** VPN: WireGuard and OpenVPN configs, imported into SteamOS's NetworkManager. */
+function VpnSection() {
+  const [st, setSt] = useState<VpnStatus | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [login, setLogin] = useState<{ uuid: string; name: string } | null>(null)
+  const [removing, setRemoving] = useState<VpnConn | null>(null)
+  const [ip, setIp] = useState<{ ip: string; place: string; org: string | null } | 'loading' | null>(null)
+  const load = () =>
+    api
+      .vpn()
+      .then(setSt)
+      .catch(e => setSt({ available: false, error: (e as Error).message, connections: [] }))
+  useEffect(() => {
+    void load()
+    const id = setInterval(() => void load(), 3000)
+    return () => clearInterval(id)
+  }, [])
+  const toggle = async (c: VpnConn) => {
+    setBusy(c.uuid)
+    setIp(null)
+    try {
+      if (c.state === 'off') {
+        await api.vpnUp(c.uuid)
+        toast(tr('VPN on'), c.name, 'ok')
+      } else {
+        await api.vpnDown(c.uuid)
+        toast(tr('VPN off'), c.name, 'ok')
+      }
+    } catch (e) {
+      toast(tr('Something went wrong'), (e as Error).message, 'error')
+    } finally {
+      setBusy(null)
+      void load()
+    }
+  }
+  const checkIp = () => {
+    setIp('loading')
+    api
+      .vpnIp()
+      .then(setIp)
+      .catch(e => {
+        setIp(null)
+        toast(tr('Something went wrong'), (e as Error).message, 'error')
+      })
+  }
+  const kind = (c: VpnConn) => (c.kind === 'wireguard' ? 'WireGuard' : c.kind === 'openvpn' ? 'OpenVPN' : 'VPN')
+  const state = (c: VpnConn) => (c.state === 'on' ? tr('On') : c.state === 'connecting' ? tr('Connecting…') : tr('Off'))
+  const active = st?.connections.find(c => c.state === 'on')
+  return (
+    <>
+      <h2 className="settings-title">VPN</h2>
+      <p className="settings-desc">
+        {tr(
+          'Import a WireGuard (.conf) or OpenVPN (.ovpn) file from your VPN provider and turn it on here. While a VPN is on, the whole device uses it: downloads, Steam and online games too.',
+        )}
+      </p>
+      {st && !st.available && <p className="inst-error">{st.error}</p>}
+      <div className={`vpn-status ${active ? 'on' : ''}`}>
+        <Icon name="shield" />
+        <span>{active ? trb('Connected to **{name}**', { name: active.name }) : tr('No VPN on')}</span>
+        {active?.ip && <small>{active.ip}</small>}
+      </div>
+      <div className="settings-list vpn-list">
+        {st?.connections.map(c => (
+          <div key={c.uuid} className="vpn-row">
+            <div className="settings-row-main">
+              <b>{c.name}</b>
+              <small>{[kind(c), state(c), c.ip].filter(Boolean).join(' · ')}</small>
+            </div>
+            <div className="row compact">
+              {c.needs_login && (
+                <button data-nav className="btn small" onClick={() => setLogin(c)}>
+                  {tr('Sign in…')}
+                </button>
+              )}
+              <button data-nav className={`btn small ${c.state === 'off' ? 'primary' : ''}`} disabled={!!busy} onClick={() => void toggle(c)}>
+                {busy === c.uuid ? <Spinner /> : c.state === 'off' ? tr('Turn on') : tr('Turn off')}
+              </button>
+              <button data-nav className="btn small" disabled={!!busy} onClick={() => setRemoving(c)}>
+                {tr('Remove')}
+              </button>
+            </div>
+          </div>
+        ))}
+        {st?.available && st.connections.length === 0 && <p className="muted">{tr('No VPN yet.')}</p>}
+      </div>
+      <div className="row">
+        <button data-nav className="btn" onClick={() => setImporting(true)}>
+          <Icon name="download" size={18} /> {tr('Import a config…')}
+        </button>
+        <button data-nav className="btn" disabled={ip === 'loading'} onClick={checkIp}>
+          {tr('Check my public IP')}
+        </button>
+      </div>
+      {ip === 'loading' && (
+        <p className="muted">
+          <Spinner /> {tr('Checking…')}
+        </p>
+      )}
+      {ip && ip !== 'loading' && (
+        <p className="settings-desc">
+          {trb('Public IP: **{ip}**', { ip: ip.ip })}
+          {[ip.place, ip.org].filter(Boolean).length ? ` · ${[ip.place, ip.org].filter(Boolean).join(' · ')}` : ''}
+        </p>
+      )}
+      {importing && (
+        <VpnImportDialog
+          onClose={() => setImporting(false)}
+          onImported={r => {
+            setImporting(false)
+            void load()
+            toast(tr('VPN imported'), r.name, 'ok')
+            if (r.needs_login) setLogin(r)
+          }}
+        />
+      )}
+      {login && (
+        <VpnLoginDialog
+          name={login.name}
+          onClose={() => setLogin(null)}
+          onSave={async (u, p) => {
+            await api.vpnLogin(login.uuid, u, p)
+            setLogin(null)
+            void load()
+            toast(tr('Saved'), login.name, 'ok')
+          }}
+        />
+      )}
+      {removing && (
+        <Dialog title={tr('Remove {name}?', { name: removing.name })} onClose={() => setRemoving(null)}>
+          <p className="settings-desc">{tr('The connection is deleted from this device.')}</p>
+          <div className="dialog-actions">
+            <button
+              data-nav
+              className="btn danger"
+              onClick={() => {
+                const c = removing
+                setRemoving(null)
+                void api
+                  .vpnRemove(c.uuid)
+                  .then(() => load())
+                  .catch(e => toast(tr('Something went wrong'), (e as Error).message, 'error'))
+              }}
+            >
+              {tr('Remove')}
+            </button>
+            <button data-nav data-nav-default className="btn" onClick={() => setRemoving(null)}>
+              {tr('Cancel')}
+            </button>
+          </div>
+        </Dialog>
+      )}
+    </>
+  )
+}
+
+function VpnImportDialog({
+  onClose,
+  onImported,
+}: {
+  onClose: () => void
+  onImported: (r: { uuid: string; name: string; needs_login: boolean }) => void
+}) {
+  const [found, setFound] = useState<{ downloads: string; files: VpnFile[] } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [browsing, setBrowsing] = useState(false)
+  useEffect(() => {
+    api
+      .vpnCandidates()
+      .then(setFound)
+      .catch(() => setFound({ downloads: '', files: [] }))
+  }, [])
+  const pick = async (path: string) => {
+    setBusy(true)
+    try {
+      onImported(await api.vpnImport(path))
+    } catch (e) {
+      setBusy(false)
+      toast(tr("Couldn't import"), (e as Error).message, 'error')
+    }
+  }
+  if (browsing && found) {
+    return (
+      <FilePicker
+        title={tr('Pick a VPN config')}
+        start={found.downloads}
+        accept={['.conf', '.ovpn']}
+        onClose={() => setBrowsing(false)}
+        onPick={path => {
+          setBrowsing(false)
+          void pick(path)
+        }}
+      />
+    )
+  }
+  return (
+    <Dialog title={tr('Import a VPN config')} onClose={onClose} wide>
+      {found === null && (
+        <p className="muted">
+          <Spinner /> {tr('Looking for files…')}
+        </p>
+      )}
+      {found?.files.length === 0 && (
+        <p className="settings-desc">
+          {tr('No VPN config found. Put your .conf or .ovpn file in Downloads, your home folder, or on an SD card or USB drive.')}
+        </p>
+      )}
+      {!!found?.files.length && (
+        <div className="settings-list">
+          {found.files.map((f, i) => (
+            <button key={f.path} data-nav data-nav-default={i === 0 ? '' : undefined} className="settings-row" disabled={busy} onClick={() => void pick(f.path)}>
+              <Icon name="file" />
+              <div className="settings-row-main">
+                <b>{f.name}</b>
+                <small>{f.path.replace(/^\/home\/[^/]+/, '~').replace(/\/[^/]+$/, '')}</small>
+              </div>
+              <span className="settings-row-action">{f.kind === 'wireguard' ? 'WireGuard' : 'OpenVPN'}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="dialog-actions">
+        <button data-nav data-nav-default={found?.files.length ? undefined : ''} className="btn" disabled={busy || !found} onClick={() => setBrowsing(true)}>
+          {tr('Browse…')}
+        </button>
+        <button data-nav className="btn" onClick={onClose}>
+          {tr('Cancel')}
+        </button>
+      </div>
+    </Dialog>
+  )
+}
+
+function VpnLoginDialog({ name, onClose, onSave }: { name: string; onClose: () => void; onSave: (user: string, pass: string) => Promise<void> }) {
+  const [user, setUser] = useState('')
+  const [pass, setPass] = useState('')
+  const [busy, setBusy] = useState(false)
+  return (
+    <Dialog title={tr('Sign in to {name}', { name })} onClose={onClose}>
+      <p className="settings-desc">{tr('The username and password from your VPN provider. NetworkManager keeps them with the connection.')}</p>
+      <div className="form-grid">
+        <label>
+          <span>{tr('Username')}</span>
+          <input data-nav data-nav-default className="field" value={user} onChange={e => setUser(e.target.value)} />
+        </label>
+        <label>
+          <span>{tr('Password')}</span>
+          <input data-nav className="field" type="password" value={pass} onChange={e => setPass(e.target.value)} />
+        </label>
+      </div>
+      <div className="dialog-actions">
+        <button
+          data-nav
+          className="btn primary"
+          disabled={busy || !user.trim()}
+          onClick={() => {
+            setBusy(true)
+            onSave(user, pass).catch(e => {
+              setBusy(false)
+              toast(tr('Something went wrong'), (e as Error).message, 'error')
+            })
+          }}
+        >
+          {tr('Save')}
+        </button>
+        <button data-nav className="btn" onClick={onClose}>
+          {tr('Cancel')}
+        </button>
+      </div>
+    </Dialog>
   )
 }
