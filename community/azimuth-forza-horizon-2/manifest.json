@@ -3,7 +3,7 @@
   "id": "azimuth-forza-horizon-2",
   "name": "Forza Horizon 2",
   "platform": "Xbox One",
-  "revision": 1,
+  "revision": 2,
   "updated": "2026-10-12",
   "authors": ["anarqz"],
   "summary": "The Xbox One edition of Forza Horizon 2 on SteamOS, through the Azimuth launcher.",
@@ -47,6 +47,7 @@
         "type": "http",
         "urls": [
           "https://archive.org/download/xboxonedumpz/%28Forza%20Horizon%202%29%20Anthem_1.0.0.64_x64__8wekyb3d8bbwe.rar",
+          "https://dn711301.ca.archive.org/0/items/xboxonedumpz/%28Forza%20Horizon%202%29%20Anthem_1.0.0.64_x64__8wekyb3d8bbwe.rar",
           "https://ia800606.us.archive.org/23/items/xboxonedumpz/%28Forza%20Horizon%202%29%20Anthem_1.0.0.64_x64__8wekyb3d8bbwe.rar",
           "https://ia600606.us.archive.org/23/items/xboxonedumpz/%28Forza%20Horizon%202%29%20Anthem_1.0.0.64_x64__8wekyb3d8bbwe.rar"
         ],
