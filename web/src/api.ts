@@ -549,6 +549,8 @@ export interface CommunityInstallPart {
   /** A partial file can be continued (direct and itch.io parts). */
   resumable: boolean
   torrent: string | null
+  /** Connections fetching it in parallel right now. */
+  connections: number
 }
 /** A community install as Transfers shows it. */
 export interface CommunityInstall {

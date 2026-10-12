@@ -118,5 +118,7 @@
   "Already have some of it?": "Já tem parte disso?",
   "Point piShop at a file you already have, finished or still downloading (a browser’s .crdownload): it continues from there instead of starting over. Optional.": "Indique um arquivo que você já tem, completo ou ainda baixando (o .crdownload de um navegador): o piShop continua dali em vez de começar do zero. Opcional.",
   "continues from {size}": "continua a partir de {size}",
-  "used as it is": "usado como está"
+  "used as it is": "usado como está",
+  "{n} connection": "{n} conexão",
+  "{n} connections": "{n} conexões"
 }

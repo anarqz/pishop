@@ -5,6 +5,7 @@
 # $PISHOP_GAME_DIR):
 #   ./azimuth.exe, ./data/   ← Azimuth (azimuth-windows.zip)
 #   ./Game/                  ← the game's RAR
+#   ./Mods/ExtraOptions/     ← RokkuDayo's Extra Options mod
 #
 # This finds the game's package folder (the one holding Mount/AppxManifest.xml)
 # and points Azimuth at it in azimuth.ini, so the launcher doesn't ask for the
@@ -20,6 +21,24 @@ if [[ ! -f azimuth.exe || ! -d data/bin ]]; then
   echo "Azimuth isn't complete in $PWD (azimuth.exe and data/bin are needed)." >&2
   exit 1
 fi
+
+echo "::step Adding Extra Options"
+# Its Azimuth build goes into data/bin, replacing Azimuth's azimuth-tls.dll.
+mod=Mods/ExtraOptions/Azimuth
+if [[ ! -f $mod/azimuth-tls.dll ]]; then
+  echo "Extra Options isn't complete in $PWD/$mod." >&2
+  exit 1
+fi
+for f in "$mod"/*; do
+  name=${f##*/}
+  # The player's own settings stay when this runs again.
+  if [[ $name == *.ini && -f data/bin/$name ]]; then
+    echo "Keeping data/bin/$name"
+    continue
+  fi
+  cp -f "$f" "data/bin/$name"
+  echo "data/bin/$name"
+done
 
 echo "::step Finding the game's files"
 manifest=$(find Game -maxdepth 4 -type f -path '*/Mount/AppxManifest.xml' -print -quit)

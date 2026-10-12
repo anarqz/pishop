@@ -5,7 +5,13 @@
 //! A download writes `<file>.part` and renames it when complete. Stopped
 //! (paused, piShop closed, the connection dropped), it picks up where the
 //! `.part` ends with a Range request; a server that answers 200 instead of
-//! 206 starts it over. Links that expire (itch.io's signed URLs, which live a
+//! 206 starts it over.
+//!
+//! A big file on a server that takes ranges is fetched over a few
+//! connections at once, each its own slice of the file (archive.org serves
+//! one connection far slower than several): the slices are saved, so a
+//! stopped download resumes each one; a connection that finishes its slice
+//! takes over half of the biggest one left. Links that expire (itch.io's signed URLs, which live a
 //! minute) are resolved again before every request. Dropped connections are
 //! retried with a growing wait; a download only fails after several attempts
 //! in a row that got nothing. State lives in `<data>/direct.json`; what was
@@ -17,7 +23,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, anyhow, bail};
@@ -94,6 +100,54 @@ pub struct Download {
     /// empty for a link added in Transfers.
     #[serde(default)]
     pub owner: String,
+    /// The slices still being fetched in parallel (empty: one connection).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub segments: Vec<Segment>,
+    /// Connections open right now.
+    #[serde(default, skip_deserializing)]
+    pub connections: usize,
+}
+
+/// A slice of the file one connection fetches: bytes `start..end`, the first
+/// `done` of them written.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Segment {
+    pub start: u64,
+    pub end: u64,
+    pub done: u64,
+}
+
+impl Segment {
+    fn pos(&self) -> u64 {
+        self.start + self.done
+    }
+    fn left(&self) -> u64 {
+        self.end.saturating_sub(self.pos())
+    }
+}
+
+/// `from..total` in `n` slices of about the same size.
+fn slices(from: u64, total: u64, n: usize) -> Vec<Segment> {
+    let n = n.max(1) as u64;
+    let len = total.saturating_sub(from);
+    (0..n)
+        .map(|k| Segment { start: from + len * k / n, end: from + len * (k + 1) / n, done: 0 })
+        .filter(|s| s.end > s.start)
+        .collect()
+}
+
+/// Half of the slice with the most left becomes a new slice (for a
+/// connection that's free); None when no slice is worth splitting.
+fn steal(segs: &mut Vec<Segment>) -> Option<usize> {
+    let (i, s) = segs.iter().enumerate().max_by_key(|(_, s)| s.left())?;
+    if s.left() < 2 * MIN_SPLIT {
+        return None;
+    }
+    let mid = s.pos() + s.left() / 2;
+    let end = s.end;
+    segs[i].end = mid;
+    segs.push(Segment { start: mid, end, done: 0 });
+    Some(segs.len() - 1)
 }
 
 static DOWNLOADS: LazyLock<Mutex<BTreeMap<u64, Download>>> = LazyLock::new(|| {
@@ -172,6 +226,8 @@ pub fn add(source: Source, path: &Path, size: Option<u64>, owner: &str) -> anyho
                 added: now(),
                 finished: None,
                 owner: owner.to_string(),
+                segments: Vec::new(),
+                connections: 0,
             },
         );
         persist(&map);
@@ -218,6 +274,7 @@ pub fn pause(id: u64) {
         if d.state == State::Running {
             d.state = State::Paused;
             d.speed = 0.0;
+            d.connections = 0;
         }
     });
 }
@@ -283,6 +340,12 @@ const BROWSER: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML
 const STALL: Duration = Duration::from_secs(60);
 /// Attempts in a row that got nothing before the download fails.
 const ATTEMPTS: u32 = 6;
+/// Connections for a big file on a server that takes ranges.
+const CONNECTIONS: usize = 4;
+/// Smaller files go through one connection.
+const MIN_PARALLEL: u64 = 32 << 20;
+/// A slice is only split when both halves get at least this much.
+const MIN_SPLIT: u64 = 8 << 20;
 
 enum Outcome {
     Done,
@@ -338,6 +401,9 @@ async fn run(id: u64, size: Option<u64>, mut stop: watch::Receiver<bool>) {
 /// One request: from where the `.part` ends to the end of the file.
 async fn attempt(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>) -> anyhow::Result<Outcome> {
     let d = get(id).ok_or_else(|| anyhow!("removed"))?;
+    if !d.segments.is_empty() {
+        return parallel(id, size, stop, None).await;
+    }
     let path = PathBuf::from(&d.path);
     let part = part_path(&path);
     let mut offset = std::fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
@@ -354,10 +420,8 @@ async fn attempt(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>) -
     let mut resp = None;
     let mut last_err = None;
     for url in resolve(&d.source).await? {
-        let mut req = HTTP.get(&url).header(USER_AGENT, BROWSER);
-        if offset > 0 {
-            req = req.header(RANGE, format!("bytes={offset}-"));
-        }
+        // Always a range: a server that answers 206 can be fetched in slices.
+        let req = HTTP.get(&url).header(USER_AGENT, BROWSER).header(RANGE, format!("bytes={offset}-"));
         match req.send().await {
             Ok(r) if r.status().is_success() => {
                 resp = Some(r);
@@ -408,6 +472,21 @@ async fn attempt(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>) -
     if *stop.borrow() {
         return Ok(Outcome::Stopped);
     }
+    // Big, and the server takes ranges: in slices, this answer being the first.
+    if r.status().as_u16() == 206 && total > 0 && total.saturating_sub(offset) >= MIN_PARALLEL {
+        let segs = slices(offset, total, CONNECTIONS);
+        log!("direto: {id} em {} conexões a partir de {offset} de {total} bytes", segs.len());
+        if offset == 0 {
+            std::fs::File::create(&part)?;
+        }
+        update(id, true, |d| {
+            d.total = total;
+            d.done = offset;
+            d.error = None;
+            d.segments = segs;
+        });
+        return parallel(id, size, stop, Some(r)).await;
+    }
 
     let mut out = tokio::fs::OpenOptions::new().create(true).write(true).truncate(offset == 0).append(offset > 0).open(&part).await?;
     let mut done = offset;
@@ -455,6 +534,251 @@ async fn attempt(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>) -
         bail!(tr!("the connection closed early", "a conexão fechou antes do fim"));
     }
     finish(id, &path, &part, size.or((total > 0).then_some(total)))
+}
+
+/// The slices of a download, over several connections at once. `first`: an
+/// answer already streaming from the first slice's start.
+async fn parallel(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>, first: Option<reqwest::Response>) -> anyhow::Result<Outcome> {
+    let d = get(id).ok_or_else(|| anyhow!("removed"))?;
+    let path = PathBuf::from(&d.path);
+    let part = part_path(&path);
+    let total = d.total;
+    if total == 0 {
+        bail!(tr!("the file's size is unknown", "o tamanho do arquivo é desconhecido"));
+    }
+    // The file at its full size; each connection writes its own slice.
+    {
+        let f = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(&part)?;
+        if f.metadata()?.len() < total {
+            f.set_len(total)?;
+        }
+    }
+    let segs = Arc::new(Mutex::new(d.segments.clone()));
+    let link: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(first.as_ref().map(|r| r.url().to_string())));
+    let source = d.source.clone();
+    let left = |segs: &Arc<Mutex<Vec<Segment>>>| segs.lock().unwrap().iter().map(|s| s.left()).sum::<u64>();
+    let mut workers: tokio::task::JoinSet<(usize, anyhow::Result<()>)> = tokio::task::JoinSet::new();
+    let mut owned: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    let mut first = first;
+    let first_start = segs.lock().unwrap().first().map(|s| s.pos());
+    let worker_stop = stop.clone();
+    let spawn = |workers: &mut tokio::task::JoinSet<(usize, anyhow::Result<()>)>, i: usize, resp: Option<reqwest::Response>| {
+        let (part, segs, link, source, stop) = (part.clone(), segs.clone(), link.clone(), source.clone(), worker_stop.clone());
+        workers.spawn(async move {
+            let r = slice_worker(i, &part, &segs, &link, &source, resp, stop).await;
+            (i, r)
+        });
+    };
+    let pending: Vec<usize> =
+        segs.lock().unwrap().iter().enumerate().filter(|(_, s)| s.left() > 0).map(|(i, _)| i).take(CONNECTIONS).collect();
+    for i in pending {
+        let resp = if i == 0 && first_start.is_some() { first.take() } else { None };
+        spawn(&mut workers, i, resp);
+        owned.insert(i);
+    }
+    drop(first);
+
+    let mut tick = tokio::time::interval(Duration::from_secs(1));
+    let mut window = (Instant::now(), total - left(&segs));
+    let mut saved = Instant::now();
+    let mut last_err: Option<anyhow::Error> = None;
+    let mut stopped = false;
+    loop {
+        tokio::select! {
+            biased;
+            _ = stop.changed(), if !stopped => {
+                // Each connection sees it too and closes its slice.
+                stopped = true;
+            }
+            joined = workers.join_next(), if !workers.is_empty() => {
+                let Some(joined) = joined else { continue };
+                let (i, result) = joined.unwrap_or_else(|e| (usize::MAX, Err(anyhow!(e))));
+                owned.remove(&i);
+                match result {
+                    Ok(()) => {}
+                    Err(e) => {
+                        log!("direto: {id} conexão da fatia {i}: {e:#}");
+                        last_err = Some(e);
+                        continue;
+                    }
+                }
+                if stopped || *stop.borrow() {
+                    continue;
+                }
+                // The free connection takes a slice nobody has, or half of the biggest one.
+                while workers.len() < CONNECTIONS {
+                    let next = {
+                        let mut s = segs.lock().unwrap();
+                        let free = (0..s.len()).find(|j| !owned.contains(j) && s[*j].left() > 0);
+                        free.or_else(|| steal(&mut s))
+                    };
+                    let Some(j) = next else { break };
+                    spawn(&mut workers, j, None);
+                    owned.insert(j);
+                }
+            }
+            _ = tick.tick() => {
+                let done = total - left(&segs);
+                let elapsed = window.0.elapsed().as_secs_f64().max(0.001);
+                let speed = done.saturating_sub(window.1) as f64 / elapsed;
+                window = (Instant::now(), done);
+                let save = saved.elapsed() > Duration::from_secs(10);
+                if save {
+                    saved = Instant::now();
+                }
+                let snapshot = segs.lock().unwrap().clone();
+                let n = workers.len();
+                update(id, save, |d| {
+                    d.done = done;
+                    d.segments = snapshot;
+                    d.connections = n;
+                    d.speed = if d.speed > 0.0 { d.speed * 0.5 + speed * 0.5 } else { speed };
+                    d.error = None;
+                });
+            }
+        }
+        if workers.is_empty() {
+            break;
+        }
+    }
+    let snapshot = segs.lock().unwrap().clone();
+    let remaining: u64 = snapshot.iter().map(|s| s.left()).sum();
+    update(id, true, |d| {
+        d.done = total - remaining;
+        d.segments = snapshot;
+        d.connections = 0;
+    });
+    if stopped || *stop.borrow() {
+        return Ok(Outcome::Stopped);
+    }
+    if remaining > 0 {
+        return Err(last_err.unwrap_or_else(|| anyhow!(tr!("the connections closed early", "as conexões fecharam antes do fim"))));
+    }
+    update(id, true, |d| d.segments.clear());
+    finish(id, &path, &part, size.or(Some(total)))
+}
+
+/// One connection: fetches its slice (retrying on its own while it gets
+/// somewhere), writing at the slice's place in the file. Stops at the slice's
+/// end even when another connection took the slice's second half meanwhile.
+async fn slice_worker(
+    i: usize,
+    part: &Path,
+    segs: &Arc<Mutex<Vec<Segment>>>,
+    link: &Arc<Mutex<Option<String>>>,
+    source: &Source,
+    mut first: Option<reqwest::Response>,
+    mut stop: watch::Receiver<bool>,
+) -> anyhow::Result<()> {
+    let mut fails = 0u32;
+    loop {
+        let (pos, end) = {
+            let s = segs.lock().unwrap();
+            (s[i].pos(), s[i].end)
+        };
+        if pos >= end || *stop.borrow() {
+            return Ok(());
+        }
+        match fetch_slice(i, pos, end, part, segs, link, source, first.take(), &mut stop).await {
+            Ok(()) => fails = 0,
+            Err(e) => {
+                let moved = segs.lock().unwrap()[i].pos() > pos;
+                fails = if moved { 1 } else { fails + 1 };
+                if fails >= 4 {
+                    return Err(e);
+                }
+                // The link may have expired or moved: resolve it again.
+                *link.lock().unwrap() = None;
+                tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_secs(2u64 << fails)) => {}
+                    _ = stop.changed() => return Ok(()),
+                }
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn fetch_slice(
+    i: usize,
+    from: u64,
+    end: u64,
+    part: &Path,
+    segs: &Arc<Mutex<Vec<Segment>>>,
+    link: &Arc<Mutex<Option<String>>>,
+    source: &Source,
+    first: Option<reqwest::Response>,
+    stop: &mut watch::Receiver<bool>,
+) -> anyhow::Result<()> {
+    use tokio::io::AsyncSeekExt;
+    let mut r = match first {
+        Some(r) => r,
+        None => range_request(from, end, link, source).await?,
+    };
+    if *stop.borrow() {
+        return Ok(());
+    }
+    let mut f = tokio::fs::OpenOptions::new().write(true).open(part).await?;
+    f.seek(std::io::SeekFrom::Start(from)).await?;
+    let mut pos = from;
+    loop {
+        let chunk = tokio::select! {
+            biased;
+            _ = stop.changed() => break,
+            c = tokio::time::timeout(STALL, r.chunk()) => match c {
+                Ok(c) => c?,
+                Err(_) => bail!(tr!("the download stalled", "o download travou")),
+            },
+        };
+        let Some(chunk) = chunk else { break };
+        // Another connection may have taken this slice's second half.
+        let end = segs.lock().unwrap()[i].end;
+        let take = (end.saturating_sub(pos) as usize).min(chunk.len());
+        f.write_all(&chunk[..take]).await?;
+        pos += take as u64;
+        {
+            let mut s = segs.lock().unwrap();
+            let seg = &mut s[i];
+            seg.done = (pos - seg.start).min(seg.end.saturating_sub(seg.start));
+        }
+        if pos >= end {
+            break;
+        }
+    }
+    f.flush().await?;
+    Ok(())
+}
+
+/// `from..end` of the file: the link that answered last (redirects already
+/// followed), else the source's links in order. Only a 206 starting at
+/// `from` is taken.
+async fn range_request(from: u64, end: u64, link: &Arc<Mutex<Option<String>>>, source: &Source) -> anyhow::Result<reqwest::Response> {
+    let cached = link.lock().unwrap().clone();
+    let mut last: Option<anyhow::Error> = None;
+    for round in 0..2 {
+        let urls = match (round, &cached) {
+            (0, Some(u)) => vec![u.clone()],
+            (0, None) => continue,
+            _ => resolve(source).await?,
+        };
+        for u in urls {
+            let r = HTTP.get(&u).header(USER_AGENT, BROWSER).header(RANGE, format!("bytes={from}-{}", end - 1)).send().await;
+            match r {
+                Ok(r) if r.status().as_u16() == 206 => {
+                    let start = r.headers().get(CONTENT_RANGE).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("bytes ")).and_then(|v| v.split('-').next()).and_then(|v| v.parse::<u64>().ok());
+                    if start != Some(from) {
+                        last = Some(anyhow!(tr!("the server sent another part of the file", "o servidor mandou outra parte do arquivo")));
+                        continue;
+                    }
+                    *link.lock().unwrap() = Some(r.url().to_string());
+                    return Ok(r);
+                }
+                Ok(r) => last = Some(anyhow!(tr!("the server answered {}", "o servidor respondeu {}", r.status()))),
+                Err(e) => last = Some(anyhow!(e)),
+            }
+        }
+    }
+    Err(last.unwrap_or_else(|| anyhow!(tr!("no link to download from", "nenhum link para baixar"))))
 }
 
 fn finish(id: u64, path: &Path, part: &Path, size: Option<u64>) -> anyhow::Result<Outcome> {
@@ -709,6 +1033,24 @@ mod tests {
         assert_eq!(pick_upload(&list, Some("AZIMUTH-windows.zip")), Some(19662858));
         assert_eq!(pick_upload(&list, None), Some(19662858));
         assert_eq!(pick_upload(&list, Some("other.zip")), None);
+    }
+
+    #[test]
+    fn slices_and_stealing() {
+        let s = slices(100, 1100, 4);
+        assert_eq!(s.iter().map(|x| (x.start, x.end)).collect::<Vec<_>>(), [(100, 350), (350, 600), (600, 850), (850, 1100)]);
+        assert_eq!(s.iter().map(|x| x.left()).sum::<u64>(), 1000);
+        // Small slices aren't split.
+        let mut small = s.clone();
+        assert_eq!(steal(&mut small), None);
+        // The one with most left gives its second half away.
+        let mut big = slices(0, 400 << 20, 2);
+        big[0].done = 150 << 20;
+        let j = steal(&mut big).unwrap();
+        assert_eq!(j, 2);
+        assert_eq!(big[1].end, big[2].start);
+        assert_eq!(big[2].end, 400 << 20);
+        assert_eq!(big.iter().map(|x| x.left()).sum::<u64>(), (400 << 20) - (150 << 20));
     }
 
     #[test]

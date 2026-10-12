@@ -688,8 +688,43 @@ fn owner(id: &str, part: &str) -> String {
     format!("{}/{part}", library::community_key(id))
 }
 
+/// A newer revision of the manifest, published while the install is still
+/// downloading, is taken on: its new parts join (and download), the script,
+/// launch and patches are the new ones; parts already there keep going as
+/// they started. Not when a part the install has was taken out.
+async fn adopt_newer(r: &Record) {
+    let Ok((games, _)) = catalog(false).await else { return };
+    let Some(m) = games.into_iter().find(|m| m.id == r.id) else { return };
+    if m.revision <= r.manifest.revision || !r.parts.iter().all(|p| m.parts.iter().any(|x| x.id == p.id)) {
+        return;
+    }
+    let added: Vec<String> = m.parts.iter().filter(|x| !r.parts.iter().any(|p| p.id == x.id)).map(|x| x.id.clone()).collect();
+    log!("comunidade: {} passa para a revisão {} (partes novas: {added:?})", r.id, m.revision);
+    change(&r.id, |rec| {
+        let new: Vec<Part> = m.parts.iter().filter(|x| !rec.parts.iter().any(|p| p.id == x.id)).cloned().collect();
+        for x in &new {
+            rec.parts.push(PartRec {
+                id: x.id.clone(),
+                state: if matches!(x.source, PartSource::User { .. }) { PartState::Waiting } else { PartState::Downloading },
+                path: None,
+                direct: None,
+                torrent: None,
+                provided: false,
+                error: None,
+                verify: 0.0,
+                extracted: false,
+                size: x.size,
+            });
+        }
+        rec.manifest = m;
+    });
+}
+
 /// Downloading: start what hasn't started, follow what runs, check what finished.
 async fn downloads(r: &Record) -> anyhow::Result<()> {
+    adopt_newer(r).await;
+    let Some(r) = record(&r.id) else { return Ok(()) };
+    let r = &r;
     for p in &r.parts {
         let Some(s) = spec(r, &p.id) else { continue };
         let busy = BUSY.lock().unwrap().contains(&(r.id.clone(), p.id.clone()));
@@ -1744,11 +1779,13 @@ fn view(r: &Record) -> Value {
             let s = spec(r, &p.id);
             let (mut done, mut total, mut speed) = (0u64, p.size.or(s.and_then(|s| s.size)).unwrap_or(0), 0f64);
             let mut paused = false;
+            let mut connections = 0usize;
             if let Some(d) = p.direct.and_then(direct::get) {
                 done = d.done;
                 total = if d.total > 0 { d.total } else { total };
                 speed = d.speed;
                 paused = d.state == direct::State::Paused;
+                connections = d.connections;
             } else if let Some((d, t, sp, _)) = p.torrent.as_ref().and_then(|h| live.get(h)) {
                 done = *d;
                 total = if *t > 0 { *t } else { total };
@@ -1786,6 +1823,7 @@ fn view(r: &Record) -> Value {
                 "extensions": s.map(|s| match &s.source { PartSource::User { extensions, .. } => extensions.clone(), _ => Vec::new() }).unwrap_or_default(),
                 "resumable": s.is_some_and(|s| matches!(s.source, PartSource::Http { .. } | PartSource::Itch { .. })),
                 "torrent": p.torrent,
+                "connections": connections,
             })
         })
         .collect();

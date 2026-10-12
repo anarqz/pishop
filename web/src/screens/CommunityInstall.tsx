@@ -7,7 +7,7 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { type CommunityInstall, type CommunityInstallPart, api, formatBytes, formatEta, imgUrl } from '../api'
 import { partKind, stageLabel } from '../community'
-import { tr, trb } from '../i18n'
+import { tr, trb, trn } from '../i18n'
 import { focusFirst, input, keepFocus } from '../input'
 import { homePath } from '../storage'
 import { Icon, Progress, Spinner, toast, useHints } from '../ui'
@@ -274,7 +274,8 @@ function PartRow({ p, first, canChange, onPick }: { p: CommunityInstallPart; fir
         const of = tr('{done} of {total}', { done: formatBytes(p.done), total: formatBytes(p.total) })
         if (p.paused) return `${tr('Paused')} · ${of}`
         const eta = p.speed > 0 && p.total ? formatEta((p.total - p.done) / p.speed) : ''
-        return `${of} · ${formatBytes(p.speed)}/s${eta ? ` · ${eta}` : ''}`
+        const conns = p.connections > 1 ? ` · ${trn(p.connections, '{n} connection', '{n} connections')}` : ''
+        return `${of} · ${formatBytes(p.speed)}/s${eta ? ` · ${eta}` : ''}${conns}`
       }
     }
   })()
