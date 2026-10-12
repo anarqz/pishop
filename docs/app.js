@@ -389,11 +389,11 @@
       tags: ['Steam', 'TheGamesDB'],
       pt: [
         'Transferências',
-        'Cada download aparece como o jogo: capa, anel de progresso e, embaixo, velocidade e tempo restante — as instalações da comunidade, os torrents e os downloads diretos em seções próprias. Os dados vêm da Steam, do TheGamesDB, do SteamGridDB e do isitcracked, nessa ordem. Pause, pare ou exclua — com ou sem os arquivos; o jogo instalado continua em Jogos. As cópias da rede ficam na mesma tela.',
+        'Como a página de Downloads da Steam: uma lista só — instalações da comunidade, torrents e downloads diretos —, uma linha por jogo com a arte dele, o progresso, a velocidade e o tempo restante, e o jogo em foco no banner de cima com a velocidade de download dos últimos minutos (agora, pico e média). Os dados vêm da Steam, do TheGamesDB, do SteamGridDB e do isitcracked, nessa ordem. Pause, pare ou exclua — com ou sem os arquivos; o jogo instalado continua em Jogos. As cópias da rede ficam na mesma tela.',
       ],
       en: [
         'Transfers',
-        'Every download shows up as the game: cover, a progress ring and, below it, speed and time left — community installs, torrents and direct downloads each in their own section. Game data comes from Steam, TheGamesDB, SteamGridDB and isitcracked, in that order. Pause, stop or delete — with or without the files; an installed game stays in Games. Network copies live on the same screen.',
+        "Like Steam's Downloads page: one list — community installs, torrents and direct downloads — a row per game with its art, progress, speed and time left, and the focused game in the banner on top with its download speed over the last minutes (current, peak and average). Game data comes from Steam, TheGamesDB, SteamGridDB and isitcracked, in that order. Pause, stop or delete — with or without the files; an installed game stays in Games. Network copies live on the same screen.",
       ],
     },
     {
@@ -653,8 +653,8 @@
     },
     {
       id: 'transfers',
-      pt: ['Transferências', 'Cada download com a capa do jogo, um anel de progresso, velocidade e tempo restante.'],
-      en: ['Transfers', "Every download with the game's cover, a progress ring, speed and time left."],
+      pt: ['Transferências', 'Uma lista só, como a da Steam: uma linha por jogo e, no banner, a velocidade dos últimos minutos.'],
+      en: ['Transfers', "One list, like Steam's: a row per game and, in the banner, the download speed over the last minutes."],
     },
     {
       id: 'community-progress',

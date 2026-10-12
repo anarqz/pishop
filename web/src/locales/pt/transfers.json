@@ -30,7 +30,6 @@
   "Peers": "Peers",
   "Preparing": "Preparando",
   "Preparing…": "Preparando…",
-  "Progress": "Progresso",
   "Publisher": "Publicadora",
   "Queued": "Na fila",
   "Queued · {n}": "Na fila · {n}",
@@ -67,5 +66,10 @@
   "{n} game": "{n} jogo",
   "{n} games": "{n} jogos",
   "In Games": "Em Jogos",
-  "Erases the {size} downloaded and what was extracted from it; the game stays in Games": "Apaga os {size} baixados e o que foi extraído deles; o jogo continua em Jogos"
+  "Erases the {size} downloaded and what was extracted from it; the game stays in Games": "Apaga os {size} baixados e o que foi extraído deles; o jogo continua em Jogos",
+  "Measuring the speed…": "Medindo a velocidade…",
+  "last {n} min": "últimos {n} min",
+  "Current": "Agora",
+  "Peak": "Pico",
+  "Average": "Média"
 }

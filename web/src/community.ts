@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import { type CommunityInstall, type CommunityInstallPart, type DirectDownload, api } from './api'
 import { tr } from './i18n'
+import { recordSpeed, speedKey, speedsChanged } from './speeds'
 
 export interface Extra {
   installs: CommunityInstall[]
@@ -21,6 +22,11 @@ export function useTransfersExtra(ms: number) {
     const tick = async () => {
       const [installs, directs] = await Promise.all([api.communityInstalls().catch(() => null), api.directs().catch(() => null)])
       if (!alive) return
+      // The banner's speed graph: what is downloading (or paused) right now. A
+      // community part's own download is already in its install's speed.
+      for (const i of installs ?? []) if (i.stage === 'downloading') recordSpeed(speedKey.community(i.id), i.paused ? 0 : i.speed)
+      for (const d of directs ?? []) if (!d.owner && (d.state === 'running' || d.state === 'paused')) recordSpeed(speedKey.direct(d.id), d.state === 'running' ? d.speed : 0)
+      speedsChanged()
       setState(s => ({ installs: installs ?? s.installs, directs: directs ?? s.directs }))
       timer = window.setTimeout(tick, ms)
     }

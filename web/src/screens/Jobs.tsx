@@ -1,6 +1,7 @@
-// Transfers, styled after Steam's Downloads page: shelves of game covers (the
-// focused one detailed on top) — community installs (each game with its
-// parts), torrents, direct downloads added by hand — then network copies.
+// Transfers, styled after Steam's Downloads page: one list of every download —
+// community installs (each game with its parts), torrents, links added by
+// hand — a row per game, the focused one in the banner on top with its speed
+// over the last minutes; then network copies.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { type CommunityInstall, type DirectDownload, type Job, api, formatBytes, formatEta } from '../api'
@@ -11,14 +12,12 @@ import { type TorrentInfo, addMagnet, pause, resume } from '../torrent'
 import { Icon, Progress, TextPrompt, toast, useHints } from '../ui'
 import CommunityInstallPage from './CommunityInstall'
 import InstallPage from './Install'
-import {
-  DeleteDialog, DownloadHero, DownloadTile, sortDownloads, toggleLabel, useEngineState, useLibrary,
-} from './Torrents'
-import { CommunityHero, CommunityRemoveDialog, CommunityTile, DirectDialog, DirectHero, DirectTile } from './TransferTiles'
+import { DeleteDialog, toggleLabel, useEngineState, useLibrary } from './Torrents'
+import { TransferBanner, TransferRow, type TransferView, directView, installView, sortViews, torrentView } from './TransferRows'
+import { CommunityRemoveDialog, DirectDialog } from './TransferTiles'
 
 const ACTIVE = ['running', 'scanning'] as const
 
-type Kind = 'job' | 'torrent' | 'community' | 'direct'
 type Focus = { kind: 'job' | 'torrent' | 'direct'; id: number } | { kind: 'community'; id: string } | null
 type DialogState =
   | { kind: 'details' | 'delete'; id: number }
@@ -71,9 +70,14 @@ export default function Jobs({
   // A community install's torrents show inside its game, not on their own.
   const torrents = useMemo(() => engine.torrents.filter(t => !owned.has(t.infoHash)), [engine.torrents, owned])
   const lib = useLibrary(torrents)
-  const downloads = useMemo(() => sortDownloads(torrents, lib), [torrents, lib])
+  const downloads = torrents
   const installs = extra.installs
-  const directs = useMemo(() => extra.directs.filter(d => !d.owner).sort((a, b) => b.added - a.added), [extra.directs])
+  const directs = useMemo(() => extra.directs.filter(d => !d.owner), [extra.directs])
+  // Every kind in one list, in Steam's order: what's downloading on top.
+  const views = useMemo(
+    () => sortViews([...installs.map(installView), ...downloads.map(t => torrentView(t, lib[t.infoHash])), ...directs.map(directView)]),
+    [installs, downloads, lib, directs],
+  )
   const [dialog, setDialog] = useState<DialogState>(null)
   const [prompt, setPrompt] = useState(false)
   const [linkBusy, setLinkBusy] = useState(false)
@@ -89,32 +93,17 @@ export default function Jobs({
 
   // What the controller is on: a download or a copy job (by data attribute).
   const [focus, setFocus] = useState<Focus>(null)
-  const [hero, setHero] = useState<{ kind: Exclude<Kind, 'job'>; id: number | string } | null>(null)
+  const [heroKey, setHeroKey] = useState<string | null>(null)
   const focusedJob = focus?.kind === 'job' ? (jobs.find(j => j.id === focus.id) ?? null) : null
   const focusedTorrent = focus?.kind === 'torrent' ? (downloads.find(t => t.id === focus.id) ?? null) : null
   const focusedInstall = focus?.kind === 'community' ? (installs.find(i => i.id === focus.id) ?? null) : null
   const focusedDirect = focus?.kind === 'direct' ? (directs.find(d => d.id === focus.id) ?? null) : null
-  // The panel on top: the focused transfer, else the first one there is.
-  const heroInstall = hero?.kind === 'community' ? installs.find(i => i.id === hero.id) : undefined
-  const heroT = hero?.kind === 'torrent' ? downloads.find(t => t.id === hero.id) : undefined
-  const heroDirect = hero?.kind === 'direct' ? directs.find(d => d.id === hero.id) : undefined
-  const top = heroInstall
-    ? ({ kind: 'community', i: heroInstall } as const)
-    : heroT
-      ? ({ kind: 'torrent', t: heroT } as const)
-      : heroDirect
-        ? ({ kind: 'direct', d: heroDirect } as const)
-        : installs[0]
-          ? ({ kind: 'community', i: installs[0] } as const)
-          : downloads[0]
-            ? ({ kind: 'torrent', t: downloads[0] } as const)
-            : directs[0]
-              ? ({ kind: 'direct', d: directs[0] } as const)
-              : null
+  // The banner: the focused transfer, else the first in the list.
+  const top = views.find(v => v.key === heroKey) ?? views[0] ?? null
   const dialogT = dialog && (dialog.kind === 'details' || dialog.kind === 'delete') ? (downloads.find(t => t.id === dialog.id) ?? null) : null
   const dialogInstall = dialog && (dialog.kind === 'community' || dialog.kind === 'community-remove') ? (installs.find(i => i.id === dialog.id) ?? null) : null
   const dialogDirect = dialog?.kind === 'direct' ? (directs.find(d => d.id === dialog.id) ?? null) : null
-  const count = installs.length + downloads.length + directs.length
+  const count = views.length
 
   // The lists arrive just after the tab opens: land on the first game then,
   // unless the controller already moved somewhere else.
@@ -134,6 +123,9 @@ export default function Jobs({
     setDialog(null)
     restoreFocus.current?.()
   }
+
+  const openView = (v: TransferView) =>
+    openDialog(v.kind === 'torrent' ? { kind: 'details', id: v.id as number } : v.kind === 'community' ? { kind: 'community', id: v.id as string } : { kind: 'direct', id: v.id as number })
 
   const act = async (j: Job, action: 'cancel' | 'retry' | 'remove') => {
     try {
@@ -232,9 +224,7 @@ export default function Jobs({
       data-nav-scope
       onFocusCapture={e => {
         const d = (e.target as HTMLElement).dataset
-        if (d.torrentId) setHero({ kind: 'torrent', id: Number(d.torrentId) })
-        if (d.communityId) setHero({ kind: 'community', id: d.communityId })
-        if (d.directId) setHero({ kind: 'direct', id: Number(d.directId) })
+        if (d.transferKey) setHeroKey(d.transferKey)
         setFocus(
           d.jobId
             ? { kind: 'job', id: Number(d.jobId) }
@@ -248,9 +238,7 @@ export default function Jobs({
         )
       }}
     >
-      {top?.kind === 'torrent' && <DownloadHero t={top.t} entry={lib[top.t.infoHash]} />}
-      {top?.kind === 'community' && <CommunityHero i={top.i} />}
-      {top?.kind === 'direct' && <DirectHero d={top.d} />}
+      {top && <TransferBanner key={top.key} v={top} />}
       <div className="transfers-scroll">
         <section className="dl-section">
           <div className="dl-head">
@@ -276,55 +264,11 @@ export default function Jobs({
               <span>{tr('No downloads. Find games in Discover, the Store or Community.')}</span>
             </div>
           )}
-          {installs.length > 0 && (
-            <>
-              <h4 className="dl-kind">
-                <Icon name="globe" size={16} /> {tr('Community')}
-              </h4>
-              <div className="dl-grid">
-                {installs.map((i, n) => (
-                  <CommunityTile key={i.id} i={i} first={n === 0} onOpen={() => openDialog({ kind: 'community', id: i.id })} />
-                ))}
-              </div>
-            </>
-          )}
-          {downloads.length > 0 && (
-            <>
-              {(installs.length > 0 || directs.length > 0) && (
-                <h4 className="dl-kind">
-                  <Icon name="torrent" size={16} /> {tr('Torrents')}
-                </h4>
-              )}
-              <div className="dl-grid">
-                {downloads.map((t, i) => (
-                  <DownloadTile
-                    key={t.id}
-                    t={t}
-                    entry={lib[t.infoHash]}
-                    first={i === 0 && !installs.length}
-                    onOpen={() => openDialog({ kind: 'details', id: t.id })}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-          {directs.length > 0 && (
-            <>
-              <h4 className="dl-kind">
-                <Icon name="download" size={16} /> {tr('Direct downloads')}
-              </h4>
-              <div className="dl-grid">
-                {directs.map((d, i) => (
-                  <DirectTile
-                    key={d.id}
-                    d={d}
-                    first={i === 0 && !installs.length && !downloads.length}
-                    onOpen={() => openDialog({ kind: 'direct', id: d.id })}
-                  />
-                ))}
-              </div>
-            </>
-          )}
+          <div className="tb-list">
+            {views.map((v, n) => (
+              <TransferRow key={v.key} v={v} first={n === 0} onOpen={() => openView(v)} />
+            ))}
+          </div>
         </section>
 
         {jobs.length > 0 && <h3 className="section-title jobs-title">{tr('Copies')}</h3>}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { recordSpeed, speedKey, speedsChanged } from './speeds'
 
 // Client for the native BitTorrent engine (librqbit) embedded in the Rust
 // launcher. It speaks regular TCP/uTP BitTorrent, DHT and trackers.
@@ -102,6 +103,9 @@ export function useEngineState(intervalMs = 1000) {
     const tick = async () => {
       const next = await fetchState().catch(() => OFFLINE)
       if (!alive) return
+      // The banner's speed graph: unfinished torrents only.
+      for (const t of next.torrents) if (!t.finished) recordSpeed(speedKey.torrent(t.infoHash), t.state === 'paused' ? 0 : t.downloadSpeed)
+      speedsChanged()
       setState(next)
       timer = window.setTimeout(tick, intervalMs)
     }

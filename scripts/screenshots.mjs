@@ -265,6 +265,13 @@ function demoInstall(row, downloadDir) {
 }
 
 /** Mocked engine + library responses for the Transfers screen. */
+/** The demo install's speed, wandering like a real one so the banner's graph has a shape. */
+function withSpeed(installs) {
+  const t = Date.now() / 1000
+  const speed = Math.round(2.31e6 * (0.8 + 0.16 * Math.sin(t / 6) + 0.07 * Math.sin(t / 1.7)))
+  return installs.map(i => ({ ...i, speed, parts: i.parts.map(p => (p.state === 'downloading' ? { ...p, speed } : p)) }))
+}
+
 /** A community install under way, as the launcher reports it (Transfers). */
 function demoCommunity(art) {
   const game = 41410957919
@@ -292,7 +299,8 @@ function demoCommunity(art) {
       game_dir: '/home/deck/.local/share/Steam/piShop/Forza Horizon 2',
       downloads: '/home/deck/Downloads/piShop/Community/azimuth-forza-horizon-2',
       library: '/home/deck/.local/share/Steam',
-      tool: 'proton_10', runtime: 'proton', appid: null, added: Math.floor(Date.now() / 1000) - 3600, finished: null,
+      // The newest: first in the list, so the banner (and its speed graph) shows it.
+      tool: 'proton_10', runtime: 'proton', appid: null, added: Math.floor(Date.now() / 1000), finished: null,
       script_running: false, log: [],
     },
   ]
@@ -586,7 +594,7 @@ async function capture(device, port) {
       const p = new URL(request.url).pathname
       const body =
         p === '/api/community/installs'
-          ? community
+          ? withSpeed(community)
           : p === '/api/direct'
             ? []
             : p === '/api/games'
@@ -637,8 +645,9 @@ async function capture(device, port) {
     await val(`window.__demoInstalled = ${demo.installed.id}`)
   }
   await tab('/^(Transfers|Transferências)/')
-  await waitFor(`document.querySelector('.dl-tile')`, 10000)
-  await sleep(5000)
+  await waitFor(`document.querySelector('.tb-row')`, 10000)
+  // The banner's speed graph fills from the polls: give it a minute of history.
+  await sleep(process.env.SHOTS_DEMO ? 60000 : 5000)
   await shot('transfers')
   if (process.env.SHOTS_DEMO) {
     // The community install: A opens its steps and parts.
