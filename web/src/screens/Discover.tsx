@@ -1,11 +1,12 @@
 // Discover: a Big Picture / Netflix style front page of the latest cracked PC
 // games (isitcracked): a featured carousel of the 5 newest (L2/R2), a centered
 // search, and one "Cracks recentes" grid that keeps loading pages as you go.
-// Picking a game opens its page (details + trailer).
+// Picking a game opens its page (details + trailer). The list is kept for the
+// whole session (switching tabs doesn't fetch it again); Y fetches it anew.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { type DiscoverGame, type GameMeta, api, imgUrl } from '../api'
-import { tr, trn } from '../i18n'
+import { locale, tr, trn } from '../i18n'
 import { focusFirst, input, keepFocus } from '../input'
 import { Glyph, Icon, Spinner, TextPrompt, useHints } from '../ui'
 import GameDetail, { daysAgo } from './GameDetail'
@@ -16,12 +17,14 @@ const FEATURED = 5
 const GRID_COLUMNS = 7
 const ROTATE_MS = 9000
 
-const memory: { search: string; items: DiscoverGame[]; total: number; featured: number; open: DiscoverGame | null } = {
+const memory: { search: string; items: DiscoverGame[]; total: number; featured: number; open: DiscoverGame | null; fetched: number } = {
   search: '',
   items: [],
   total: 0,
   featured: 0,
   open: null,
+  /** When the first page came from isitcracked (ms), shown as "updated 14:32". */
+  fetched: 0,
 }
 
 // Art for the featured hero (Steam's library banner when the game is on
@@ -61,11 +64,12 @@ export default function Discover({
   const [prompt, setPrompt] = useState(false)
   const [featured, setFeatured] = useState(memory.featured)
   const [open, setOpen] = useState<DiscoverGame | null>(memory.open)
+  const [fetched, setFetched] = useState(memory.fetched)
   const loadingRef = useRef(false)
 
   useEffect(() => {
-    Object.assign(memory, { search, items, total, featured, open })
-  }, [search, items, total, featured, open])
+    Object.assign(memory, { search, items, total, featured, open, fetched })
+  }, [search, items, total, featured, open, fetched])
 
   const load = useCallback(async (offset: number, q: string, limit = PAGE) => {
     if (loadingRef.current) return
@@ -74,6 +78,7 @@ export default function Discover({
     setError(null)
     try {
       const page = await api.discover(offset, q, limit)
+      if (offset === 0) setFetched(Date.now())
       setTotal(page.total)
       setItems(prev => {
         const base = offset === 0 ? [] : prev
@@ -120,6 +125,13 @@ export default function Discover({
     void load(0, q)
   }
 
+  // Y: the first page again from isitcracked. The list on screen stays until
+  // the new one arrives (and if that fails, with the error above it).
+  const refresh = () => {
+    setFeatured(0)
+    void load(0, search)
+  }
+
   // Featured hero: rotates by itself; L2/R2 flips through it.
   const featuredGames = useMemo(() => items.slice(0, FEATURED), [items])
   const hero = featuredGames[featured % Math.max(1, featuredGames.length)]
@@ -154,14 +166,18 @@ export default function Discover({
 
   const flip = (d: number) => setFeatured(f => (f + d + featuredGames.length) % Math.max(1, featuredGames.length))
 
-  const ctl = useRef({ search, applySearch, n: featuredGames.length })
-  ctl.current = { search, applySearch, n: featuredGames.length }
+  const ctl = useRef({ search, applySearch, refresh, n: featuredGames.length })
+  ctl.current = { search, applySearch, refresh, n: featuredGames.length }
   useEffect(() => {
     if (prompt || open || !iic) return
     return input.pushHandler(a => {
       const c = ctl.current
       if (a === 'menu') {
         setPrompt(true)
+        return true
+      }
+      if (a === 'y') {
+        c.refresh()
         return true
       }
       if ((a === 'lt' || a === 'rt') && !c.search && c.n > 1) {
@@ -184,6 +200,7 @@ export default function Discover({
         : [
           { glyph: 'A', label: tr('View game') },
           { glyph: 'MENU', label: tr('Search') },
+          { glyph: 'Y', label: tr('Refresh') },
           ...(!search ? [{ glyph: ['L2', 'R2'] as ['L2', 'R2'], label: tr('Spotlight') }] : []),
           ...(search ? [{ glyph: 'B' as const, label: tr('Clear search') }] : [{ glyph: 'L1' as const, label: tr('Tabs') }]),
         ],
@@ -304,7 +321,10 @@ export default function Discover({
         <section className="dsc-catalog">
           <div className="dsc-catalog-head">
             <h3 className="dsc-row-title">{search ? tr('Results for “{q}”', { q: search }) : tr('Recent cracks')}</h3>
-            <span className="sort-label">{total ? trn(total, '{shown} of {n} game', '{shown} of {n} games', { shown: Math.min(items.length, total) }) : ''}</span>
+            <span className="sort-label">
+              {total ? trn(total, '{shown} of {n} game', '{shown} of {n} games', { shown: Math.min(items.length, total) }) : ''}
+              {fetched > 0 && ` · ${tr('updated {time}', { time: new Date(fetched).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) })}`}
+            </span>
           </div>
           {!error && !loading && items.length === 0 && <div className="store-msg">{tr('No games found.')}</div>}
           {items.length === 0 && loading && (
