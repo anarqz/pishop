@@ -27,8 +27,10 @@ pull request.
   `settings.json`, `library.json`, `direct.json`, `community/installs.json`…
   Each module reads and writes its own file through small load/store helpers.
   The launcher log is `launcher.log` there.
-- **Steam integration.** `steam.rs` + `vdf.rs` edit `shortcuts.vdf` when Steam
-  is off. `steamclient.rs` drives Steam's own client API live over its CEF
+- **Steam integration.** `steam.rs` + `vdf.rs` edit `shortcuts.vdf` directly
+  (piShop's own registration, `--install-steam`); Steam only reads that file at
+  startup, so this needs a Steam restart. Everything at runtime goes through
+  `steamclient.rs`, which drives Steam's own client API live over its CEF
   debugging port (127.0.0.1:8080, enabled by
   `~/.local/share/Steam/.cef-enable-remote-debugging`): add shortcuts, set
   artwork and Proton, launch apps. `focus.rs` reads gamescope's focused app so
