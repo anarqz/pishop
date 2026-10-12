@@ -58,23 +58,36 @@ button { font: inherit; color: inherit; }
 
 /* ---------- top bar & tabs ---------- */
 .topbar {
-  display: grid; grid-template-columns: 200px 1fr 200px; align-items: center;
+  display: grid; grid-template-columns: 200px minmax(0, 1fr) 200px; align-items: center;
   padding: 0 20px;
 }
 .brand img { width: 30px; height: 30px; display: block; }
-.tabs { display: flex; align-items: center; justify-content: center; gap: 4px; }
+/* One row, whatever the language: L1 · the tabs (scrolling sideways when
+   they don't fit, the active one kept in view) · R1. */
+.tabs { display: flex; align-items: center; min-width: 0; }
+.tabs-scroll {
+  position: relative; flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; scroll-behavior: smooth;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent);
+  padding: 0 8px;
+}
+/* Centered when they fit, scrollable from the first one when they don't. */
+.tabs-scroll > :first-child { margin-left: auto; }
+.tabs-scroll > :last-child { margin-right: auto; }
 .tab {
-  background: none; border: 0; padding: 8px 14px; cursor: pointer;
+  flex: none; display: inline-flex; align-items: center; white-space: nowrap;
+  background: none; border: 0; padding: 8px 12px; cursor: pointer;
   color: var(--muted); font-size: 14px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase;
   position: relative; border-radius: 4px;
 }
 .tab.active { color: var(--text-strong); }
 .tab.active::after {
-  content: ''; position: absolute; left: 14px; right: 14px; bottom: 0; height: 3px; border-radius: 2px; background: var(--blue);
+  content: ''; position: absolute; left: 12px; right: 12px; bottom: 0; height: 3px; border-radius: 2px; background: var(--blue);
 }
-.tabs .glyph { margin: 0 8px; }
+.tabs .glyph { flex: none; margin: 0 8px; }
 .badge {
-  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px;
+  flex: none; display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px;
   border-radius: 9px; background: var(--blue); color: #fff; font-size: 11px; letter-spacing: 0; vertical-align: 1px;
 }
 .status { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }

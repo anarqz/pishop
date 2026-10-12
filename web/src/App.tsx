@@ -61,8 +61,7 @@ function useQuitProgress() {
 }
 
 export default function App() {
-  // Re-renders the whole tree when the language changes.
-  useLang()
+  // Re-renders the whole tree when the language changes (`lang`, below).
   const [tab, setTab] = useState<Tab>('discover')
   const [storeRequest, setStoreRequest] = useState<StoreRequest | null>(null)
   const [explorerRequest, setExplorerRequest] = useState<ExplorerRequest | null>(null)
@@ -188,6 +187,17 @@ export default function App() {
     requestAnimationFrame(focusFirst)
   }, [tab])
 
+  // The tab row scrolls sideways when it doesn't fit (long labels in
+  // Portuguese): the active tab slides to the middle on every change.
+  const tabsRef = useRef<HTMLDivElement>(null)
+  const lang = useLang()
+  useEffect(() => {
+    const row = tabsRef.current
+    const on = row?.querySelector<HTMLElement>('.tab.active')
+    if (!row || !on) return
+    row.scrollTo({ left: on.offsetLeft - (row.clientWidth - on.offsetWidth) / 2, behavior: 'smooth' })
+  }, [tab, lang])
+
   const current = jobs.find(j => j.status === 'running' || j.status === 'scanning')
   const engine = useEngineState(3000)
   const extra = useTransfersExtra(3000)
@@ -205,12 +215,14 @@ export default function App() {
         </div>
         <nav className="tabs">
           <Glyph name="L1" />
-          {TABS.map(([t, label]) => (
-            <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => go(t)} tabIndex={-1}>
-              {label()}
-              {t === 'jobs' && active > 0 && <span className="badge">{active}</span>}
-            </button>
-          ))}
+          <div className="tabs-scroll" ref={tabsRef}>
+            {TABS.map(([t, label]) => (
+              <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => go(t)} tabIndex={-1}>
+                {label()}
+                {t === 'jobs' && active > 0 && <span className="badge">{active}</span>}
+              </button>
+            ))}
+          </div>
           <Glyph name="R1" />
         </nav>
         <div className="status">
