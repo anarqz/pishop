@@ -7,7 +7,9 @@ mod archive;
 mod archivetools;
 mod browser;
 mod catalog;
+mod community;
 mod compat;
+mod direct;
 mod discover;
 mod exeguess;
 mod focus;
@@ -182,6 +184,8 @@ async fn run(args: Args) -> i32 {
     sources::load();
     focus::start();
     jobs::start();
+    direct::start();
+    community::start();
     update::start();
     tokio::spawn(install::recover());
 

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { type Job, type Place, type Source, api, formatBytes } from './api'
 import { locale, setLang, tr, useLang } from './i18n'
 import { focusFirst, input } from './input'
+import { ownedTorrents, useTransfersExtra } from './community'
+import Community from './screens/Community'
 import Explorer, { type ExplorerRequest } from './screens/Explorer'
 import Games, { type GamesRequest } from './screens/Games'
 import Jobs from './screens/Jobs'
@@ -9,15 +11,18 @@ import Settings, { type SettingsSection } from './screens/Settings'
 import Discover from './screens/Discover'
 import Store, { type StoreRequest } from './screens/Store'
 import { useEngineState } from './screens/Torrents'
+import { extraActive } from './screens/TransferTiles'
 import { setTorrentApi } from './torrent'
 import { Dialog, Footer, Glyph, Spinner, Toasts, toast } from './ui'
 
-export type Tab = 'discover' | 'store' | 'jobs' | 'games' | 'explorer' | 'settings'
+export type Tab = 'discover' | 'community' | 'store' | 'jobs' | 'games' | 'explorer' | 'settings'
 
 // Labels are functions so they follow the current language. In the order a
-// game goes: found, downloaded, installed; then files and settings.
+// game goes: found (Discover, Community, Store), downloaded, installed; then
+// files and settings.
 const TABS: Array<[Tab, () => string]> = [
   ['discover', () => tr('Discover')],
+  ['community', () => tr('Community')],
   ['store', () => tr('Store')],
   ['jobs', () => tr('Transfers')],
   ['games', () => tr('Games')],
@@ -185,8 +190,12 @@ export default function App() {
 
   const current = jobs.find(j => j.status === 'running' || j.status === 'scanning')
   const engine = useEngineState(3000)
-  const torrentsActive = engine.torrents.filter(t => !t.finished && t.state !== 'paused' && !t.error).length
-  const active = jobs.filter(j => ['running', 'scanning', 'queued'].includes(j.status)).length + torrentsActive
+  const extra = useTransfersExtra(3000)
+  // A community install's torrents count once, as its game.
+  const owned = ownedTorrents(extra.installs)
+  const torrentsActive = engine.torrents.filter(t => !owned.has(t.infoHash) && !t.finished && t.state !== 'paused' && !t.error).length
+  const active =
+    jobs.filter(j => ['running', 'scanning', 'queued'].includes(j.status)).length + torrentsActive + extraActive(extra.installs, extra.directs)
 
   return (
     <div className="app">
@@ -229,6 +238,7 @@ export default function App() {
             onGoSettings={() => goSettings('indexers')}
           />
         )}
+        {tab === 'community' && <Community onOpenGame={openGame} onExplore={explore} onGoTransfers={() => go('jobs')} />}
         {tab === 'store' && <Store places={places} request={storeRequest} onGoSettings={() => goSettings('indexers')} />}
         {tab === 'explorer' && (
           <Explorer sources={sources} places={places} request={explorerRequest} onGoSettings={() => go('settings')} />

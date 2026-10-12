@@ -2774,7 +2774,7 @@ checksum = "13bee6c73da26345c729282832b60b0363cf3dd9f4bfd81d8551b7a1c889a113"
 
 [[package]]
 name = "pishop"
-version = "1.0.2"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -2784,11 +2784,14 @@ dependencies = [
  "libc",
  "librqbit",
  "librqbit-dualstack-sockets",
+ "md-5",
  "mime_guess",
+ "regex",
  "reqwest 0.12.28",
  "rust-embed",
  "serde",
  "serde_json",
+ "sha1 0.11.0",
  "sha2",
  "smb",
  "tokio",

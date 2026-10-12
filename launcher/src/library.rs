@@ -7,6 +7,9 @@
 //! so their state (Proton, game folder, a borrowed shortcut, the artwork the
 //! user picked) lives in the same place and the install routes work for them.
 //!
+//! Games from the community catalog have an entry keyed `cm-<game>`
+//! (`community_key`): no torrent behind it, the install routes work the same.
+//!
 //! Each field comes from the first source that has it, in this order:
 //! Steam (when the game has an appid) → TheGamesDB (when its key is set) →
 //! SteamGridDB (public) → isitcracked (when configured; also the crack info).
@@ -221,6 +224,15 @@ pub fn shortcut_key(appid: u32) -> String {
 /// Whether a key is a shortcut's own entry rather than a download's.
 pub fn is_shortcut_key(key: &str) -> bool {
     key.starts_with("sc-")
+}
+
+/// The key of a game installed from the community catalog (`community`).
+pub fn community_key(id: &str) -> String {
+    format!("cm-{id}")
+}
+
+pub fn is_community_key(key: &str) -> bool {
+    key.starts_with("cm-")
 }
 
 /// Changes an entry in place; false if there is none.

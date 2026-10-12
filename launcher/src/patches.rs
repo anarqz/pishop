@@ -3,6 +3,12 @@
 //! before `%command%`, arguments after it — and whether it's on is read back
 //! from the launch options themselves, so edits made in Steam show up here
 //! and turning a patch off takes out exactly what it put in.
+//!
+//! Besides piShop's own patches, a game from the community catalog gets the
+//! ones its manifest offers (`community::patches_for`): environment variables
+//! set before `%command%` (e.g. SDL_GAMECONTROLLER_IGNORE_DEVICES).
+
+use std::borrow::Cow;
 
 use axum::extract::Path as UrlPath;
 use axum::routing::{get, post};
@@ -24,14 +30,16 @@ enum Change {
     /// Wine loads this DLL the given way, e.g. "n,b": the game's own copy
     /// first, Wine's if there's none (an entry of WINEDLLOVERRIDES).
     DllOverride { dll: &'static str, mode: &'static str },
+    /// Environment variables set to these values (a community patch).
+    Env(Vec<(String, String)>),
 }
 
 struct Patch {
-    id: &'static str,
+    id: Cow<'static, str>,
     change: Change,
 }
 
-const PATCHES: &[Patch] = &[Patch { id: "winmm", change: Change::DllOverride { dll: "winmm", mode: "n,b" } }];
+const PATCHES: &[Patch] = &[Patch { id: Cow::Borrowed("winmm"), change: Change::DllOverride { dll: "winmm", mode: "n,b" } }];
 
 /// A patch's name and what it's for, in the UI's language.
 fn texts(id: &str) -> (String, String) {
@@ -179,19 +187,78 @@ fn set_override(o: &mut Options, dll: &str, mode: &str, on: bool) {
     put_overrides(o, at, entries);
 }
 
+/// `NAME=value` among the words before %command%, quotes aside.
+fn has_env(o: &Options, var: &str, value: &str) -> bool {
+    let prefix = format!("{var}=");
+    o.before.iter().any(|t| t.strip_prefix(&prefix).is_some_and(|v| unquote(v) == value))
+}
+
+/// Sets (or takes out) `NAME=value`, with the other variables.
+fn set_env(o: &mut Options, var: &str, value: &str, on: bool) {
+    let prefix = format!("{var}=");
+    let at = o.before.iter().position(|t| t.starts_with(&prefix));
+    let word = if value.chars().any(|c| c.is_whitespace() || c == ';' || c == '"') {
+        format!("{var}=\"{}\"", value.replace('"', ""))
+    } else {
+        format!("{var}={value}")
+    };
+    match (at, on) {
+        (Some(i), true) => o.before[i] = word,
+        (Some(i), false) => {
+            if unquote(&o.before[i][prefix.len()..]) == value {
+                o.before.remove(i);
+            }
+        }
+        (None, true) => {
+            let i = o.before.iter().position(|t| !is_assignment(t)).unwrap_or(o.before.len());
+            o.before.insert(i, word);
+            o.command = true;
+        }
+        (None, false) => {}
+    }
+}
+
 fn applied(p: &Patch, o: &Options) -> bool {
-    match p.change {
+    match &p.change {
         Change::DllOverride { dll, mode } => has_override(o, dll, mode),
+        Change::Env(vars) => !vars.is_empty() && vars.iter().all(|(k, v)| has_env(o, k, v)),
     }
 }
 
 /// The launch options with a patch on or off.
 fn patched(p: &Patch, options: &str, on: bool) -> String {
     let mut o = parse(options);
-    match p.change {
+    match &p.change {
         Change::DllOverride { dll, mode } => set_override(&mut o, dll, mode, on),
+        Change::Env(vars) => {
+            for (k, v) in vars {
+                set_env(&mut o, k, v, on);
+            }
+        }
     }
     render(&o)
+}
+
+/// A community game's patch: its id is "cm:<id>" so it never clashes with piShop's.
+struct Dynamic {
+    patch: Patch,
+    title: String,
+    about: String,
+}
+
+fn community(appid: u32) -> Vec<Dynamic> {
+    crate::community::patches_for(appid)
+        .into_iter()
+        .map(|p| {
+            let id = Cow::Owned(format!("cm:{}", p.id));
+            let about = if p.about.is_empty() {
+                p.env.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(" ")
+            } else {
+                p.about.clone()
+            };
+            Dynamic { patch: Patch { id, change: Change::Env(p.env.into_iter().collect()) }, title: p.title, about }
+        })
+        .collect()
 }
 
 // ---------- routes ----------
@@ -212,13 +279,16 @@ async fn list(appid: u32) -> anyhow::Result<Value> {
 /// The patches as these launch options have them.
 fn state(appid: u32, launch_options: &str) -> Value {
     let o = parse(launch_options);
-    let patches: Vec<Value> = PATCHES
+    let mut patches: Vec<Value> = PATCHES
         .iter()
         .map(|p| {
-            let (title, about) = texts(p.id);
+            let (title, about) = texts(&p.id);
             json!({ "id": p.id, "title": title, "about": about, "applied": applied(p, &o) })
         })
         .collect();
+    for d in community(appid) {
+        patches.push(json!({ "id": d.patch.id, "title": d.title, "about": d.about, "applied": applied(&d.patch, &o), "community": true }));
+    }
     json!({ "launch_options": launch_options, "patches": patches, "busy": busy(appid) })
 }
 
@@ -232,7 +302,12 @@ async fn set_route(UrlPath((appid, id)): UrlPath<(u32, String)>, Json(r): Json<S
 }
 
 async fn set(appid: u32, id: &str, on: bool) -> anyhow::Result<Value> {
-    let p = PATCHES.iter().find(|p| p.id == id).ok_or_else(|| anyhow::anyhow!(tr!("unknown patch", "patch desconhecido")))?;
+    let extra = community(appid);
+    let p = PATCHES
+        .iter()
+        .chain(extra.iter().map(|d| &d.patch))
+        .find(|p| p.id == id)
+        .ok_or_else(|| anyhow::anyhow!(tr!("unknown patch", "patch desconhecido")))?;
     if busy(appid) {
         anyhow::bail!(tr!("an installer is using this shortcut: wait for it to close", "um instalador está usando este atalho: espere ele fechar"));
     }
@@ -279,6 +354,17 @@ mod tests {
         assert_eq!(winmm("gamemoderun %command%", true), r#"WINEDLLOVERRIDES="winmm=n,b" gamemoderun %command%"#);
         // Quoted arguments survive.
         assert_eq!(winmm(r#"%command% -path "C:\My Games\x""#, true), r#"WINEDLLOVERRIDES="winmm=n,b" %command% -path "C:\My Games\x""#);
+    }
+
+    #[test]
+    fn community_env_patches() {
+        let p = Patch { id: Cow::Borrowed("cm:sdl"), change: Change::Env(vec![("SDL_GAMECONTROLLER_IGNORE_DEVICES".into(), "0x0079/0x0006".into())]) };
+        assert_eq!(patched(&p, "", true), "SDL_GAMECONTROLLER_IGNORE_DEVICES=0x0079/0x0006 %command%");
+        assert_eq!(patched(&p, "SDL_GAMECONTROLLER_IGNORE_DEVICES=0x0079/0x0006 %command%", false), "");
+        assert_eq!(patched(&p, "PROTON_LOG=1 %command% -x", true), "PROTON_LOG=1 SDL_GAMECONTROLLER_IGNORE_DEVICES=0x0079/0x0006 %command% -x");
+        assert!(applied(&p, &parse("SDL_GAMECONTROLLER_IGNORE_DEVICES=\"0x0079/0x0006\" %command%")));
+        // Someone else's value for the variable stays when the patch goes off.
+        assert_eq!(patched(&p, "SDL_GAMECONTROLLER_IGNORE_DEVICES=0x1234/0x5678 %command%", false), "SDL_GAMECONTROLLER_IGNORE_DEVICES=0x1234/0x5678 %command%");
     }
 
     #[test]

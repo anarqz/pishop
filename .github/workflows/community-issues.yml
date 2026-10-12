@@ -1,0 +1,38 @@
+# Files community-game issues under their game: the form's "SteamGridDB ID"
+# becomes the label sgdb:<id>, which piShop's Troubleshooting lists for that
+# game. Only digits are read from the issue body.
+name: Community issues
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  label:
+    if: contains(github.event.issue.body, '### SteamGridDB ID')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || ''
+            const m = body.match(/### SteamGridDB ID\s+(?:https?:\/\/(?:www\.)?steamgriddb\.com\/game\/)?(\d{1,10})\b/i)
+            if (!m) return
+            const name = `sgdb:${m[1]}`
+            const { owner, repo } = context.repo
+            const issue_number = context.issue.number
+            try {
+              await github.rest.issues.getLabel({ owner, repo, name })
+            } catch {
+              await github.rest.issues.createLabel({ owner, repo, name, color: '1a9fff', description: 'A community game, by its SteamGridDB id' })
+            }
+            // An edited ID moves the issue to the other game.
+            for (const l of context.payload.issue.labels || []) {
+              if (l.name.startsWith('sgdb:') && l.name !== name) {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name: l.name }).catch(() => {})
+              }
+            }
+            await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [name, 'community'] })

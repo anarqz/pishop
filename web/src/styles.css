@@ -258,7 +258,7 @@ button { font: inherit; color: inherit; }
 @keyframes fade { from { opacity: 0 } }
 .dialog {
   width: min(620px, calc(100% - 64px)); max-height: calc(100% - 48px); overflow: auto;
-  display: grid; gap: 16px; padding: 26px 30px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 26px 30px;
   background: linear-gradient(180deg, #2a303a 0%, #1d2129 100%); border-radius: 8px;
   box-shadow: 0 24px 80px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.06);
   animation: pop .14s ease-out;
@@ -982,3 +982,109 @@ button.scard:focus .sring small { color: #39414b; }
 .field-box.prefixed:focus-within { border-color: var(--text); background: rgba(0,0,0,.5); }
 .field-box.prefixed > .field { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; background: none; }
 .field-prefix { flex: none; font-family: ui-monospace, 'Noto Sans Mono', monospace; font-size: 15px; white-space: pre; color: var(--muted); }
+
+/* ---------- community: catalog, game page, install, troubleshooting ---------- */
+.mono { font-family: ui-monospace, 'Noto Sans Mono', monospace; }
+.cm-hero .dsc-hero-content { max-width: 680px; }
+.cm-hero-summary { margin: 0; max-width: 620px; font-size: 17px; line-height: 1.45; color: #e6ebf0; text-shadow: 0 2px 18px rgba(0,0,0,.7); }
+.cm-warning { margin: 10px 28px 0; padding: 10px 14px; border-radius: 8px; background: rgba(230,162,60,.12); color: #f3c98b; font-size: 14px; }
+.cm-error { height: auto; padding: 60px 28px; }
+.cm-card .cover { position: relative; }
+.cm-state {
+  position: absolute; right: 8px; bottom: 8px; z-index: 2; min-width: 34px; height: 30px; padding: 0 9px; border-radius: 15px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: rgba(10,14,20,.82); color: #7cc3ff; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; backdrop-filter: blur(4px);
+}
+.cm-state.done { width: 30px; min-width: 0; padding: 0; background: var(--green); color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,.45); }
+.cm-state.done .icon { stroke: #fff; stroke-width: 3; }
+
+.cm-how { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 30px 28px 0; }
+.cm-how-item {
+  display: grid; align-content: start; gap: 6px; padding: 16px 18px; border-radius: 12px;
+  background: linear-gradient(160deg, rgba(26,159,255,.10), rgba(23,29,37,.85) 55%); box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+}
+.cm-how-item .icon { stroke: #7cc3ff; }
+.cm-how-item b { font-size: 16px; color: var(--text-strong); }
+.cm-how-item span { font-size: 13px; line-height: 1.45; color: var(--muted); }
+.cm-how-item .btn { justify-self: start; margin-top: 4px; display: inline-flex; align-items: center; gap: 6px; }
+
+/* a game's page: Discover's page, with a body that scrolls (right stick) */
+.cmg-details { overflow: hidden; }
+.cmg-main { overflow-y: auto; padding-right: 8px; align-content: start; }
+.gd-chip.warn { color: #f3c98b; }
+.cmg-info { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 26px; padding-bottom: 24px; }
+.cmg-description { margin: 0; font-size: 15px; line-height: 1.6; white-space: pre-line; text-shadow: 0 1px 12px rgba(0,0,0,.6); }
+.cmg-sub { margin: 16px 0 8px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #7cc3ff; }
+.cmg-sub:first-child { margin-top: 0; }
+.cmg-notes { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.cmg-notes li {
+  padding: 10px 12px 10px 14px; border-radius: 8px; background: rgba(10,14,20,.6); box-shadow: inset 3px 0 0 var(--amber);
+  font-size: 14px; line-height: 1.5;
+}
+.cmg-parts { display: grid; gap: 6px; align-content: start; padding: 14px 16px; border-radius: 8px; background: rgba(10,14,20,.6); backdrop-filter: blur(10px); box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+.cmg-part { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-bottom: 1px solid rgba(255,255,255,.05); }
+.cmg-part:last-of-type { border-bottom: 0; }
+.cmg-part.user .icon { stroke: var(--amber); }
+.cmg-parts > p { margin: 6px 4px 0; }
+
+.cm-setup { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.cm-setup .sstatus-text small { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-setup .cmg-sub { margin-top: 4px; }
+.cm-script { max-height: 44vh; white-space: pre; overflow: auto; }
+
+/* install page: the steps */
+.cm-steps { gap: 0; }
+.cm-step { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 14px; padding: 10px 0 16px; }
+.cm-step:not(:last-child)::before { content: ''; position: absolute; left: 14px; top: 40px; bottom: -2px; width: 2px; background: rgba(255,255,255,.08); }
+.cm-step.done:not(:last-child)::before { background: rgba(127,220,102,.45); }
+.cm-step-dot {
+  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800;
+  background: rgba(255,255,255,.06); box-shadow: inset 0 0 0 2px rgba(255,255,255,.12); color: var(--muted);
+}
+.cm-step.now .cm-step-dot { background: rgba(26,159,255,.18); box-shadow: inset 0 0 0 2px var(--blue); }
+.cm-step.done .cm-step-dot { background: var(--green); box-shadow: none; }
+.cm-step.done .cm-step-dot .icon { stroke: #fff; stroke-width: 3; }
+.cm-step.failed .cm-step-dot { background: var(--red); box-shadow: none; color: #fff; }
+.cm-step-body { display: grid; gap: 10px; min-width: 0; }
+.cm-step-head { display: flex; align-items: baseline; gap: 12px; min-height: 30px; padding-top: 4px; }
+.cm-step-head b { font-size: 17px; color: var(--text-strong); }
+.cm-step.todo .cm-step-head b { color: var(--muted); }
+.cm-step-head .muted { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-step-body > p { margin: 0; }
+.cm-part { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; background: rgba(255,255,255,.04); }
+.cm-part.waiting { box-shadow: inset 0 0 0 1px rgba(230,162,60,.5); background: rgba(230,162,60,.08); }
+.cm-part.ready .icon { stroke: var(--green); }
+.cm-part.failed { box-shadow: inset 0 0 0 1px rgba(229,72,77,.5); }
+.cm-part .inst-row-main { gap: 4px; }
+.cm-part .inst-row-main b { display: flex; align-items: baseline; gap: 8px; }
+.cm-part .btn { flex: none; }
+.cm-kind { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.cm-log { max-height: 22vh; }
+.cm-failed h3 { color: #ff8a8d; }
+
+/* Transfers: the kinds on the shelf */
+.dl-kind { display: flex; align-items: center; gap: 8px; margin: 18px 0 10px; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.dl-kind:first-of-type { margin-top: 4px; }
+.dl-kind .icon { stroke: var(--muted); }
+.cm-badge {
+  position: absolute; right: 8px; top: 8px; z-index: 2; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(26,159,255,.9); box-shadow: 0 2px 8px rgba(0,0,0,.45);
+}
+.cm-badge .icon { stroke: #fff; }
+.dl-cover.direct { background: linear-gradient(160deg, hsl(var(--h) 20% 26%), hsl(var(--h) 20% 12%)); }
+
+/* troubleshooting */
+.cmt-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 18px 28px 14px; border-bottom: 1px solid var(--line); }
+.cmt-head > div:first-child { display: grid; gap: 4px; min-width: 0; }
+.cmt-head h2 { margin: 0; font-size: 26px; font-weight: 800; color: var(--text-strong); }
+.cmt-head .btn { display: inline-flex; align-items: center; gap: 8px; }
+.cmt-msg { padding: 24px 28px; }
+.cmt-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.6fr); gap: 20px; padding: 16px 28px 20px; }
+.cmt-list { display: grid; gap: 6px; align-content: start; overflow-y: auto; padding: 2px; }
+.cmt-issue.on:not(:focus) { box-shadow: inset 3px 0 0 var(--blue); }
+.cmt-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+.cmt-dot.closed { background: #a371f7; box-shadow: 0 0 8px #a371f7; }
+.cmt-issue-view { min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 8px; padding: 16px 20px; border-radius: 10px; background: rgba(23,29,37,.88); box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); outline: none; }
+.cmt-issue-view h3 { margin: 0; font-size: 20px; color: var(--text-strong); }
+.cmt-text { margin: 0; font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cmt-comment { display: grid; gap: 4px; padding: 10px 12px; border-radius: 8px; background: rgba(255,255,255,.04); }

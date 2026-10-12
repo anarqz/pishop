@@ -55,6 +55,10 @@ pub struct Config {
     /// apibay when Prowlarr isn't set up (the Store always has a source).
     #[serde(default)]
     pub tpb_url: String,
+    /// The community catalog (index.json): a URL, or a file on the device
+    /// for testing a manifest. Empty means piShop's repository.
+    #[serde(default)]
+    pub community_url: String,
 }
 
 /// The Pirate Bay's own public JSON API: the Store's source when nothing else
@@ -88,6 +92,7 @@ pub struct ConfigUpdate {
     pub iic_key: Option<String>,
     pub iic_cdn: Option<String>,
     pub tpb_url: Option<String>,
+    pub community_url: Option<String>,
 }
 
 pub fn update_config(u: ConfigUpdate) -> anyhow::Result<Config> {
@@ -105,6 +110,9 @@ pub fn update_config(u: ConfigUpdate) -> anyhow::Result<Config> {
     if let Some(url) = u.tpb_url {
         c.tpb_url = url.trim().trim_end_matches('/').to_string();
     }
+    if let Some(url) = u.community_url {
+        c.community_url = url.trim().to_string();
+    }
     c.prowlarr_key = secret(u.prowlarr_key, c.prowlarr_key);
     c.tgdb_key = secret(u.tgdb_key, c.tgdb_key);
     c.iic_key = secret(u.iic_key, c.iic_key);
@@ -120,6 +128,8 @@ pub fn public_config() -> Value {
         "iic_url": c.iic_url, "iic_cdn": c.iic_cdn, "has_iic_key": !c.iic_key.is_empty(),
         "tpb_url": c.tpb_url,
         "tpb_default": DEFAULT_TPB,
+        "community_url": c.community_url,
+        "community_default": crate::community::DEFAULT_URL,
     })
 }
 

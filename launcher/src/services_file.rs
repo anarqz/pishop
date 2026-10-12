@@ -228,6 +228,7 @@ fn apply(file: ServicesFile, from: &str) -> anyhow::Result<Vec<String>> {
         iic_key: some(s.iic_key),
         iic_cdn: some(s.iic_cdn),
         tpb_url: some(s.tpb_url),
+        community_url: None,
     })?;
     crate::log!("serviços: importados de {from}: {}", names.join(", "));
     Ok(names)

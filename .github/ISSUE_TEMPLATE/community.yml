@@ -1,0 +1,63 @@
+name: Community game problem
+description: A game from piShop's Community tab doesn't install or doesn't run well.
+title: "[Community] "
+labels: ["community"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Opened from piShop (Community → the game → Troubleshooting → Report a problem), the game's fields are already filled in.
+        Players see this issue and its comments in piShop's Troubleshooting for the same game, so say what fixed it when something did.
+  - type: input
+    id: game
+    attributes:
+      label: Game
+    validations:
+      required: true
+  - type: input
+    id: sgdb
+    attributes:
+      label: SteamGridDB ID
+      description: The number in steamgriddb.com/game/<id>. It files this issue under the game.
+    validations:
+      required: true
+  - type: input
+    id: community
+    attributes:
+      label: Community installer
+      description: The game's folder in community/ (e.g. azimuth-forza-horizon-2).
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      options:
+        - Steam Deck LCD
+        - Steam Deck OLED
+        - ROG Ally / Ally X
+        - Legion Go / Go S
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: proton
+    attributes:
+      label: Proton
+      description: Games → the game → Compatibility (e.g. Proton 10.0-2).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you saw.
+    validations:
+      required: true
+  - type: textarea
+    id: fix
+    attributes:
+      label: What fixed it
+      description: If you found a workaround, it helps the next player.
+  - type: textarea
+    id: log
+    attributes:
+      label: Install log
+      description: Transfers → the game → the log, if the install failed.
+      render: shell

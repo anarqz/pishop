@@ -272,6 +272,7 @@ function IndexersSection() {
   const [iicKey, setIicKey] = useState('')
   const [iicCdn, setIicCdn] = useState('')
   const [tpbUrl, setTpbUrl] = useState('')
+  const [communityUrl, setCommunityUrl] = useState('')
   const [tests, setTests] = useState<Record<string, TestState>>({})
   const setTest = (k: string, v: TestState) => setTests(t => ({ ...t, [k]: v }))
 
@@ -281,6 +282,7 @@ function IndexersSection() {
     setIicUrl(c.iic_url)
     setIicCdn(c.iic_cdn)
     setTpbUrl(c.tpb_url ?? '')
+    setCommunityUrl(c.community_url ?? '')
   }
   useEffect(() => {
     api.catalogConfig().then(apply).catch(() => {})
@@ -352,6 +354,38 @@ function IndexersSection() {
           {tr('Test')}
         </button>
         <button data-nav className="btn primary" onClick={() => save({ tpb_url: tpbUrl }, 'The Pirate Bay')}>
+          {tr('Save')}
+        </button>
+      </div>
+
+      <h3 className="section-title">{tr('Community · game installers')}</h3>
+      <div className="form-grid">
+        <label>
+          <span>{tr('Catalog address (index.json)')}</span>
+          <input
+            data-nav
+            className="field"
+            placeholder={cfg?.community_default ?? 'https://raw.githubusercontent.com/anarqz/pishop/main/community/index.json'}
+            value={communityUrl}
+            onChange={e => setCommunityUrl(e.target.value)}
+          />
+        </label>
+      </div>
+      <p className="settings-note">{tr('Empty: piShop’s repository. A path on this device (e.g. /home/deck/community/index.json) tests a manifest before its pull request.')}</p>
+      <TestLine state={tests.community ?? { s: 'idle' }} />
+      <div className="row">
+        <button
+          data-nav
+          className="btn primary"
+          onClick={() =>
+            run('community', async () => {
+              apply(await api.saveServices({ community_url: communityUrl }))
+              const c = await api.community(true)
+              if (c.warning) throw new Error(c.warning)
+              return trn(c.games.length, 'Saved · {n} game in the catalog', 'Saved · {n} games in the catalog')
+            })
+          }
+        >
           {tr('Save')}
         </button>
       </div>

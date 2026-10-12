@@ -116,6 +116,10 @@ pub fn router() -> Router {
 
 /// Top-level files/folders of a download, from the torrent engine.
 pub(crate) async fn content(hash: &str) -> anyhow::Result<Vec<PathBuf>> {
+    // Shortcuts' and community games' entries have no torrent behind them.
+    if hash.len() != 40 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+        bail!(tr!("download not found", "download não encontrado"));
+    }
     let v: Value = reqwest::Client::new()
         .get(format!("http://127.0.0.1:{}/torrents/{hash}", torrent::api_port()))
         .timeout(Duration::from_secs(10))
@@ -247,7 +251,7 @@ pub(crate) async fn tools() -> anyhow::Result<Vec<Tool>> {
 }
 
 /// Newest installed numbered Proton, else Experimental, else the first one.
-fn default_tool(tools: &[Tool]) -> Option<String> {
+pub(crate) fn default_tool(tools: &[Tool]) -> Option<String> {
     let version = |t: &Tool| -> Option<f32> {
         t.display.trim_start_matches("Proton ").split(['-', ' ']).next()?.parse().ok()
     };
@@ -260,13 +264,13 @@ fn default_tool(tools: &[Tool]) -> Option<String> {
         .map(|t| t.name.clone())
 }
 
-fn folder_name(game: &str) -> String {
+pub(crate) fn folder_name(game: &str) -> String {
     let s: String = game.chars().filter(|c| !"<>:\"/\\|?*".contains(*c) && !c.is_control()).collect();
     let s = s.trim().trim_end_matches('.').trim().to_string();
     if s.is_empty() { "Game".into() } else { s }
 }
 
-fn target_for(library: &str, game: &str) -> PathBuf {
+pub(crate) fn target_for(library: &str, game: &str) -> PathBuf {
     Path::new(library).join(crate::APP_NAME).join(folder_name(game))
 }
 

@@ -67,7 +67,7 @@ export function sortDownloads(ts: TorrentInfo[], lib: Record<string, LibraryEntr
   )
 }
 
-function hue(s: string) {
+export function hue(s: string) {
   let h = 0
   for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360
   return h
@@ -77,9 +77,13 @@ const pctOf = (t: TorrentInfo) => Math.floor(Math.max(0, Math.min(1, t.progress)
 
 /** Circular progress with the percentage inside; spins while downloading. */
 function Ring({ t, state }: { t: TorrentInfo; state: DlState }) {
+  return <ProgressRing pct={pctOf(t)} state={state} />
+}
+
+/** The ring over a cover, for any transfer: `note` replaces "Paused" under it. */
+export function ProgressRing({ pct, state, note }: { pct: number; state: DlState; note?: string }) {
   const r = 40
   const c = 2 * Math.PI * r
-  const pct = pctOf(t)
   return (
     <div className={`ring ${state}`}>
       <svg viewBox="0 0 100 100" aria-hidden>
@@ -108,12 +112,12 @@ function Ring({ t, state }: { t: TorrentInfo; state: DlState }) {
           </>
         )}
       </span>
-      {state === 'paused' && <span className="ring-note">{tr('Paused')}</span>}
+      {(note || state === 'paused') && <span className="ring-note">{note ?? tr('Paused')}</span>}
     </div>
   )
 }
 
-function Cover({ name, cover }: { name: string; cover?: string | null }) {
+export function Cover({ name, cover }: { name: string; cover?: string | null }) {
   const [failed, setFailed] = useState(false)
   return cover && !failed ? (
     <img src={imgUrl(cover)} alt="" draggable={false} onError={() => setFailed(true)} />

@@ -52,6 +52,8 @@ pub fn router() -> Router {
         .merge(crate::vpn::router())
         .merge(crate::games::router())
         .merge(crate::patches::router())
+        .merge(crate::direct::router())
+        .merge(crate::community::router())
         .route("/api/library", get(|| async { Json(crate::library::all()) }))
         .route("/api/focus", get(|| async { Json(json!({ "focused": crate::focus::focused() })) }))
         .route("/api/settings", get(|| async { Json(crate::settings::get()) }).post(save_settings))

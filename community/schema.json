@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/anarqz/pishop/community/schema.json",
+  "title": "piShop community game",
+  "description": "A game piShop installs from the community catalog. See community/README.md.",
+  "type": "object",
+  "required": ["id", "name", "platform", "revision", "authors", "summary", "description", "art", "parts", "install", "launch"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "type": "string", "pattern": "^[a-z0-9_-]{1,64}$", "description": "The folder's name." },
+    "name": { "type": "string", "minLength": 1 },
+    "platform": { "type": "string", "description": "The game's original platform, e.g. \"Xbox One\", \"Nintendo 64\"." },
+    "revision": { "type": "integer", "minimum": 1, "description": "Bump on every change." },
+    "updated": { "type": "string", "format": "date" },
+    "authors": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "summary": { "type": "string", "maxLength": 200 },
+    "description": { "type": "string" },
+    "steamos": { "type": "array", "items": { "type": "string" }, "description": "Known issues on SteamOS and their workarounds." },
+    "wrapper": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": { "name": { "type": "string" }, "version": { "type": "string" }, "url": { "type": "string", "format": "uri" } }
+    },
+    "art": {
+      "type": "object",
+      "required": ["sgdb_id"],
+      "additionalProperties": false,
+      "properties": {
+        "sgdb_id": { "type": "integer", "description": "The game on SteamGridDB: artwork, and the label of its troubleshooting issues (sgdb:<id>)." },
+        "steam_appid": { "type": ["string", "integer"] },
+        "cover": { "type": "string", "format": "uri" },
+        "hero": { "type": "string", "format": "uri" }
+      }
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "ram_gb": { "type": "integer" }, "note": { "type": "string" } }
+    },
+    "parts": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/part" } },
+    "install": {
+      "type": "object",
+      "required": ["script"],
+      "additionalProperties": false,
+      "properties": {
+        "script": { "type": "string", "description": "The script next to manifest.json." },
+        "disk": { "type": "integer", "description": "About how much the installed game takes, in bytes." }
+      }
+    },
+    "launch": {
+      "type": "object",
+      "required": ["exe"],
+      "additionalProperties": false,
+      "properties": {
+        "exe": { "type": "string", "description": "Relative to the game's folder." },
+        "runtime": { "enum": ["proton", "native"], "default": "proton" },
+        "proton": { "type": "string", "description": "A Proton to prefer, e.g. proton_experimental." },
+        "options": { "type": "string", "description": "Steam launch options." }
+      }
+    },
+    "patches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "env"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9_-]{1,32}$" },
+          "title": { "type": "string" },
+          "about": { "type": "string" },
+          "env": { "type": "object", "additionalProperties": { "type": "string" } }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "hashes": {
+      "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+    },
+    "part": {
+      "type": "object",
+      "required": ["id", "name", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_-]{1,32}$", "description": "The script sees it as $PISHOP_PART_<ID>." },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "role": { "enum": ["launcher", "game", "data", "other"] },
+        "size": { "type": "integer", "minimum": 1 },
+        "checksums": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sha1": { "$ref": "#/$defs/hashes" },
+            "sha256": { "$ref": "#/$defs/hashes" },
+            "md5": { "$ref": "#/$defs/hashes" }
+          }
+        },
+        "extract": { "type": "string", "description": "Extract into this folder of the game (\"\" = its root)." },
+        "source": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["type", "urls", "file"],
+              "additionalProperties": false,
+              "properties": {
+                "type": { "const": "http" },
+                "urls": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^https://" } },
+                "file": { "type": "string" }
+              }
+            },
+            {
+              "type": "object",
+              "required": ["type", "page", "file"],
+              "additionalProperties": false,
+              "properties": {
+                "type": { "const": "itch" },
+                "page": { "type": "string", "pattern": "^https://[^/]+\\.itch\\.io/" },
+                "upload_id": { "type": "integer" },
+                "file": { "type": "string" }
+              }
+            },
+            {
+              "type": "object",
+              "required": ["type", "repo", "asset"],
+              "additionalProperties": false,
+              "properties": {
+                "type": { "const": "github" },
+                "repo": { "type": "string", "pattern": "^[\\w.-]+/[\\w.-]+$" },
+                "tag": { "type": "string", "default": "latest" },
+                "asset": { "type": "string", "description": "Regular expression for the asset's name." }
+              }
+            },
+            {
+              "type": "object",
+              "required": ["type"],
+              "additionalProperties": false,
+              "properties": {
+                "type": { "const": "torrent" },
+                "urls": { "type": "array", "items": { "type": "string", "pattern": "^https://" } },
+                "magnet": { "type": "string", "pattern": "^magnet:" },
+                "files": { "type": "string", "description": "Regular expression: only these files of the torrent." }
+              }
+            },
+            {
+              "type": "object",
+              "required": ["type", "hint"],
+              "additionalProperties": false,
+              "properties": {
+                "type": { "const": "user" },
+                "hint": { "type": "string", "description": "What the player should pick." },
+                "extensions": { "type": "array", "items": { "type": "string", "pattern": "^\\.[a-z0-9]+$" } }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

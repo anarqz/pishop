@@ -1,6 +1,6 @@
 [package]
 name = "pishop"
-version = "1.0.2"
+version = "1.1.0"
 edition = "2024"
 
 [dependencies]
@@ -22,6 +22,11 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 # piShop answers as `cabextract`/`unzip` for winetricks (archivetools.rs).
 cab = "0.6"
 sha2 = "0.11"
+# Checksums of community downloads (archive.org and ROM sets publish SHA-1/MD5).
+sha1 = "0.11"
+md-5 = "0.11"
+# Already in through librqbit: file patterns of community downloads.
+regex = "1"
 zip = { version = "8", default-features = false, features = ["deflate-flate2", "deflate64"] }
 
 [profile.release]

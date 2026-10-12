@@ -1,0 +1,27 @@
+# Community installers: every manifest valid for the launcher, the scripts
+# within policy and ShellCheck-clean, and community/index.json regenerated.
+# Scripts are only read here, never run.
+name: Community
+
+on:
+  pull_request:
+    paths: ['community/**', 'scripts/community.mjs', '.github/workflows/community.yml']
+  push:
+    branches: [main]
+    paths: ['community/**', 'scripts/community.mjs', '.github/workflows/community.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Manifests, policy and index
+        run: node scripts/community.mjs --check
+      - name: ShellCheck
+        run: shellcheck --shell=bash --severity=warning community/*/*.sh

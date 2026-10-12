@@ -1,20 +1,42 @@
-// Transfers, styled after Steam's Downloads page: torrent downloads as a shelf
-// of game covers (the focused one detailed on top), then network copies.
+// Transfers, styled after Steam's Downloads page: shelves of game covers (the
+// focused one detailed on top) — community installs (each game with its
+// parts), torrents, direct downloads added by hand — then network copies.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { type Job, api, formatBytes, formatEta } from '../api'
+import { type CommunityInstall, type DirectDownload, type Job, api, formatBytes, formatEta } from '../api'
+import { ownedTorrents, useTransfersExtra } from '../community'
 import { tr, trn } from '../i18n'
 import { focusFirst, input, keepFocus } from '../input'
 import { type TorrentInfo, addMagnet, pause, resume } from '../torrent'
 import { Icon, Progress, TextPrompt, toast, useHints } from '../ui'
+import CommunityInstallPage from './CommunityInstall'
 import InstallPage from './Install'
 import {
   DeleteDialog, DownloadHero, DownloadTile, sortDownloads, toggleLabel, useEngineState, useLibrary,
 } from './Torrents'
+import { CommunityHero, CommunityRemoveDialog, CommunityTile, DirectDialog, DirectHero, DirectTile } from './TransferTiles'
 
 const ACTIVE = ['running', 'scanning'] as const
 
-type Focus = { kind: 'job' | 'torrent'; id: number } | null
+type Kind = 'job' | 'torrent' | 'community' | 'direct'
+type Focus = { kind: 'job' | 'torrent' | 'direct'; id: number } | { kind: 'community'; id: string } | null
+type DialogState =
+  | { kind: 'details' | 'delete'; id: number }
+  | { kind: 'community' | 'community-remove'; id: string }
+  | { kind: 'direct'; id: number }
+  | null
+
+/** X on a community install: pause or resume its downloads. */
+function toggleInstall(i: CommunityInstall) {
+  if (i.stage !== 'downloading') return
+  api.communityAction(i.id, i.paused ? 'resume' : 'pause').catch(e => toast(tr('Action failed'), String((e as Error).message), 'error'))
+}
+
+/** X on a direct download: pause, or resume (also after an error). */
+function toggleDirect(d: DirectDownload) {
+  if (d.state === 'done') return
+  api.directAction(d.id, d.state === 'running' ? 'pause' : 'resume').catch(e => toast(tr('Action failed'), String((e as Error).message), 'error'))
+}
 
 /** X: pause/resume while downloading, stop/resume sharing once finished. */
 function toggle(t: TorrentInfo) {
@@ -44,10 +66,18 @@ export default function Jobs({
     .sort((a, b) => (b.finished ?? 0) - (a.finished ?? 0))
 
   const engine = useEngineState()
-  const lib = useLibrary(engine.torrents)
-  const downloads = useMemo(() => sortDownloads(engine.torrents, lib), [engine.torrents, lib])
-  const [dialog, setDialog] = useState<{ kind: 'details' | 'delete'; id: number } | null>(null)
+  const extra = useTransfersExtra(1000)
+  const owned = useMemo(() => ownedTorrents(extra.installs), [extra.installs])
+  // A community install's torrents show inside its game, not on their own.
+  const torrents = useMemo(() => engine.torrents.filter(t => !owned.has(t.infoHash)), [engine.torrents, owned])
+  const lib = useLibrary(torrents)
+  const downloads = useMemo(() => sortDownloads(torrents, lib), [torrents, lib])
+  const installs = extra.installs
+  const directs = useMemo(() => extra.directs.filter(d => !d.owner).sort((a, b) => b.added - a.added), [extra.directs])
+  const [dialog, setDialog] = useState<DialogState>(null)
   const [prompt, setPrompt] = useState(false)
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [linkError, setLinkError] = useState<string | null>(null)
   const restoreFocus = useRef<(() => void) | null>(null)
   const [cap, setCap] = useState<number | null>(null)
   useEffect(() => {
@@ -59,25 +89,46 @@ export default function Jobs({
 
   // What the controller is on: a download or a copy job (by data attribute).
   const [focus, setFocus] = useState<Focus>(null)
-  const [heroId, setHeroId] = useState<number | null>(null)
+  const [hero, setHero] = useState<{ kind: Exclude<Kind, 'job'>; id: number | string } | null>(null)
   const focusedJob = focus?.kind === 'job' ? (jobs.find(j => j.id === focus.id) ?? null) : null
   const focusedTorrent = focus?.kind === 'torrent' ? (downloads.find(t => t.id === focus.id) ?? null) : null
-  const heroT = downloads.find(t => t.id === heroId) ?? downloads[0] ?? null
-  const dialogT = dialog ? (downloads.find(t => t.id === dialog.id) ?? null) : null
+  const focusedInstall = focus?.kind === 'community' ? (installs.find(i => i.id === focus.id) ?? null) : null
+  const focusedDirect = focus?.kind === 'direct' ? (directs.find(d => d.id === focus.id) ?? null) : null
+  // The panel on top: the focused transfer, else the first one there is.
+  const heroInstall = hero?.kind === 'community' ? installs.find(i => i.id === hero.id) : undefined
+  const heroT = hero?.kind === 'torrent' ? downloads.find(t => t.id === hero.id) : undefined
+  const heroDirect = hero?.kind === 'direct' ? directs.find(d => d.id === hero.id) : undefined
+  const top = heroInstall
+    ? ({ kind: 'community', i: heroInstall } as const)
+    : heroT
+      ? ({ kind: 'torrent', t: heroT } as const)
+      : heroDirect
+        ? ({ kind: 'direct', d: heroDirect } as const)
+        : installs[0]
+          ? ({ kind: 'community', i: installs[0] } as const)
+          : downloads[0]
+            ? ({ kind: 'torrent', t: downloads[0] } as const)
+            : directs[0]
+              ? ({ kind: 'direct', d: directs[0] } as const)
+              : null
+  const dialogT = dialog && (dialog.kind === 'details' || dialog.kind === 'delete') ? (downloads.find(t => t.id === dialog.id) ?? null) : null
+  const dialogInstall = dialog && (dialog.kind === 'community' || dialog.kind === 'community-remove') ? (installs.find(i => i.id === dialog.id) ?? null) : null
+  const dialogDirect = dialog?.kind === 'direct' ? (directs.find(d => d.id === dialog.id) ?? null) : null
+  const count = installs.length + downloads.length + directs.length
 
-  // The torrent list arrives just after the tab opens: land on the first game
-  // then, unless the controller already moved somewhere else.
+  // The lists arrive just after the tab opens: land on the first game then,
+  // unless the controller already moved somewhere else.
   const landed = useRef(false)
   useEffect(() => {
-    if (landed.current || !downloads.length) return
+    if (landed.current || !count) return
     landed.current = true
     const el = document.activeElement as HTMLElement | null
     if (!el || el === document.body || el.closest('.dl-head')) requestAnimationFrame(focusFirst)
-  }, [downloads.length])
+  }, [count])
 
-  const openDialog = (kind: 'details' | 'delete', id: number) => {
+  const openDialog = (d: NonNullable<DialogState>) => {
     restoreFocus.current = keepFocus()
-    setDialog({ kind, id })
+    setDialog(d)
   }
   const closeDialog = () => {
     setDialog(null)
@@ -93,18 +144,34 @@ export default function Jobs({
     }
   }
 
-  const ref = useRef({ focusedJob, focusedTorrent, act, history, openDialog })
-  ref.current = { focusedJob, focusedTorrent, act, history, openDialog }
+  const ref = useRef({ focusedJob, focusedTorrent, focusedInstall, focusedDirect, act, history, openDialog })
+  ref.current = { focusedJob, focusedTorrent, focusedInstall, focusedDirect, act, history, openDialog }
   useEffect(
     () =>
       input.pushHandler(a => {
-        const { focusedJob: j, focusedTorrent: t, act, history, openDialog } = ref.current
+        const { focusedJob: j, focusedTorrent: t, focusedInstall: ci, focusedDirect: d, act, history, openDialog } = ref.current
         if (t && a === 'x') {
           toggle(t)
           return true
         }
         if (t && a === 'y') {
-          openDialog('delete', t.id)
+          openDialog({ kind: 'delete', id: t.id })
+          return true
+        }
+        if (ci && a === 'x') {
+          toggleInstall(ci)
+          return true
+        }
+        if (ci && a === 'y') {
+          openDialog({ kind: 'community-remove', id: ci.id })
+          return true
+        }
+        if (d && a === 'x') {
+          toggleDirect(d)
+          return true
+        }
+        if (d && a === 'y') {
+          openDialog({ kind: 'direct', id: d.id })
           return true
         }
         if (j && a === 'x') {
@@ -136,6 +203,20 @@ export default function Jobs({
                 { glyph: 'Y' as const, label: tr('Delete') },
               ]
             : []),
+          ...(focusedInstall
+            ? [
+                { glyph: 'A' as const, label: tr('View details') },
+                ...(focusedInstall.stage === 'downloading' ? [{ glyph: 'X' as const, label: focusedInstall.paused ? tr('Resume') : tr('Pause') }] : []),
+                { glyph: 'Y' as const, label: focusedInstall.stage === 'installed' ? tr('Remove') : tr('Cancel installation') },
+              ]
+            : []),
+          ...(focusedDirect
+            ? [
+                { glyph: 'A' as const, label: tr('Options') },
+                ...(focusedDirect.state !== 'done' ? [{ glyph: 'X' as const, label: focusedDirect.state === 'running' ? tr('Pause') : tr('Resume') }] : []),
+                { glyph: 'Y' as const, label: tr('Delete') },
+              ]
+            : []),
           ...(focusedJob ? [{ glyph: 'X' as const, label: jobActive ? tr('Cancel') : tr('Remove') }] : []),
           ...(focusedJob && ['failed', 'canceled'].includes(focusedJob.status) ? [{ glyph: 'Y' as const, label: tr('Retry') }] : []),
           ...(history.length ? [{ glyph: 'MENU' as const, label: tr('Clear history') }] : []),
@@ -151,11 +232,25 @@ export default function Jobs({
       data-nav-scope
       onFocusCapture={e => {
         const d = (e.target as HTMLElement).dataset
-        if (d.torrentId) setHeroId(Number(d.torrentId))
-        setFocus(d.jobId ? { kind: 'job', id: Number(d.jobId) } : d.torrentId ? { kind: 'torrent', id: Number(d.torrentId) } : null)
+        if (d.torrentId) setHero({ kind: 'torrent', id: Number(d.torrentId) })
+        if (d.communityId) setHero({ kind: 'community', id: d.communityId })
+        if (d.directId) setHero({ kind: 'direct', id: Number(d.directId) })
+        setFocus(
+          d.jobId
+            ? { kind: 'job', id: Number(d.jobId) }
+            : d.torrentId
+              ? { kind: 'torrent', id: Number(d.torrentId) }
+              : d.communityId
+                ? { kind: 'community', id: d.communityId }
+                : d.directId
+                  ? { kind: 'direct', id: Number(d.directId) }
+                  : null,
+        )
       }}
     >
-      {heroT && <DownloadHero t={heroT} entry={lib[heroT.infoHash]} />}
+      {top?.kind === 'torrent' && <DownloadHero t={top.t} entry={lib[top.t.infoHash]} />}
+      {top?.kind === 'community' && <CommunityHero i={top.i} />}
+      {top?.kind === 'direct' && <DirectHero d={top.d} />}
       <div className="transfers-scroll">
         <section className="dl-section">
           <div className="dl-head">
@@ -171,21 +266,65 @@ export default function Jobs({
                 tr('Starting the torrent engine…')
               )}
             </span>
-            <button data-nav data-nav-default={downloads.length ? undefined : ''} className="btn small" onClick={() => setPrompt(true)}>
-              <Icon name="plus" size={18} /> {tr('Magnet link')}
+            <button data-nav data-nav-default={count ? undefined : ''} className="btn small" onClick={() => setPrompt(true)}>
+              <Icon name="plus" size={18} /> {tr('Add link')}
             </button>
           </div>
-          {engine.online && !downloads.length && (
+          {engine.online && !count && (
             <div className="jobs-empty">
               <Icon name="download" size={28} />
-              <span>{tr('No downloads. Find games in Discover or the Store.')}</span>
+              <span>{tr('No downloads. Find games in Discover, the Store or Community.')}</span>
             </div>
           )}
-          <div className="dl-grid">
-            {downloads.map((t, i) => (
-              <DownloadTile key={t.id} t={t} entry={lib[t.infoHash]} first={i === 0} onOpen={() => openDialog('details', t.id)} />
-            ))}
-          </div>
+          {installs.length > 0 && (
+            <>
+              <h4 className="dl-kind">
+                <Icon name="globe" size={16} /> {tr('Community')}
+              </h4>
+              <div className="dl-grid">
+                {installs.map((i, n) => (
+                  <CommunityTile key={i.id} i={i} first={n === 0} onOpen={() => openDialog({ kind: 'community', id: i.id })} />
+                ))}
+              </div>
+            </>
+          )}
+          {downloads.length > 0 && (
+            <>
+              {(installs.length > 0 || directs.length > 0) && (
+                <h4 className="dl-kind">
+                  <Icon name="torrent" size={16} /> {tr('Torrents')}
+                </h4>
+              )}
+              <div className="dl-grid">
+                {downloads.map((t, i) => (
+                  <DownloadTile
+                    key={t.id}
+                    t={t}
+                    entry={lib[t.infoHash]}
+                    first={i === 0 && !installs.length}
+                    onOpen={() => openDialog({ kind: 'details', id: t.id })}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+          {directs.length > 0 && (
+            <>
+              <h4 className="dl-kind">
+                <Icon name="download" size={16} /> {tr('Direct downloads')}
+              </h4>
+              <div className="dl-grid">
+                {directs.map((d, i) => (
+                  <DirectTile
+                    key={d.id}
+                    d={d}
+                    first={i === 0 && !installs.length && !downloads.length}
+                    onOpen={() => openDialog({ kind: 'direct', id: d.id })}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </section>
 
         {jobs.length > 0 && <h3 className="section-title jobs-title">{tr('Copies')}</h3>}
@@ -204,20 +343,39 @@ export default function Jobs({
         )}
       </div>
 
+      {dialog?.kind === 'community' && dialogInstall && (
+        <CommunityInstallPage install={dialogInstall} onClose={closeDialog} onExplore={onExplore} onOpenGame={onOpenGame} />
+      )}
+      {dialog?.kind === 'community-remove' && dialogInstall && <CommunityRemoveDialog i={dialogInstall} onClose={closeDialog} />}
+      {dialog?.kind === 'direct' && dialogDirect && <DirectDialog d={dialogDirect} onClose={closeDialog} onExplore={onExplore} />}
       {dialog?.kind === 'details' && dialogT && (
         <InstallPage t={dialogT} entry={lib[dialogT.infoHash]} onClose={closeDialog} onExplore={onExplore} onOpenGame={onOpenGame} />
       )}
       {dialog?.kind === 'delete' && dialogT && <DeleteDialog t={dialogT} entry={lib[dialogT.infoHash]} onClose={closeDialog} />}
       {prompt && (
         <TextPrompt
-          title={tr('Magnet link')}
-          placeholder="magnet:?xt=urn:btih:…"
+          title={tr('Add link')}
+          placeholder="magnet:?xt=urn:btih:…  ·  https://…"
+          hint={tr('A magnet link downloads as a torrent; a web link downloads the file directly.')}
           submitLabel={tr('Add')}
-          validate={v => v.startsWith('magnet:')}
-          onCancel={() => setPrompt(false)}
-          onSubmit={m => {
+          busy={linkBusy}
+          error={linkError}
+          validate={v => v.startsWith('magnet:') || /^https?:\/\/\S+$/.test(v)}
+          onCancel={() => {
             setPrompt(false)
-            addMagnet(m).catch(e => toast(tr("Couldn't add the magnet link"), String((e as Error).message), 'error'))
+            setLinkError(null)
+          }}
+          onSubmit={link => {
+            setLinkBusy(true)
+            setLinkError(null)
+            const add = link.startsWith('magnet:') ? addMagnet(link) : api.addDirect(link)
+            add
+              .then(() => {
+                setPrompt(false)
+                toast(link.startsWith('magnet:') ? tr('Torrent added') : tr('Download added'), undefined, 'ok')
+              })
+              .catch(e => setLinkError(String((e as Error).message)))
+              .finally(() => setLinkBusy(false))
           }}
         />
       )}

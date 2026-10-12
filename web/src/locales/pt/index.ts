@@ -2,6 +2,7 @@
 // area of the app; `pnpm i18n` checks every tr() string has an entry here.
 
 import common from './common.json'
+import community from './community.json'
 import compat from './compat.json'
 import discover from './discover.json'
 import explore from './explore.json'
@@ -11,6 +12,6 @@ import settings from './settings.json'
 import store from './store.json'
 import transfers from './transfers.json'
 
-const PT: Record<string, string> = { ...common, ...discover, ...store, ...explore, ...transfers, ...settings, ...compat, ...install, ...games }
+const PT: Record<string, string> = { ...common, ...discover, ...store, ...explore, ...transfers, ...settings, ...compat, ...install, ...games, ...community }
 
 export default PT

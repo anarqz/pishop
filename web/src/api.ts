@@ -439,6 +439,9 @@ export interface ServicesConfig {
   iic_cdn: string
   has_iic_key: boolean
   tpb_url: string
+  /** The community catalog's address; empty = piShop's repository (community_default). */
+  community_url?: string
+  community_default?: string
 }
 
 export interface DiscoverGame {
@@ -451,6 +454,156 @@ export interface DiscoverGame {
   release_date: string | null
   scene_group: string | null
   drm: string | null
+}
+
+/** Community catalog (launcher's community.rs): a game someone wrote an installer for. */
+export type CommunityPartKind = 'direct' | 'itch' | 'github' | 'torrent' | 'user'
+export interface CommunityPart {
+  id: string
+  name: string
+  description?: string
+  role?: 'launcher' | 'game' | 'data' | 'other' | string
+  kind: CommunityPartKind
+  /** Where it comes from ("itch.io", "archive.org"…); empty for a file the user picks. */
+  from: string
+  size?: number | null
+  extract?: string | null
+  checksums?: { sha1?: string[]; sha256?: string[]; md5?: string[] }
+  source: { type: string; hint?: string; extensions?: string[] }
+}
+export interface CommunityStatus {
+  state: 'none' | 'installing' | 'installed'
+  stage?: CommunityStage
+  progress?: number | null
+  key?: string
+  appid?: number | null
+  game_dir?: string | null
+}
+export interface CommunityGame {
+  id: string
+  name: string
+  platform: string
+  revision: number
+  updated?: string
+  summary: string
+  description: string
+  steamos: string[]
+  authors: string[]
+  wrapper: { name: string; version?: string; url?: string } | null
+  art: { sgdb_id?: number | null; steam_appid?: string | null; cover?: string | null; hero?: string | null }
+  requirements: { ram_gb?: number | null; note?: string }
+  parts: CommunityPart[]
+  install: { script: string; sha256: string; disk?: number | null }
+  launch: { exe: string; options: string; runtime: 'proton' | 'native'; proton?: string | null }
+  patches: Array<{ id: string; title: string; about: string }>
+  status: CommunityStatus
+}
+export interface CommunityCatalog {
+  games: CommunityGame[]
+  /** The catalog came from the copy saved last time (offline). */
+  warning: string | null
+  source: string
+  default_source: string
+  contribute: string
+}
+export interface CommunitySetup {
+  game: CommunityGame
+  folder: string
+  libraries: Array<{ path: string; label: string; free: number | null; total: number | null }>
+  default_library: string | null
+  tools: InstallTool[]
+  default_tool: string | null
+  steam_api: boolean
+  debugging_enabled: boolean
+  /** bubblewrap is there to sandbox the script. */
+  bwrap: boolean
+  downloads: { path: string; free: number | null; total: number | null; disk: string }
+  download_size: number
+  install_size: number | null
+  status: CommunityStatus
+}
+export type CommunityStage = 'downloading' | 'extracting' | 'preparing' | 'shortcut' | 'installed' | 'failed'
+export type CommunityPartState = 'waiting' | 'downloading' | 'verifying' | 'ready' | 'failed'
+export interface CommunityInstallPart {
+  id: string
+  name: string
+  description: string
+  role: string
+  kind: CommunityPartKind
+  from: string
+  state: CommunityPartState
+  paused: boolean
+  done: number
+  total: number
+  speed: number
+  error: string | null
+  path: string | null
+  /** The user's own file, used where it is. */
+  provided: boolean
+  /** 0..1 while its checksum is computed. */
+  verify: number
+  extract: string | null
+  extracted: boolean
+  hint: string | null
+  extensions: string[]
+  /** A partial file can be continued (direct and itch.io parts). */
+  resumable: boolean
+  torrent: string | null
+}
+/** A community install as Transfers shows it. */
+export interface CommunityInstall {
+  id: string
+  key: string
+  name: string
+  platform: string
+  wrapper: { name: string; version?: string } | null
+  game: LibraryGame | null
+  stage: CommunityStage
+  failed_at: CommunityStage | null
+  error: string | null
+  step: string | null
+  progress: number | null
+  paused: boolean
+  done: number
+  total: number
+  speed: number
+  parts: CommunityInstallPart[]
+  game_dir: string
+  downloads: string
+  library: string
+  tool: string
+  runtime: 'proton' | 'native'
+  appid: number | null
+  added: number
+  finished: number | null
+  script_running: boolean
+  log: string[]
+}
+export interface CommunityIssue {
+  number: number
+  title: string
+  state: 'open' | 'closed'
+  comments: number
+  user: string
+  created: string
+  updated: string
+  body: string
+  url: string
+  labels: string[]
+}
+/** A web download of its own (Transfers → Add link), or a community part. */
+export interface DirectDownload {
+  id: number
+  path: string
+  total: number
+  done: number
+  state: 'running' | 'paused' | 'done' | 'failed'
+  error: string | null
+  speed: number
+  added: number
+  finished: number | null
+  /** "cm-<game>/<part>" for a community part; empty for a link added by hand. */
+  owner: string
 }
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
@@ -528,7 +681,7 @@ export const api = {
   catalogConfig: () => call<ServicesConfig>('/api/catalog/config'),
   /** Partial update: only the fields given change; blank secrets keep the stored ones. */
   saveServices: (
-    u: Partial<Record<'prowlarr_url' | 'prowlarr_key' | 'tgdb_key' | 'iic_url' | 'iic_key' | 'iic_cdn' | 'tpb_url', string>>,
+    u: Partial<Record<'prowlarr_url' | 'prowlarr_key' | 'tgdb_key' | 'iic_url' | 'iic_key' | 'iic_cdn' | 'tpb_url' | 'community_url', string>>,
   ) =>
     post<ServicesConfig>('/api/catalog/config', u),
   testService: (service: 'tgdb' | 'iic' | 'tpb', u: { url?: string; key?: string; cdn?: string }) =>
@@ -596,6 +749,24 @@ export const api = {
   /** Settings → Downloads: overall torrent speed cap (bytes/s, null = none). */
   torrentLimits: () => call<{ download_bps: number | null }>('/api/torrent/limits'),
   setTorrentLimits: (download_bps: number | null) => post<{ download_bps: number | null }>('/api/torrent/limits', { download_bps }),
+  community: (fresh = false) => call<CommunityCatalog>(`/api/community${fresh ? '?fresh=true' : ''}`),
+  communitySetup: (id: string) => call<CommunitySetup>(`/api/community/${id}/setup`),
+  communityScript: (id: string) => call<{ name: string; source: string; sha256: string; revision: number }>(`/api/community/${id}/script`),
+  communityCheck: (id: string, part: string, path: string) =>
+    post<{ size: number; verified: boolean; partial: boolean }>(`/api/community/${id}/check/${part}`, { path }),
+  communityInstall: (id: string, r: { library: string; tool: string; files: Record<string, string> }) =>
+    post<CommunityInstall>(`/api/community/${id}/install`, r),
+  communityInstalls: () => call<CommunityInstall[]>('/api/community/installs'),
+  communityAction: (id: string, action: 'pause' | 'resume' | 'retry') => post<CommunityInstall | null>(`/api/community/installs/${id}/${action}`),
+  communityProvide: (id: string, part: string, path: string) => post<object>(`/api/community/installs/${id}/parts/${part}`, { path }),
+  communityRemove: (id: string, deleteFiles: boolean) => post<{ freed: number }>(`/api/community/installs/${id}/remove`, { delete: deleteFiles }),
+  communityIssues: (id: string) => call<{ issues: CommunityIssue[]; new_issue: string; label: string | null }>(`/api/community/${id}/issues`),
+  communityComments: (n: number) => call<Array<{ user: string; created: string; body: string }>>(`/api/community/issues/${n}/comments`),
+  /** A page of piShop's GitHub in Steam's browser. */
+  openGithub: (url: string) => post<object>('/api/community/open', { url }),
+  directs: () => call<DirectDownload[]>('/api/direct'),
+  addDirect: (url: string, dest?: string) => post<{ id: number }>('/api/direct', { url, dest: dest ?? null }),
+  directAction: (id: number, action: 'pause' | 'resume' | 'remove' | 'delete') => post<object>(`/api/direct/${id}/${action}`),
   /** Game metadata of Store downloads, by info hash. */
   library: () => call<Record<string, LibraryEntry>>('/api/library'),
   forgetLibrary: (infoHash: string) => call<void>(`/api/library/${infoHash}`, { method: 'DELETE' }),
