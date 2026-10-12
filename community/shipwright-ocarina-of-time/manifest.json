@@ -1,0 +1,82 @@
+{
+  "$schema": "../schema.json",
+  "id": "shipwright-ocarina-of-time",
+  "name": "The Legend of Zelda: Ocarina of Time",
+  "platform": "Nintendo 64",
+  "revision": 1,
+  "updated": "2026-10-12",
+  "authors": ["anarqz"],
+  "summary": "Ocarina of Time as a native Linux game: HarbourMasters' Ship of Harkinian, built from your own copy of the game.",
+  "description": "Ship of Harkinian is HarbourMasters' PC port of The Legend of Zelda: Ocarina of Time, built on the game's decompilation. It runs natively (no emulator, no Proton) at any resolution and frame rate, with widescreen, the randomizer, mods, and an in-game menu full of enhancements and accessibility options.\n\nThe game's data comes from your own copy: any N64 version (USA, Japan or Europe, 1.0 to 1.2), a GameCube release, or Master Quest. piShop checks it and puts it in the game's folder; at the first start Ship of Harkinian builds its assets from it (oot.o2r, or oot-mq.o2r for Master Quest). Settings, saves and mods stay in the game's folder.",
+  "steamos": [
+    "First start: Ship of Harkinian builds the game's assets from your ROM by itself, then asks whether to run the game: answer Yes. It only happens once.",
+    "Master Quest too: a second ROM (oot-mq.o2r) can be added later from the in-game menu."
+  ],
+  "wrapper": {
+    "name": "Ship of Harkinian",
+    "version": "9.3.0",
+    "url": "https://github.com/HarbourMasters/Shipwright"
+  },
+  "art": {
+    "sgdb_id": 21202
+  },
+  "parts": [
+    {
+      "id": "soh",
+      "name": "Ship of Harkinian",
+      "description": "HarbourMasters' port, the Linux AppImage (release 9.3.0).",
+      "role": "launcher",
+      "source": {
+        "type": "github",
+        "repo": "HarbourMasters/Shipwright",
+        "tag": "9.3.0",
+        "asset": "^SoH-[^/]*\\.appimage$"
+      },
+      "size": 32113856,
+      "checksums": {
+        "sha256": "8507bb70413e130e452ebaf5f156bfd78013ee0144364b7968680e8cf064a0fa"
+      }
+    },
+    {
+      "id": "rom",
+      "name": "Ocarina of Time ROM",
+      "description": "Your own copy: an N64 version (USA, Japan or Europe), a GameCube release or Master Quest, in .z64 byte order.",
+      "role": "data",
+      "source": {
+        "type": "user",
+        "hint": "Your own Ocarina of Time dump (N64, GameCube or Master Quest), in .z64 format",
+        "extensions": [".z64"]
+      },
+      "checksums": {
+        "sha1": [
+          "ad69c91157f6705e8ab06c79fe08aad47bb57ba7",
+          "d3ecb253776cd847a5aa63d859d8c89a2f37b364",
+          "41b3bdc48d98c48529219919015a1af22f5057c2",
+          "c892bbda3993e66bd0d56a10ecd30b1ee612210f",
+          "dbfc81f655187dc6fefd93fa6798face770d579d",
+          "fa5f5942b27480d60243c2d52c0e93e26b9e6b86",
+          "328a1f1beba30ce5e178f031662019eb32c5f3b5",
+          "cfbb98d392e4a9d39da8285d10cbef3974c2f012",
+          "0227d7c0074f2d0ac935631990da8ec5914597b4",
+          "b82710ba2bd3b4c6ee8aa1a7e9acf787dfc72e9b",
+          "0769c84615422d60f16925cd859593cdfa597f84",
+          "2ce2d1a9f0534c9cd9fa04ea5317b80da21e5e73",
+          "cee6bc3c2a634b41728f2af8da54d9bf8cc14099",
+          "f46239439f59a2a594ef83cf68ef65043b1bffe2",
+          "8b5d13aac69bfbf989861cfdc50b1d840945fc1d",
+          "dd14e143c4275861fe93ea79d0c02e36ae8c6c2f",
+          "079b855b943d6ad8bd1eb026c0ed169ecbdac7da",
+          "50bebedad9e0f10746a52b07239e47fa6c284d03",
+          "cfecfdc58d650e71a200c81f033de4e6d617a9f6"
+        ]
+      }
+    }
+  ],
+  "install": {
+    "script": "install.sh"
+  },
+  "launch": {
+    "exe": "soh.sh",
+    "runtime": "native"
+  }
+}

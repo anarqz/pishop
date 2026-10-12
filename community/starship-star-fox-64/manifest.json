@@ -1,0 +1,68 @@
+{
+  "$schema": "../schema.json",
+  "id": "starship-star-fox-64",
+  "name": "Star Fox 64",
+  "platform": "Nintendo 64",
+  "revision": 1,
+  "updated": "2026-10-12",
+  "authors": ["anarqz"],
+  "summary": "Star Fox 64 as a native Linux game: HarbourMasters' Starship, built from your own cartridge dump.",
+  "description": "Starship is HarbourMasters' PC port of Star Fox 64, built on the game's decompilation. It runs natively (no emulator, no Proton) at any resolution and frame rate, with widescreen, mods and an in-game menu for graphics, controls and enhancements.\n\nThe game's data comes from your own Star Fox 64 (USA, 1.0 or 1.1) cartridge dump: piShop checks it and puts it in the game's folder as baserom.us.z64; at the first start Starship builds its assets from it (sf64.o2r). The Japanese and European dumps only add voice packs, from the in-game menu later. Settings, saves and mods stay in the game's folder.",
+  "steamos": [
+    "First start: Starship asks for a Star Fox 64 ROM. Answer Yes, pick baserom.us.z64 in the game's folder (the file picker opens there; the touchscreen works), then answer No to “Extract another?”. It only happens once.",
+    "Starship 2.0.0 opens in a window: turn on fullscreen in its menu (Esc opens it), or set Window → Fullscreen → Enabled to true in starship.cfg.json."
+  ],
+  "wrapper": {
+    "name": "Starship",
+    "version": "2.0.0",
+    "url": "https://github.com/HarbourMasters/Starship"
+  },
+  "art": {
+    "sgdb_id": 36615
+  },
+  "parts": [
+    {
+      "id": "port",
+      "name": "Starship",
+      "description": "HarbourMasters' port, the Linux AppImage with its extraction files (release v2.0.0).",
+      "role": "launcher",
+      "source": {
+        "type": "github",
+        "repo": "HarbourMasters/Starship",
+        "tag": "v2.0.0",
+        "asset": "^Starship-.*-Linux\\.zip$"
+      },
+      "size": 79980135,
+      "checksums": {
+        "sha256": "85dd03d3ad8abd881aa3aa2b49ded336627b44b8ac8333e3c41b5bf7c4336289"
+      },
+      "extract": ""
+    },
+    {
+      "id": "rom",
+      "name": "Star Fox 64 (USA) ROM",
+      "description": "Your own cartridge dump: USA 1.0 or 1.1 (Rev A), compressed as dumped or already decompressed, in .z64 byte order.",
+      "role": "data",
+      "source": {
+        "type": "user",
+        "hint": "Your own Star Fox 64 (USA) dump, 1.0 or 1.1, in .z64 format",
+        "extensions": [".z64"]
+      },
+      "checksums": {
+        "sha1": [
+          "d8b1088520f7c5f81433292a9258c1184afa1457",
+          "09f0d105f476b00efa5303a3ebc42e60a7753b7a",
+          "63b69f0ef36306257481afc250f9bc304c7162b2",
+          "f7475fb11e7e6830f82883412638e8390791ab87"
+        ]
+      }
+    }
+  ],
+  "install": {
+    "script": "install.sh"
+  },
+  "launch": {
+    "exe": "starship.sh",
+    "runtime": "native"
+  }
+}

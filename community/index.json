@@ -2,6 +2,78 @@
   "format": 1,
   "games": [
     {
+      "id": "lighthouse-banjo-kazooie",
+      "name": "Banjo-Kazooie",
+      "platform": "Nintendo 64",
+      "revision": 1,
+      "updated": "2026-10-12",
+      "authors": [
+        "anarqz"
+      ],
+      "summary": "Banjo-Kazooie as a native Linux game: HarbourMasters' Lighthouse, built from your own cartridge dump.",
+      "description": "Lighthouse is HarbourMasters' PC port of Banjo-Kazooie, built on the game's decompilation. It runs natively (no emulator, no Proton) at any resolution and frame rate, with widescreen, mods and romhacks, and an in-game menu for graphics, controls and enhancements.\n\nThe game's data comes from your own Banjo-Kazooie cartridge dump (USA 1.0 or 1.1, Japan or Europe; USA 1.0 if you want romhacks): piShop checks it and puts it in the game's folder, and at the first start Lighthouse builds its assets from it (bk.o2r). Settings, saves and mods stay in the game's folder.",
+      "steamos": [
+        "First start: Lighthouse offers to build the game's assets. Answer Yes, Yes again to process the ROM it found, then Yes to run the game. The controller works in these prompts, and it only happens once."
+      ],
+      "wrapper": {
+        "name": "Lighthouse",
+        "version": "1.1.0",
+        "url": "https://github.com/HarbourMasters/Lighthouse"
+      },
+      "art": {
+        "sgdb_id": 35564
+      },
+      "parts": [
+        {
+          "id": "port",
+          "name": "Lighthouse",
+          "description": "HarbourMasters' port, the Linux AppImage (release 1.1.0).",
+          "role": "launcher",
+          "source": {
+            "type": "github",
+            "repo": "HarbourMasters/Lighthouse",
+            "tag": "1.1.0",
+            "asset": "^Lighthouse-.*-Linux\\.zip$"
+          },
+          "size": 12932492,
+          "checksums": {
+            "sha256": "0ed81123ab142e711854c95921c1e37b2e75dd4a3966fa0382f65da7c775986d"
+          },
+          "extract": ""
+        },
+        {
+          "id": "rom",
+          "name": "Banjo-Kazooie ROM",
+          "description": "Your own cartridge dump: USA 1.0 or 1.1, Japan or Europe, in .z64 byte order.",
+          "role": "data",
+          "source": {
+            "type": "user",
+            "hint": "Your own Banjo-Kazooie dump (USA, Japan or Europe), in .z64 format",
+            "extensions": [
+              ".z64"
+            ]
+          },
+          "checksums": {
+            "sha1": [
+              "1fe1632098865f639e22c11b9a81ee8f29c75d7a",
+              "ded6ee166e740ad1bc810fd678a84b48e245ab80",
+              "90726d7e7cd5bf6cdfd38f45c9acbf4d45bd9fd8",
+              "bb359a75941df74bf7290212c89fbc6e2c5601fe"
+            ]
+          }
+        }
+      ],
+      "install": {
+        "script": "install.sh",
+        "source": "#!/usr/bin/env bash\n# Banjo-Kazooie through Lighthouse (HarbourMasters), the Linux AppImage.\n#\n# piShop has already extracted the Lighthouse Linux zip into this game's\n# folder (the current folder, $PISHOP_GAME_DIR): lighthouse.appimage,\n# gamecontrollerdb.txt and readme.txt. The ROM ($PISHOP_PART_ROM) was checked\n# against the supported dumps' SHA-1.\n#\n# Lighthouse keeps its settings, saves, mods and bk.o2r (built from the ROM\n# at the first start) in $SHIP_HOME, and looks for the ROM there. The\n# launcher below points SHIP_HOME at this folder, so everything stays\n# together when piShop moves the game.\n#\n# Safe to run again.\nset -euo pipefail\n\necho \"::step Checking Lighthouse\"\napp=$(find . -maxdepth 2 -type f -iname '*.appimage' -print -quit)\nif [[ -z $app ]]; then\n  echo \"No AppImage in the Lighthouse download.\" >&2\n  exit 1\nfi\nif [[ $app != ./lighthouse.appimage ]]; then\n  mv -f \"$app\" lighthouse.appimage\nfi\nchmod +x lighthouse.appimage\n\necho \"::step Adding your ROM\"\ncp -f \"$PISHOP_PART_ROM\" baserom.us.z64\nchmod 0644 baserom.us.z64\n\necho \"::step Writing the launcher\"\ncat > lighthouse.sh <<'LAUNCHER'\n#!/usr/bin/env bash\n# Runs Lighthouse from this folder, keeping its data here.\ncd \"$(dirname \"$(readlink -f \"$0\")\")\" || exit 1\nexport SHIP_HOME=\"$PWD\"\nexec ./lighthouse.appimage \"$@\"\nLAUNCHER\nchmod +x lighthouse.sh\necho \"::progress 100 Ready to play\"\n",
+        "sha256": "79fd2ff62277f896791647b6cfb68063bfda06329f602e5853d4a7fe77684b25"
+      },
+      "launch": {
+        "exe": "lighthouse.sh",
+        "runtime": "native"
+      }
+    },
+    {
       "id": "azimuth-forza-horizon-2",
       "name": "Forza Horizon 2",
       "platform": "Xbox One",
@@ -103,6 +175,234 @@
           }
         }
       ]
+    },
+    {
+      "id": "spaghettikart-mario-kart-64",
+      "name": "Mario Kart 64",
+      "platform": "Nintendo 64",
+      "revision": 1,
+      "updated": "2026-10-12",
+      "authors": [
+        "anarqz"
+      ],
+      "summary": "Mario Kart 64 as a native Linux game: HarbourMasters' SpaghettiKart, built from your own cartridge dump.",
+      "description": "SpaghettiKart is HarbourMasters' PC port of Mario Kart 64, built on the game's decompilation. It runs natively (no emulator, no Proton) at any resolution and frame rate, with widescreen, mods and an in-game menu for graphics, controls and enhancements.\n\nThe game's data comes from your own Mario Kart 64 (USA) cartridge dump: piShop checks it, puts it in the game's folder, and at the first start SpaghettiKart builds its assets from it (mk64.o2r). Settings, saves and mods stay in the game's folder.",
+      "steamos": [
+        "First start: SpaghettiKart asks to build the game's assets from your ROM. Answer Yes, then OK (the touchscreen works). It takes a few seconds and only happens once.",
+        "The in-game menu bar opens with Esc (map it to a back button in Steam Input for the controller)."
+      ],
+      "wrapper": {
+        "name": "SpaghettiKart",
+        "version": "1.0.0",
+        "url": "https://github.com/HarbourMasters/SpaghettiKart"
+      },
+      "art": {
+        "sgdb_id": 21164
+      },
+      "parts": [
+        {
+          "id": "port",
+          "name": "SpaghettiKart",
+          "description": "HarbourMasters' port, the Linux AppImage (release 1.0.0).",
+          "role": "launcher",
+          "source": {
+            "type": "github",
+            "repo": "HarbourMasters/SpaghettiKart",
+            "tag": "1.0.0",
+            "asset": "^spaghetti-linux\\.zip$"
+          },
+          "size": 12395451,
+          "checksums": {
+            "sha256": "54e249bd4aa71e55c63239c9c1c0eb522b07497d85f2ede193907059e4de250c"
+          },
+          "extract": ""
+        },
+        {
+          "id": "rom",
+          "name": "Mario Kart 64 (USA) ROM",
+          "description": "Your own cartridge dump. SpaghettiKart only takes the USA version, in .z64 byte order.",
+          "role": "data",
+          "source": {
+            "type": "user",
+            "hint": "Your own Mario Kart 64 (USA) dump, in .z64 format",
+            "extensions": [
+              ".z64"
+            ]
+          },
+          "checksums": {
+            "sha1": "579c48e211ae952530ffc8738709f078d5dd215e"
+          }
+        }
+      ],
+      "install": {
+        "script": "install.sh",
+        "source": "#!/usr/bin/env bash\n# Mario Kart 64 through SpaghettiKart (HarbourMasters), the Linux AppImage.\n#\n# piShop has already extracted spaghetti-linux.zip into this game's folder\n# (the current folder, $PISHOP_GAME_DIR): spaghetti.appimage and\n# gamecontrollerdb.txt. The ROM ($PISHOP_PART_ROM) was checked against the\n# USA cartridge's SHA-1.\n#\n# SpaghettiKart looks for the ROM in its working folder and builds mk64.o2r\n# there at the first start; its settings, saves and mods go to $SHIP_HOME.\n# The launcher below runs it from this folder with SHIP_HOME pointing here,\n# so everything stays together when piShop moves the game.\n#\n# Safe to run again.\nset -euo pipefail\n\necho \"::step Checking SpaghettiKart\"\napp=$(find . -maxdepth 2 -type f -iname '*.appimage' -print -quit)\nif [[ -z $app ]]; then\n  echo \"No AppImage in the SpaghettiKart download.\" >&2\n  exit 1\nfi\nif [[ $app != ./spaghetti.appimage ]]; then\n  mv -f \"$app\" spaghetti.appimage\nfi\nchmod +x spaghetti.appimage\n\necho \"::step Adding your ROM\"\ncp -f \"$PISHOP_PART_ROM\" baserom.us.z64\nchmod 0644 baserom.us.z64\n\necho \"::step Writing the launcher\"\ncat > spaghettikart.sh <<'LAUNCHER'\n#!/usr/bin/env bash\n# Runs SpaghettiKart from this folder, keeping its data here.\ncd \"$(dirname \"$(readlink -f \"$0\")\")\" || exit 1\nexport SHIP_HOME=\"$PWD\"\nexec ./spaghetti.appimage \"$@\"\nLAUNCHER\nchmod +x spaghettikart.sh\necho \"::progress 100 Ready to play\"\n",
+        "sha256": "85edcb7469d3de6704e7aefe1a5ccac2df97749bcf87c6bed7e600d669836a9a"
+      },
+      "launch": {
+        "exe": "spaghettikart.sh",
+        "runtime": "native"
+      }
+    },
+    {
+      "id": "starship-star-fox-64",
+      "name": "Star Fox 64",
+      "platform": "Nintendo 64",
+      "revision": 1,
+      "updated": "2026-10-12",
+      "authors": [
+        "anarqz"
+      ],
+      "summary": "Star Fox 64 as a native Linux game: HarbourMasters' Starship, built from your own cartridge dump.",
+      "description": "Starship is HarbourMasters' PC port of Star Fox 64, built on the game's decompilation. It runs natively (no emulator, no Proton) at any resolution and frame rate, with widescreen, mods and an in-game menu for graphics, controls and enhancements.\n\nThe game's data comes from your own Star Fox 64 (USA, 1.0 or 1.1) cartridge dump: piShop checks it and puts it in the game's folder as baserom.us.z64; at the first start Starship builds its assets from it (sf64.o2r). The Japanese and European dumps only add voice packs, from the in-game menu later. Settings, saves and mods stay in the game's folder.",
+      "steamos": [
+        "First start: Starship asks for a Star Fox 64 ROM. Answer Yes, pick baserom.us.z64 in the game's folder (the file picker opens there; the touchscreen works), then answer No to “Extract another?”. It only happens once.",
+        "Starship 2.0.0 opens in a window: turn on fullscreen in its menu (Esc opens it), or set Window → Fullscreen → Enabled to true in starship.cfg.json."
+      ],
+      "wrapper": {
+        "name": "Starship",
+        "version": "2.0.0",
+        "url": "https://github.com/HarbourMasters/Starship"
+      },
+      "art": {
+        "sgdb_id": 36615
+      },
+      "parts": [
+        {
+          "id": "port",
+          "name": "Starship",
+          "description": "HarbourMasters' port, the Linux AppImage with its extraction files (release v2.0.0).",
+          "role": "launcher",
+          "source": {
+            "type": "github",
+            "repo": "HarbourMasters/Starship",
+            "tag": "v2.0.0",
+            "asset": "^Starship-.*-Linux\\.zip$"
+          },
+          "size": 79980135,
+          "checksums": {
+            "sha256": "85dd03d3ad8abd881aa3aa2b49ded336627b44b8ac8333e3c41b5bf7c4336289"
+          },
+          "extract": ""
+        },
+        {
+          "id": "rom",
+          "name": "Star Fox 64 (USA) ROM",
+          "description": "Your own cartridge dump: USA 1.0 or 1.1 (Rev A), compressed as dumped or already decompressed, in .z64 byte order.",
+          "role": "data",
+          "source": {
+            "type": "user",
+            "hint": "Your own Star Fox 64 (USA) dump, 1.0 or 1.1, in .z64 format",
+            "extensions": [
+              ".z64"
+            ]
+          },
+          "checksums": {
+            "sha1": [
+              "d8b1088520f7c5f81433292a9258c1184afa1457",
+              "09f0d105f476b00efa5303a3ebc42e60a7753b7a",
+              "63b69f0ef36306257481afc250f9bc304c7162b2",
+              "f7475fb11e7e6830f82883412638e8390791ab87"
+            ]
+          }
+        }
+      ],
+      "install": {
+        "script": "install.sh",
+        "source": "#!/usr/bin/env bash\n# Star Fox 64 through Starship (HarbourMasters), the Linux AppImage.\n#\n# piShop has already extracted the Starship Linux zip into this game's folder\n# (the current folder, $PISHOP_GAME_DIR): starship.appimage, config.yml and\n# assets/ (what it extracts the ROM with), mods/, readme.txt and\n# gamecontrollerdb.txt. The ROM ($PISHOP_PART_ROM) was checked against the\n# USA 1.0/1.1 dumps' SHA-1.\n#\n# Starship 2.0.0 reads config.yml and assets/ from its working folder and\n# writes sf64.o2r there; the game reads it from $SHIP_HOME. The launcher below\n# runs it from this folder with SHIP_HOME pointing here, so both agree and\n# everything stays together when piShop moves the game.\n#\n# Safe to run again.\nset -euo pipefail\n\necho \"::step Checking Starship\"\napp=$(find . -maxdepth 2 -type f -iname '*.appimage' -print -quit)\nif [[ -z $app ]]; then\n  echo \"No AppImage in the Starship download.\" >&2\n  exit 1\nfi\nif [[ $app != ./starship.appimage ]]; then\n  mv -f \"$app\" starship.appimage\nfi\nchmod +x starship.appimage\nif [[ ! -f config.yml || ! -d assets ]]; then\n  echo \"config.yml or assets/ is missing: Starship can't build its assets without them.\" >&2\n  exit 1\nfi\nmkdir -p mods\n\n# The 2.0.0 zip's gamecontrollerdb.txt is a web page, not the mappings file:\n# without it SDL's built-in mappings are used.\nif [[ -f gamecontrollerdb.txt ]] && grep -qi '<html' gamecontrollerdb.txt; then\n  echo \"Removing the broken gamecontrollerdb.txt\"\n  rm -f gamecontrollerdb.txt\nfi\n\necho \"::step Adding your ROM\"\ncp -f \"$PISHOP_PART_ROM\" baserom.us.z64\nchmod 0644 baserom.us.z64\n\necho \"::step Writing the launcher\"\ncat > starship.sh <<'LAUNCHER'\n#!/usr/bin/env bash\n# Runs Starship from this folder, keeping its data here.\ncd \"$(dirname \"$(readlink -f \"$0\")\")\" || exit 1\nexport SHIP_HOME=\"$PWD\"\nexec ./starship.appimage \"$@\"\nLAUNCHER\nchmod +x starship.sh\necho \"::progress 100 Ready to play\"\n",
+        "sha256": "51a43f93c22e266154a863c13d5409f75263d574e62e033cbdbcab147384670e"
+      },
+      "launch": {
+        "exe": "starship.sh",
+        "runtime": "native"
+      }
+    },
+    {
+      "id": "shipwright-ocarina-of-time",
+      "name": "The Legend of Zelda: Ocarina of Time",
+      "platform": "Nintendo 64",
+      "revision": 1,
+      "updated": "2026-10-12",
+      "authors": [
+        "anarqz"
+      ],
+      "summary": "Ocarina of Time as a native Linux game: HarbourMasters' Ship of Harkinian, built from your own copy of the game.",
+      "description": "Ship of Harkinian is HarbourMasters' PC port of The Legend of Zelda: Ocarina of Time, built on the game's decompilation. It runs natively (no emulator, no Proton) at any resolution and frame rate, with widescreen, the randomizer, mods, and an in-game menu full of enhancements and accessibility options.\n\nThe game's data comes from your own copy: any N64 version (USA, Japan or Europe, 1.0 to 1.2), a GameCube release, or Master Quest. piShop checks it and puts it in the game's folder; at the first start Ship of Harkinian builds its assets from it (oot.o2r, or oot-mq.o2r for Master Quest). Settings, saves and mods stay in the game's folder.",
+      "steamos": [
+        "First start: Ship of Harkinian builds the game's assets from your ROM by itself, then asks whether to run the game: answer Yes. It only happens once.",
+        "Master Quest too: a second ROM (oot-mq.o2r) can be added later from the in-game menu."
+      ],
+      "wrapper": {
+        "name": "Ship of Harkinian",
+        "version": "9.3.0",
+        "url": "https://github.com/HarbourMasters/Shipwright"
+      },
+      "art": {
+        "sgdb_id": 21202
+      },
+      "parts": [
+        {
+          "id": "soh",
+          "name": "Ship of Harkinian",
+          "description": "HarbourMasters' port, the Linux AppImage (release 9.3.0).",
+          "role": "launcher",
+          "source": {
+            "type": "github",
+            "repo": "HarbourMasters/Shipwright",
+            "tag": "9.3.0",
+            "asset": "^SoH-[^/]*\\.appimage$"
+          },
+          "size": 32113856,
+          "checksums": {
+            "sha256": "8507bb70413e130e452ebaf5f156bfd78013ee0144364b7968680e8cf064a0fa"
+          }
+        },
+        {
+          "id": "rom",
+          "name": "Ocarina of Time ROM",
+          "description": "Your own copy: an N64 version (USA, Japan or Europe), a GameCube release or Master Quest, in .z64 byte order.",
+          "role": "data",
+          "source": {
+            "type": "user",
+            "hint": "Your own Ocarina of Time dump (N64, GameCube or Master Quest), in .z64 format",
+            "extensions": [
+              ".z64"
+            ]
+          },
+          "checksums": {
+            "sha1": [
+              "ad69c91157f6705e8ab06c79fe08aad47bb57ba7",
+              "d3ecb253776cd847a5aa63d859d8c89a2f37b364",
+              "41b3bdc48d98c48529219919015a1af22f5057c2",
+              "c892bbda3993e66bd0d56a10ecd30b1ee612210f",
+              "dbfc81f655187dc6fefd93fa6798face770d579d",
+              "fa5f5942b27480d60243c2d52c0e93e26b9e6b86",
+              "328a1f1beba30ce5e178f031662019eb32c5f3b5",
+              "cfbb98d392e4a9d39da8285d10cbef3974c2f012",
+              "0227d7c0074f2d0ac935631990da8ec5914597b4",
+              "b82710ba2bd3b4c6ee8aa1a7e9acf787dfc72e9b",
+              "0769c84615422d60f16925cd859593cdfa597f84",
+              "2ce2d1a9f0534c9cd9fa04ea5317b80da21e5e73",
+              "cee6bc3c2a634b41728f2af8da54d9bf8cc14099",
+              "f46239439f59a2a594ef83cf68ef65043b1bffe2",
+              "8b5d13aac69bfbf989861cfdc50b1d840945fc1d",
+              "dd14e143c4275861fe93ea79d0c02e36ae8c6c2f",
+              "079b855b943d6ad8bd1eb026c0ed169ecbdac7da",
+              "50bebedad9e0f10746a52b07239e47fa6c284d03",
+              "cfecfdc58d650e71a200c81f033de4e6d617a9f6"
+            ]
+          }
+        }
+      ],
+      "install": {
+        "script": "install.sh",
+        "source": "#!/usr/bin/env bash\n# The Legend of Zelda: Ocarina of Time through Ship of Harkinian\n# (HarbourMasters), the Linux AppImage.\n#\n# piShop has downloaded the AppImage ($PISHOP_PART_SOH) and checked the ROM\n# ($PISHOP_PART_ROM) against the supported dumps' SHA-1 (N64, GameCube and\n# Master Quest versions).\n#\n# Ship of Harkinian keeps its settings, saves, mods and oot.o2r / oot-mq.o2r\n# (built from the ROM) in $SHIP_HOME. The launcher below points SHIP_HOME at\n# this folder, so everything stays together when piShop moves the game, and\n# until an archive exists it hands the ROM over on the command line: Ship of\n# Harkinian then builds it right away, without its file picker.\n#\n# Safe to run again.\nset -euo pipefail\n\necho \"::step Adding Ship of Harkinian\"\ncp -f \"$PISHOP_PART_SOH\" soh.appimage\nchmod +x soh.appimage\n\necho \"::step Adding your ROM\"\ncp -f \"$PISHOP_PART_ROM\" baserom.z64\nchmod 0644 baserom.z64\n\necho \"::step Writing the launcher\"\ncat > soh.sh <<'LAUNCHER'\n#!/usr/bin/env bash\n# Runs Ship of Harkinian from this folder, keeping its data here. The first\n# time (no oot.o2r / oot-mq.o2r yet) it gets the ROM to build them from.\ncd \"$(dirname \"$(readlink -f \"$0\")\")\" || exit 1\nexport SHIP_HOME=\"$PWD\"\nif [[ ! -e oot.o2r && ! -e oot-mq.o2r && -f baserom.z64 ]]; then\n  exec ./soh.appimage \"$PWD/baserom.z64\"\nfi\nexec ./soh.appimage \"$@\"\nLAUNCHER\nchmod +x soh.sh\necho \"::progress 100 Ready to play\"\n",
+        "sha256": "9b6b859790e51468f5a9f9e4f978e8343f3b0c3220d5df39f4b2a1765d8c7a16"
+      },
+      "launch": {
+        "exe": "soh.sh",
+        "runtime": "native"
+      }
     }
   ]
 }

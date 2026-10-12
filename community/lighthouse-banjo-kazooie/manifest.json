@@ -1,0 +1,67 @@
+{
+  "$schema": "../schema.json",
+  "id": "lighthouse-banjo-kazooie",
+  "name": "Banjo-Kazooie",
+  "platform": "Nintendo 64",
+  "revision": 1,
+  "updated": "2026-10-12",
+  "authors": ["anarqz"],
+  "summary": "Banjo-Kazooie as a native Linux game: HarbourMasters' Lighthouse, built from your own cartridge dump.",
+  "description": "Lighthouse is HarbourMasters' PC port of Banjo-Kazooie, built on the game's decompilation. It runs natively (no emulator, no Proton) at any resolution and frame rate, with widescreen, mods and romhacks, and an in-game menu for graphics, controls and enhancements.\n\nThe game's data comes from your own Banjo-Kazooie cartridge dump (USA 1.0 or 1.1, Japan or Europe; USA 1.0 if you want romhacks): piShop checks it and puts it in the game's folder, and at the first start Lighthouse builds its assets from it (bk.o2r). Settings, saves and mods stay in the game's folder.",
+  "steamos": [
+    "First start: Lighthouse offers to build the game's assets. Answer Yes, Yes again to process the ROM it found, then Yes to run the game. The controller works in these prompts, and it only happens once."
+  ],
+  "wrapper": {
+    "name": "Lighthouse",
+    "version": "1.1.0",
+    "url": "https://github.com/HarbourMasters/Lighthouse"
+  },
+  "art": {
+    "sgdb_id": 35564
+  },
+  "parts": [
+    {
+      "id": "port",
+      "name": "Lighthouse",
+      "description": "HarbourMasters' port, the Linux AppImage (release 1.1.0).",
+      "role": "launcher",
+      "source": {
+        "type": "github",
+        "repo": "HarbourMasters/Lighthouse",
+        "tag": "1.1.0",
+        "asset": "^Lighthouse-.*-Linux\\.zip$"
+      },
+      "size": 12932492,
+      "checksums": {
+        "sha256": "0ed81123ab142e711854c95921c1e37b2e75dd4a3966fa0382f65da7c775986d"
+      },
+      "extract": ""
+    },
+    {
+      "id": "rom",
+      "name": "Banjo-Kazooie ROM",
+      "description": "Your own cartridge dump: USA 1.0 or 1.1, Japan or Europe, in .z64 byte order.",
+      "role": "data",
+      "source": {
+        "type": "user",
+        "hint": "Your own Banjo-Kazooie dump (USA, Japan or Europe), in .z64 format",
+        "extensions": [".z64"]
+      },
+      "checksums": {
+        "sha1": [
+          "1fe1632098865f639e22c11b9a81ee8f29c75d7a",
+          "ded6ee166e740ad1bc810fd678a84b48e245ab80",
+          "90726d7e7cd5bf6cdfd38f45c9acbf4d45bd9fd8",
+          "bb359a75941df74bf7290212c89fbc6e2c5601fe"
+        ]
+      }
+    }
+  ],
+  "install": {
+    "script": "install.sh"
+  },
+  "launch": {
+    "exe": "lighthouse.sh",
+    "runtime": "native"
+  }
+}

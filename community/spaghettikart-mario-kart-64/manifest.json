@@ -1,0 +1,63 @@
+{
+  "$schema": "../schema.json",
+  "id": "spaghettikart-mario-kart-64",
+  "name": "Mario Kart 64",
+  "platform": "Nintendo 64",
+  "revision": 1,
+  "updated": "2026-10-12",
+  "authors": ["anarqz"],
+  "summary": "Mario Kart 64 as a native Linux game: HarbourMasters' SpaghettiKart, built from your own cartridge dump.",
+  "description": "SpaghettiKart is HarbourMasters' PC port of Mario Kart 64, built on the game's decompilation. It runs natively (no emulator, no Proton) at any resolution and frame rate, with widescreen, mods and an in-game menu for graphics, controls and enhancements.\n\nThe game's data comes from your own Mario Kart 64 (USA) cartridge dump: piShop checks it, puts it in the game's folder, and at the first start SpaghettiKart builds its assets from it (mk64.o2r). Settings, saves and mods stay in the game's folder.",
+  "steamos": [
+    "First start: SpaghettiKart asks to build the game's assets from your ROM. Answer Yes, then OK (the touchscreen works). It takes a few seconds and only happens once.",
+    "The in-game menu bar opens with Esc (map it to a back button in Steam Input for the controller)."
+  ],
+  "wrapper": {
+    "name": "SpaghettiKart",
+    "version": "1.0.0",
+    "url": "https://github.com/HarbourMasters/SpaghettiKart"
+  },
+  "art": {
+    "sgdb_id": 21164
+  },
+  "parts": [
+    {
+      "id": "port",
+      "name": "SpaghettiKart",
+      "description": "HarbourMasters' port, the Linux AppImage (release 1.0.0).",
+      "role": "launcher",
+      "source": {
+        "type": "github",
+        "repo": "HarbourMasters/SpaghettiKart",
+        "tag": "1.0.0",
+        "asset": "^spaghetti-linux\\.zip$"
+      },
+      "size": 12395451,
+      "checksums": {
+        "sha256": "54e249bd4aa71e55c63239c9c1c0eb522b07497d85f2ede193907059e4de250c"
+      },
+      "extract": ""
+    },
+    {
+      "id": "rom",
+      "name": "Mario Kart 64 (USA) ROM",
+      "description": "Your own cartridge dump. SpaghettiKart only takes the USA version, in .z64 byte order.",
+      "role": "data",
+      "source": {
+        "type": "user",
+        "hint": "Your own Mario Kart 64 (USA) dump, in .z64 format",
+        "extensions": [".z64"]
+      },
+      "checksums": {
+        "sha1": "579c48e211ae952530ffc8738709f078d5dd215e"
+      }
+    }
+  ],
+  "install": {
+    "script": "install.sh"
+  },
+  "launch": {
+    "exe": "spaghettikart.sh",
+    "runtime": "native"
+  }
+}
