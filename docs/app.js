@@ -995,7 +995,7 @@
   lightbox.addEventListener('click', () => lightbox.close())
 
   // ---------------------------------------------------------------- terminal
-  let version = 'v1.1.5'
+  let version = 'v1.1.6'
   let termRun = 0
   let termStarted = false
   const TERM = {
