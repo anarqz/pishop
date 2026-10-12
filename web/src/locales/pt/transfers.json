@@ -71,5 +71,6 @@
   "last {n} min": "últimos {n} min",
   "Current": "Agora",
   "Peak": "Pico",
-  "Average": "Média"
+  "Average": "Média",
+  "last minute": "último minuto"
 }

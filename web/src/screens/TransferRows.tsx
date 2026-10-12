@@ -355,7 +355,7 @@ function SpeedGraph({ samples }: { samples: Sample[] }) {
     <div className="tb-graph">
       <div className="tb-graph-head">
         <span>{tr('Download speed')}</span>
-        <span>{tr('last {n} min', { n: minutes })}</span>
+        <span>{trn(minutes, 'last minute', 'last {n} min')}</span>
       </div>
       <svg viewBox={`0 0 ${GRAPH_W} ${GRAPH_H}`} preserveAspectRatio="none" aria-hidden>
         <defs>
