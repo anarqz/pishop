@@ -12,14 +12,28 @@ import { partKind } from '../community'
 import { locale, tr, trn } from '../i18n'
 import { focusFirst, input, keepFocus } from '../input'
 import { StorageCard, homePath } from '../storage'
-import { Dialog, Glyph, Icon, Spinner, toast, useHints } from '../ui'
+import { Dialog, Glyph, Icon, Spinner, TextPrompt, toast, useHints } from '../ui'
 import CommunityInstallPage, { pickStart } from './CommunityInstall'
 import FilePicker, { type SourcePick } from './FilePicker'
 import { ChooseDialog, Choice } from './GameSetup'
 
 const ROTATE_MS = 9000
 
-const memory: { games: CommunityGame[]; featured: number; open: string | null } = { games: [], featured: 0, open: null }
+const memory: { games: CommunityGame[]; featured: number; open: string | null; search: string } = { games: [], featured: 0, open: null, search: '' }
+/** Must match `.grid` in styles.css. */
+const GRID_COLUMNS = 7
+
+/** Lowercase, without accents: "Pokémon" finds "pokemon". */
+const fold = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+
+/** Every word of the search appears in the game's name, console, port, summary or authors. */
+function matches(g: CommunityGame, q: string) {
+  const hay = fold([g.name, g.platform, g.wrapper?.name ?? '', g.summary, g.authors.join(' '), g.id].join(' '))
+  return fold(q)
+    .split(/\s+/)
+    .filter(Boolean)
+    .every(w => hay.includes(w))
+}
 
 // SteamGridDB art by name (the manifest's own art wins), once per game.
 const artCache = new Map<string, Promise<GameMeta | null>>()
@@ -75,11 +89,14 @@ export default function Community({
   const [loading, setLoading] = useState(false)
   const [featured, setFeatured] = useState(memory.featured)
   const [openId, setOpenId] = useState<string | null>(memory.open)
+  const [search, setSearch] = useState(memory.search)
+  const [prompt, setPrompt] = useState<null | { before: string }>(null)
+  const shown = useMemo(() => (search ? games.filter(g => matches(g, search)) : games), [games, search])
   const open = games.find(g => g.id === openId) ?? null
 
   useEffect(() => {
-    Object.assign(memory, { games, featured, open: openId })
-  }, [games, featured, openId])
+    Object.assign(memory, { games, featured, open: openId, search })
+  }, [games, featured, openId, search])
 
   const load = useCallback(async (fresh = false) => {
     setLoading(true)
@@ -133,38 +150,48 @@ export default function Community({
     restoreFocus.current = null
   }
 
-  const ctl = useRef({ n: games.length, load })
-  ctl.current = { n: games.length, load }
+  const ctl = useRef({ n: games.length, load, search })
+  ctl.current = { n: games.length, load, search }
   useEffect(() => {
-    if (openId) return
+    if (openId || prompt) return
     return input.pushHandler(a => {
       const c = ctl.current
-      if ((a === 'lt' || a === 'rt') && c.n > 1) {
+      if ((a === 'lt' || a === 'rt') && c.n > 1 && !c.search) {
         setFeatured(f => (f + (a === 'rt' ? 1 : -1) + c.n) % c.n)
         return true
       }
       if (a === 'menu') {
+        setPrompt({ before: c.search })
+        return true
+      }
+      if (a === 'y') {
         void c.load(true)
+        return true
+      }
+      if (a === 'back' && c.search) {
+        setSearch('')
+        requestAnimationFrame(focusFirst)
         return true
       }
       return false
     })
-  }, [openId])
+  }, [openId, prompt])
   useHints(
-    openId
+    openId || prompt
       ? null
       : [
           { glyph: 'A', label: tr('View game') },
-          { glyph: 'MENU', label: tr('Refresh') },
-          ...(games.length > 1 ? [{ glyph: ['L2', 'R2'] as ['L2', 'R2'], label: tr('Spotlight') }] : []),
-          { glyph: 'L1', label: tr('Tabs') },
+          { glyph: 'MENU', label: tr('Search') },
+          { glyph: 'Y', label: tr('Refresh') },
+          ...(games.length > 1 && !search ? [{ glyph: ['L2', 'R2'] as ['L2', 'R2'], label: tr('Spotlight') }] : []),
+          ...(search ? [{ glyph: 'B' as const, label: tr('Clear search') }] : [{ glyph: 'L1' as const, label: tr('Tabs') }]),
         ],
   )
 
   return (
     <div className="dsc cm" data-nav-scope>
       <div className="dsc-scroll">
-        {hero && (
+        {hero && !search && (
           <section className="dsc-hero cm-hero">
             <div key={hero.id} className="dsc-hero-bg" style={heroArt.hero ? { backgroundImage: `url(${imgUrl(heroArt.hero)})` } : undefined} />
             <div className="dsc-hero-shade" />
@@ -184,7 +211,14 @@ export default function Community({
                   .join('  ·  ')}
               </div>
               <div className="row">
-                <button data-nav data-nav-default className="btn primary big" onClick={() => openGame(hero)}>
+                <button
+                  data-nav
+                  data-nav-default
+                  data-nav-id="cm-hero-main"
+                  data-nav-down='[data-nav-id="cm-search"]'
+                  className="btn primary big"
+                  onClick={() => openGame(hero)}
+                >
                   {hero.status.state === 'installed' ? (
                     <>
                       <Icon name="check" /> {tr('Installed')}
@@ -217,6 +251,25 @@ export default function Community({
           </section>
         )}
 
+        {games.length > 0 && (
+          <div className="dsc-search">
+            <button
+              data-nav
+              data-nav-id="cm-search"
+              data-nav-up='[data-nav-id="cm-hero-main"]'
+              data-nav-down=".dsc-catalog .grid .card"
+              data-nav-left="none"
+              data-nav-right="none"
+              className="searchbar center"
+              onClick={() => setPrompt({ before: search })}
+            >
+              <Icon name="search" />
+              <span className={`searchbar-text ${search ? '' : 'placeholder'}`}>{search || tr('Search community games…')}</span>
+              {search && <span className="searchbar-busy">{trn(shown.length, '{n} game', '{n} games')}</span>}
+            </button>
+          </div>
+        )}
+
         {warning && <p className="cm-warning">{warning}</p>}
         {error && !games.length && (
           <div className="store-msg error cm-error">
@@ -238,12 +291,13 @@ export default function Community({
         {games.length > 0 && (
           <section className="dsc-catalog">
             <div className="dsc-catalog-head">
-              <h3 className="dsc-row-title">{tr('Community installers')}</h3>
-              <span className="sort-label">{trn(games.length, '{n} game', '{n} games')}</span>
+              <h3 className="dsc-row-title">{search ? tr('Results for “{q}”', { q: search }) : tr('Community installers')}</h3>
+              <span className="sort-label">{trn(shown.length, '{n} game', '{n} games')}</span>
             </div>
+            {search && !shown.length && <div className="store-msg cm-none">{tr('No games found.')}</div>}
             <div className="grid">
-              {games.map(g => (
-                <CommunityCard key={g.id} g={g} onOpen={() => openGame(g)} />
+              {shown.map((g, i) => (
+                <CommunityCard key={g.id} g={g} first={!!search && i === 0} upToSearch={i < GRID_COLUMNS} onOpen={() => openGame(g)} />
               ))}
             </div>
           </section>
@@ -278,6 +332,24 @@ export default function Community({
         </section>
       </div>
 
+      {prompt && (
+        <TextPrompt
+          title={tr('Search community games')}
+          placeholder={tr('Game, console or port')}
+          initial={search}
+          submitLabel={tr('Search')}
+          onChange={setSearch}
+          onCancel={() => {
+            setSearch(prompt.before)
+            setPrompt(null)
+          }}
+          onSubmit={v => {
+            setSearch(v)
+            setPrompt(null)
+            requestAnimationFrame(focusFirst)
+          }}
+        />
+      )}
       {open && (
         <CommunityGamePage
           game={open}
@@ -292,13 +364,19 @@ export default function Community({
   )
 }
 
-function CommunityCard({ g, onOpen }: { g: CommunityGame; onOpen: () => void }) {
+function CommunityCard({ g, first, upToSearch, onOpen }: { g: CommunityGame; first?: boolean; upToSearch?: boolean; onOpen: () => void }) {
   const art = useArt(g)
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
   const s = g.status
   return (
-    <button data-nav className="card poster cm-card" onClick={onOpen}>
+    <button
+      data-nav
+      data-nav-default={first ? '' : undefined}
+      data-nav-up={upToSearch ? '[data-nav-id="cm-search"]' : undefined}
+      className="card poster cm-card"
+      onClick={onOpen}
+    >
       <div className="cover" style={{ ['--h' as string]: hue(g.name) }}>
         {(!art.cover || failed) && (
           <div className="cover-placeholder">

@@ -1093,3 +1093,7 @@ button.scard:focus .sring small { color: #39414b; }
 .fp-modes { flex: none; }
 .fp-places { flex: none; margin-top: -4px; }
 .fp-places .chip { font-size: 13px; }
+
+/* community: search */
+.cm .dsc-search { padding-top: 18px; }
+.cm-none { height: auto; padding: 30px 0; }

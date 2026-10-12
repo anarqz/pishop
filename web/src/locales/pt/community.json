@@ -130,5 +130,8 @@
   "Copying to this device": "Copiando para este aparelho",
   "Copying from {source}": "Copiando de {source}",
   "this part takes a {types} file": "esta parte aceita um arquivo {types}",
-  "{source}: {path} · copied when the install starts": "{source}: {path} · copiado quando a instalação começar"
+  "{source}: {path} · copied when the install starts": "{source}: {path} · copiado quando a instalação começar",
+  "Search community games…": "Buscar jogos da comunidade…",
+  "Search community games": "Buscar jogos da comunidade",
+  "Game, console or port": "Jogo, console ou port"
 }

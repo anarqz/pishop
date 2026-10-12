@@ -188,6 +188,7 @@ export function TextPrompt({
   error,
   prefix,
   hint,
+  onChange,
 }: {
   title: string
   placeholder?: string
@@ -210,6 +211,8 @@ export function TextPrompt({
   prefix?: (v: string) => string | null
   /** A line under the field on what to type (an error takes its place). */
   hint?: string
+  /** Every edit, as it's typed (e.g. to filter a list live). */
+  onChange?: (v: string) => void
 }) {
   const [value, setValue] = useState(initial)
   // What was last submitted: an error is about that text, not an edit of it.
@@ -238,7 +241,10 @@ export function TextPrompt({
           value={value}
           spellCheck={false}
           autoComplete="off"
-          onChange={e => setValue(e.target.value)}
+          onChange={e => {
+            setValue(e.target.value)
+            onChange?.(e.target.value.trim())
+          }}
           onKeyDown={e => {
             if (e.key === 'Enter' && ok && !busy) submit(onSubmit)
           }}
