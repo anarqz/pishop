@@ -342,6 +342,10 @@ const STALL: Duration = Duration::from_secs(60);
 const ATTEMPTS: u32 = 6;
 /// Connections for a big file on a server that takes ranges.
 const CONNECTIONS: usize = 4;
+/// At most this many, counting the extra ones on a server much faster than the others.
+const MAX_CONNECTIONS: usize = 6;
+/// Connections on one server (more than two gained nothing on archive.org).
+const PER_SERVER: usize = 2;
 /// Smaller files go through one connection.
 const MIN_PARALLEL: u64 = 32 << 20;
 /// A slice is only split when both halves get at least this much.
@@ -419,7 +423,9 @@ async fn attempt(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>) -
     }
     let mut resp = None;
     let mut last_err = None;
-    for url in resolve(&d.source).await? {
+    let mut used = 0;
+    for (ui, url) in resolve(&d.source).await?.into_iter().enumerate() {
+        used = ui;
         // Always a range: a server that answers 206 can be fetched in slices.
         let req = HTTP.get(&url).header(USER_AGENT, BROWSER).header(RANGE, format!("bytes={offset}-"));
         match req.send().await {
@@ -485,7 +491,7 @@ async fn attempt(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>) -
             d.error = None;
             d.segments = segs;
         });
-        return parallel(id, size, stop, Some(r)).await;
+        return parallel(id, size, stop, Some((r, used))).await;
     }
 
     let mut out = tokio::fs::OpenOptions::new().create(true).write(true).truncate(offset == 0).append(offset > 0).open(&part).await?;
@@ -537,8 +543,15 @@ async fn attempt(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>) -
 }
 
 /// The slices of a download, over several connections at once. `first`: an
-/// answer already streaming from the first slice's start.
-async fn parallel(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>, first: Option<reqwest::Response>) -> anyhow::Result<Outcome> {
+/// answer already streaming from the first slice's start, and which of the
+/// source's links gave it.
+///
+/// A source with mirrors (several links) spreads its connections across
+/// them: each server throttles on its own, so their speeds add up. A
+/// connection that finishes hands its place to a new one on the same server,
+/// or on the fastest one when its own was much slower, so the fast servers
+/// end up doing most of the work.
+async fn parallel(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>, first: Option<(reqwest::Response, usize)>) -> anyhow::Result<Outcome> {
     let d = get(id).ok_or_else(|| anyhow!("removed"))?;
     let path = PathBuf::from(&d.path);
     let part = part_path(&path);
@@ -554,27 +567,48 @@ async fn parallel(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>, 
         }
     }
     let segs = Arc::new(Mutex::new(d.segments.clone()));
-    let link: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(first.as_ref().map(|r| r.url().to_string())));
     let source = d.source.clone();
+    // Links that stay valid (plain mirrors); itch.io and GitHub resolve each time.
+    let mirrors: Vec<String> = match &source {
+        Source::Http { urls } => urls.clone(),
+        _ => Vec::new(),
+    };
+    let lanes = mirrors.len().max(1);
+    let mut speeds = vec![0f64; lanes];
     let left = |segs: &Arc<Mutex<Vec<Segment>>>| segs.lock().unwrap().iter().map(|s| s.left()).sum::<u64>();
-    let mut workers: tokio::task::JoinSet<(usize, anyhow::Result<()>)> = tokio::task::JoinSet::new();
+    type Joined = (usize, usize, f64, anyhow::Result<()>);
+    let mut workers: tokio::task::JoinSet<Joined> = tokio::task::JoinSet::new();
     let mut owned: std::collections::HashSet<usize> = std::collections::HashSet::new();
-    let mut first = first;
+    // Which server each running slice is on, and where it was at the last check.
+    let mut on_lane: HashMap<usize, usize> = HashMap::new();
+    let mut checked: HashMap<usize, u64> = HashMap::new();
+    let mut last_check = Instant::now();
     let first_start = segs.lock().unwrap().first().map(|s| s.pos());
+    let (mut first, first_lane) = match first {
+        Some((r, lane)) => (Some(r), lane.min(lanes - 1)),
+        None => (None, 0),
+    };
     let worker_stop = stop.clone();
-    let spawn = |workers: &mut tokio::task::JoinSet<(usize, anyhow::Result<()>)>, i: usize, resp: Option<reqwest::Response>| {
-        let (part, segs, link, source, stop) = (part.clone(), segs.clone(), link.clone(), source.clone(), worker_stop.clone());
+    let spawn = |workers: &mut tokio::task::JoinSet<Joined>, i: usize, lane: usize, resp: Option<reqwest::Response>| {
+        let (part, segs, source, stop) = (part.clone(), segs.clone(), source.clone(), worker_stop.clone());
+        let link = resp.as_ref().map(|r| r.url().to_string());
+        let mirror = mirrors.get(lane).cloned();
+        if let Some(m) = &mirror {
+            log!("direto: {id} fatia {i} ← {}", m.split('/').nth(2).unwrap_or(m));
+        }
         workers.spawn(async move {
-            let r = slice_worker(i, &part, &segs, &link, &source, resp, stop).await;
-            (i, r)
+            let (speed, r) = slice_worker(i, &part, &segs, link, mirror, &source, resp, stop).await;
+            (i, lane, speed, r)
         });
     };
     let pending: Vec<usize> =
         segs.lock().unwrap().iter().enumerate().filter(|(_, s)| s.left() > 0).map(|(i, _)| i).take(CONNECTIONS).collect();
-    for i in pending {
-        let resp = if i == 0 && first_start.is_some() { first.take() } else { None };
-        spawn(&mut workers, i, resp);
+    for (k, i) in pending.into_iter().enumerate() {
+        let lane = if i == 0 && first_start.is_some() && first.is_some() { first_lane } else { k % lanes };
+        let resp = if lane == first_lane && i == 0 { first.take() } else { None };
+        spawn(&mut workers, i, lane, resp);
         owned.insert(i);
+        on_lane.insert(i, lane);
     }
     drop(first);
 
@@ -592,19 +626,24 @@ async fn parallel(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>, 
             }
             joined = workers.join_next(), if !workers.is_empty() => {
                 let Some(joined) = joined else { continue };
-                let (i, result) = joined.unwrap_or_else(|e| (usize::MAX, Err(anyhow!(e))));
+                let (i, lane, speed, result) = joined.unwrap_or_else(|e| (usize::MAX, 0, 0.0, Err(anyhow!(e))));
                 owned.remove(&i);
-                match result {
-                    Ok(()) => {}
-                    Err(e) => {
-                        log!("direto: {id} conexão da fatia {i}: {e:#}");
-                        last_err = Some(e);
-                        continue;
-                    }
+                on_lane.remove(&i);
+                if speed > 0.0 {
+                    speeds[lane] = if speeds[lane] > 0.0 { speeds[lane] * 0.5 + speed * 0.5 } else { speed };
+                }
+                if let Err(e) = result {
+                    log!("direto: {id} conexão da fatia {i}: {e:#}");
+                    last_err = Some(e);
+                    continue;
                 }
                 if stopped || *stop.borrow() {
                     continue;
                 }
+                // The free place goes to the same server, or to the fastest
+                // one when this one ran at under a quarter of its speed.
+                let (best, best_speed) = speeds.iter().copied().enumerate().max_by(|a, b| a.1.total_cmp(&b.1)).unwrap_or((lane, 0.0));
+                let lane = if speeds[lane] < best_speed / 4.0 { best } else { lane };
                 // The free connection takes a slice nobody has, or half of the biggest one.
                 while workers.len() < CONNECTIONS {
                     let next = {
@@ -613,11 +652,45 @@ async fn parallel(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>, 
                         free.or_else(|| steal(&mut s))
                     };
                     let Some(j) = next else { break };
-                    spawn(&mut workers, j, None);
+                    spawn(&mut workers, j, lane, None);
                     owned.insert(j);
+                    on_lane.insert(j, lane);
                 }
             }
             _ = tick.tick() => {
+                // Every 30 s: a server much faster per connection than the
+                // others gets one more connection, on half of the biggest slice.
+                if last_check.elapsed() >= Duration::from_secs(30) && !stopped && lanes > 1 {
+                    let elapsed = last_check.elapsed().as_secs_f64();
+                    last_check = Instant::now();
+                    let pos: HashMap<usize, u64> = { let s = segs.lock().unwrap(); on_lane.keys().map(|i| (*i, s[*i].pos())).collect() };
+                    let mut lane_bytes = vec![0u64; lanes];
+                    let mut lane_conns = vec![0usize; lanes];
+                    for (i, lane) in &on_lane {
+                        lane_conns[*lane] += 1;
+                        if let (Some(now), Some(before)) = (pos.get(i), checked.get(i)) {
+                            lane_bytes[*lane] += now.saturating_sub(*before);
+                        }
+                    }
+                    checked = pos;
+                    let per_conn: Vec<f64> = (0..lanes).map(|l| if lane_conns[l] > 0 { lane_bytes[l] as f64 / lane_conns[l] as f64 / elapsed } else { 0.0 }).collect();
+                    for l in 0..lanes {
+                        if per_conn[l] > 0.0 {
+                            speeds[l] = per_conn[l];
+                        }
+                    }
+                    let best = (0..lanes).max_by(|a, b| per_conn[*a].total_cmp(&per_conn[*b])).unwrap_or(0);
+                    let others = (0..lanes).filter(|l| *l != best && lane_conns[*l] > 0).map(|l| per_conn[l]).fold(0f64, f64::max);
+                    if per_conn[best] > 0.0 && per_conn[best] >= 2.0 * others && lane_conns[best] < PER_SERVER && workers.len() < MAX_CONNECTIONS {
+                        let j = steal(&mut segs.lock().unwrap());
+                        if let Some(j) = j {
+                            log!("direto: {id} mais uma conexão no servidor mais rápido ({} KB/s por conexão)", (per_conn[best] / 1024.0) as u64);
+                            spawn(&mut workers, j, best, None);
+                            owned.insert(j);
+                            on_lane.insert(j, best);
+                        }
+                    }
+                }
                 let done = total - left(&segs);
                 let elapsed = window.0.elapsed().as_secs_f64().max(0.001);
                 let speed = done.saturating_sub(window.1) as f64 / elapsed;
@@ -661,15 +734,24 @@ async fn parallel(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>, 
 /// One connection: fetches its slice (retrying on its own while it gets
 /// somewhere), writing at the slice's place in the file. Stops at the slice's
 /// end even when another connection took the slice's second half meanwhile.
+/// Returns how fast it went (bytes per second).
+#[allow(clippy::too_many_arguments)]
 async fn slice_worker(
     i: usize,
     part: &Path,
     segs: &Arc<Mutex<Vec<Segment>>>,
-    link: &Arc<Mutex<Option<String>>>,
+    mut link: Option<String>,
+    mirror: Option<String>,
     source: &Source,
     mut first: Option<reqwest::Response>,
     mut stop: watch::Receiver<bool>,
-) -> anyhow::Result<()> {
+) -> (f64, anyhow::Result<()>) {
+    let started = Instant::now();
+    let from = segs.lock().unwrap()[i].pos();
+    let speed = |segs: &Arc<Mutex<Vec<Segment>>>| {
+        let got = segs.lock().unwrap()[i].pos().saturating_sub(from);
+        got as f64 / started.elapsed().as_secs_f64().max(0.001)
+    };
     let mut fails = 0u32;
     loop {
         let (pos, end) = {
@@ -677,21 +759,21 @@ async fn slice_worker(
             (s[i].pos(), s[i].end)
         };
         if pos >= end || *stop.borrow() {
-            return Ok(());
+            return (speed(segs), Ok(()));
         }
-        match fetch_slice(i, pos, end, part, segs, link, source, first.take(), &mut stop).await {
+        match fetch_slice(i, pos, end, part, segs, &mut link, mirror.as_deref(), source, first.take(), &mut stop).await {
             Ok(()) => fails = 0,
             Err(e) => {
                 let moved = segs.lock().unwrap()[i].pos() > pos;
                 fails = if moved { 1 } else { fails + 1 };
                 if fails >= 4 {
-                    return Err(e);
+                    return (speed(segs), Err(e));
                 }
-                // The link may have expired or moved: resolve it again.
-                *link.lock().unwrap() = None;
+                // The link may have expired or moved: ask again.
+                link = None;
                 tokio::select! {
                     _ = tokio::time::sleep(Duration::from_secs(2u64 << fails)) => {}
-                    _ = stop.changed() => return Ok(()),
+                    _ = stop.changed() => return (speed(segs), Ok(())),
                 }
             }
         }
@@ -705,7 +787,8 @@ async fn fetch_slice(
     end: u64,
     part: &Path,
     segs: &Arc<Mutex<Vec<Segment>>>,
-    link: &Arc<Mutex<Option<String>>>,
+    link: &mut Option<String>,
+    mirror: Option<&str>,
     source: &Source,
     first: Option<reqwest::Response>,
     stop: &mut watch::Receiver<bool>,
@@ -713,7 +796,7 @@ async fn fetch_slice(
     use tokio::io::AsyncSeekExt;
     let mut r = match first {
         Some(r) => r,
-        None => range_request(from, end, link, source).await?,
+        None => range_request(from, end, link, mirror, source).await?,
     };
     if *stop.borrow() {
         return Ok(());
@@ -749,16 +832,15 @@ async fn fetch_slice(
     Ok(())
 }
 
-/// `from..end` of the file: the link that answered last (redirects already
-/// followed), else the source's links in order. Only a 206 starting at
-/// `from` is taken.
-async fn range_request(from: u64, end: u64, link: &Arc<Mutex<Option<String>>>, source: &Source) -> anyhow::Result<reqwest::Response> {
-    let cached = link.lock().unwrap().clone();
+/// `from..end` of the file: this connection's last link (redirects already
+/// followed), else its mirror, else the source's links in order. Only a 206
+/// starting at `from` is taken.
+async fn range_request(from: u64, end: u64, link: &mut Option<String>, mirror: Option<&str>, source: &Source) -> anyhow::Result<reqwest::Response> {
     let mut last: Option<anyhow::Error> = None;
-    for round in 0..2 {
-        let urls = match (round, &cached) {
-            (0, Some(u)) => vec![u.clone()],
-            (0, None) => continue,
+    for round in 0..3 {
+        let urls = match round {
+            0 => link.clone().into_iter().collect(),
+            1 => mirror.map(String::from).into_iter().collect(),
             _ => resolve(source).await?,
         };
         for u in urls {
@@ -770,7 +852,7 @@ async fn range_request(from: u64, end: u64, link: &Arc<Mutex<Option<String>>>, s
                         last = Some(anyhow!(tr!("the server sent another part of the file", "o servidor mandou outra parte do arquivo")));
                         continue;
                     }
-                    *link.lock().unwrap() = Some(r.url().to_string());
+                    *link = Some(r.url().to_string());
                     return Ok(r);
                 }
                 Ok(r) => last = Some(anyhow!(tr!("the server answered {}", "o servidor respondeu {}", r.status()))),
