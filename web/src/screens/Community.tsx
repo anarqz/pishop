@@ -37,10 +37,10 @@ function matches(g: CommunityGame, q: string) {
 
 // SteamGridDB art by name (the manifest's own art wins), once per game.
 const artCache = new Map<string, Promise<GameMeta | null>>()
-function artFor(name: string) {
+function artFor(name: string, appid?: string | null) {
   let p = artCache.get(name)
   if (!p) {
-    p = api.gameInfo(name, false).catch(() => null)
+    p = api.gameInfo(name, false, appid).catch(() => null)
     artCache.set(name, p)
   }
   return p
@@ -52,7 +52,7 @@ function useArt(g: CommunityGame | null | undefined) {
     if (!g) return
     let alive = true
     setMeta(null)
-    void artFor(g.name).then(m => alive && setMeta(m))
+    void artFor(g.name, g.art.steam_appid).then(m => alive && setMeta(m))
     return () => {
       alive = false
     }

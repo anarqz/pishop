@@ -687,8 +687,12 @@ pub async fn sgdb_pack(name: &str, id: Option<u64>) -> SgdbPack {
     SgdbPack { cover: next(), wide: next(), hero: next(), logo: next(), icon: next() }
 }
 
+/// Picks made before banners were checked for see-through sides are in
+/// heroes.json; this file starts over so those games get picked again.
+const HEROES_FILE: &str = "heroes-2.json";
+
 static HEROES: LazyLock<Mutex<HashMap<u64, Option<String>>>> = LazyLock::new(|| {
-    Mutex::new(std::fs::read(data_dir().join(".cache").join("heroes.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default())
+    Mutex::new(std::fs::read(data_dir().join(".cache").join(HEROES_FILE)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default())
 });
 
 /// Wide background art for a matched game (cached on disk).
@@ -696,27 +700,108 @@ pub async fn hero(game: &Art) -> Option<String> {
     if let Some(hit) = HEROES.lock().unwrap().get(&game.game_id).cloned() {
         return hit;
     }
-    let found = extra_art(game).await;
+    // Network trouble isn't "no banner": not cached, asked again next time.
+    let found = extra_art(game).await.ok()?;
     let mut m = HEROES.lock().unwrap();
     m.insert(game.game_id, found.clone());
     if let Ok(bytes) = serde_json::to_vec(&*m) {
-        let path = data_dir().join(".cache").join("heroes.json");
+        let path = data_dir().join(".cache").join(HEROES_FILE);
         let _ = std::fs::create_dir_all(path.parent().unwrap());
         let _ = std::fs::write(path, bytes);
     }
     found
 }
 
-/// Hero (wide background) for the details page, for a matched game. Logos
-/// are not used: too many fan/joke variants are tagged "official".
-async fn extra_art(game: &Art) -> Option<String> {
-    let pick = |v: anyhow::Result<Value>, style: &str| -> Option<String> {
-        let v = v.ok()?;
-        let games = v["data"]["games"].as_array()?.clone();
-        let g = games.iter().find(|g| g["game"]["id"].as_u64() == Some(game.game_id))?;
-        pick_asset_scored(&g["assets"], Some(style), false).map(|(url, _)| url)
+/// Banners opened to find one that covers the whole width.
+const HERO_CHECKS: usize = 5;
+
+/// Hero (wide background) for a matched game: the best liked of
+/// SteamGridDB's banners whose picture covers the whole width. The site lists
+/// them newest first, and many recent ones are made for Steam plugins that
+/// draw them over a blur: a picture in the middle with see-through sides,
+/// which across the screen looks like a square. Logos are not used: too many
+/// fan/joke variants are tagged "official".
+async fn extra_art(game: &Art) -> anyhow::Result<Option<String>> {
+    let v = sgdb_search(&game.name, "hero").await?;
+    let Some(g) = v["data"]["games"].as_array().and_then(|gs| gs.iter().find(|g| g["game"]["id"].as_u64() == Some(game.game_id))) else {
+        return Ok(None);
     };
-    pick(sgdb_search(&game.name, "hero").await, "alternate")
+    for url in rank_heroes(&g["assets"]).into_iter().take(HERO_CHECKS) {
+        let bytes = match image(&url).await {
+            Ok((bytes, _)) => bytes,
+            Err(e) => {
+                log!("arte: banner {url} indisponível: {e:#}");
+                continue;
+            }
+        };
+        if tokio::task::spawn_blocking(move || covers_width(&bytes)).await.unwrap_or(false) {
+            return Ok(Some(url));
+        }
+        log!("arte: banner com as laterais transparentes ignorado ({url})");
+    }
+    Ok(None)
+}
+
+/// SteamGridDB's banners for a game, best first: English (or no text), the
+/// plain style, then the most liked; the site's order among equals.
+fn rank_heroes(assets: &Value) -> Vec<String> {
+    let mut ranked: Vec<(i64, usize, String)> = assets
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .filter(|(_, a)| {
+            !["nsfw", "humor", "epilepsy", "is_animated"].iter().any(|k| a[*k].as_bool().unwrap_or(false))
+        })
+        .filter_map(|(i, a)| {
+            let url = a["url"].as_str()?.to_string();
+            let mut score = 0;
+            if a["language"].as_str().is_none_or(|l| l == "en") {
+                score += 4000;
+            }
+            if a["style"].as_str() == Some("alternate") {
+                score += 2000;
+            }
+            let likes = a["hearts"].as_i64().unwrap_or(0) + a["upvotes"].as_i64().unwrap_or(0) - a["downvotes"].as_i64().unwrap_or(0);
+            score += likes.clamp(-999, 999);
+            Some((score, i, url))
+        })
+        .collect();
+    ranked.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    ranked.into_iter().map(|(_, _, url)| url).collect()
+}
+
+/// Whether an image's picture reaches its left and right edges: at most 2%
+/// of the pixels in the outer 5% on each side are see-through. JPEG has no
+/// transparency; an image that can't be read counts as fine.
+fn covers_width(bytes: &[u8]) -> bool {
+    if !bytes.starts_with(b"\x89PNG") {
+        return true;
+    }
+    let mut d = png::Decoder::new(std::io::Cursor::new(bytes));
+    d.set_transformations(png::Transformations::normalize_to_color8());
+    let Ok(mut r) = d.read_info() else { return true };
+    let channels = match r.output_color_type().0 {
+        png::ColorType::Rgba => 4,
+        png::ColorType::GrayscaleAlpha => 2,
+        _ => return true,
+    };
+    let Some(size) = r.output_buffer_size() else { return true };
+    let mut buf = vec![0u8; size];
+    let Ok(info) = r.next_frame(&mut buf) else { return true };
+    let (w, h, line) = (info.width as usize, info.height as usize, info.line_size);
+    let edge = (w / 20).max(1);
+    let (mut seen, mut clear) = (0usize, 0usize);
+    for y in (0..h).step_by((h / 60).max(1)) {
+        let row = &buf[y * line..(y + 1) * line];
+        for x in (0..edge).chain(w - edge..w).step_by(3) {
+            seen += 1;
+            if row[x * channels + channels - 1] < 200 {
+                clear += 1;
+            }
+        }
+    }
+    clear * 50 <= seen
 }
 
 // ---------- image proxy ----------
@@ -939,5 +1024,48 @@ mod tests {
         let icons = serde_json::json!([{ "url": "i.ico", "mime": "image/vnd.microsoft.icon", "language": "en" }]);
         assert_eq!(pick_for_steam(&icons, None, false, true).as_deref(), Some("i.ico"));
         assert_eq!(pick_for_steam(&icons, None, false, false), None);
+    }
+}
+
+#[cfg(test)]
+mod hero_tests {
+    use super::*;
+
+    fn png(w: u32, h: u32, alpha: impl Fn(u32, u32) -> u8) -> Vec<u8> {
+        let mut out = Vec::new();
+        {
+            let mut e = png::Encoder::new(&mut out, w, h);
+            e.set_color(png::ColorType::Rgba);
+            e.set_depth(png::BitDepth::Eight);
+            let mut wr = e.write_header().unwrap();
+            let mut data = Vec::with_capacity((w * h * 4) as usize);
+            for y in 0..h {
+                for x in 0..w {
+                    data.extend_from_slice(&[90, 120, 200, alpha(x, y)]);
+                }
+            }
+            wr.write_image_data(&data).unwrap();
+        }
+        out
+    }
+
+    #[test]
+    fn banners_with_see_through_sides_are_spotted() {
+        // A full banner, and one with only its middle 56% drawn (the "PS5 style").
+        assert!(covers_width(&png(384, 124, |_, _| 255)));
+        assert!(!covers_width(&png(384, 124, |x, _| if (84..300).contains(&x) { 255 } else { 0 })));
+        // Not a PNG: JPEG can't be see-through.
+        assert!(covers_width(b"\xff\xd8\xff\xe0 jpeg"));
+    }
+
+    #[test]
+    fn liked_banners_come_before_new_ones() {
+        let assets = json!([
+            { "url": "new", "style": "alternate", "language": "en", "hearts": 0 },
+            { "url": "liked", "style": "alternate", "language": "en", "hearts": 5, "upvotes": 2 },
+            { "url": "blurred", "style": "blurred", "language": "en", "hearts": 40 },
+            { "url": "joke", "style": "alternate", "language": "en", "hearts": 90, "humor": true },
+        ]);
+        assert_eq!(rank_heroes(&assets), ["liked", "new", "blurred"]);
     }
 }

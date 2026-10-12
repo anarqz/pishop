@@ -465,6 +465,10 @@ struct GameQuery {
 async fn game_info(Query(q): Query<GameQuery>) -> Json<serde_json::Value> {
     let art = catalog::art(&q.name).await;
     let hero = async {
+        // Steam's own library banner first: official, and always edge to edge.
+        if let Some(h) = crate::steam_store::library_art(&q.appid).await.and_then(|a| a.hero) {
+            return Some(h);
+        }
         match &art {
             Some(a) => catalog::hero(a).await,
             None => None,

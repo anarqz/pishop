@@ -24,12 +24,13 @@ const memory: { search: string; items: DiscoverGame[]; total: number; featured: 
   open: null,
 }
 
-// SteamGridDB art for the featured hero, fetched once per title.
+// Art for the featured hero (Steam's library banner when the game is on
+// Steam, else SteamGridDB's), fetched once per title.
 const metaCache = new Map<string, Promise<GameMeta | null>>()
-function heroMeta(title: string) {
+function heroMeta(title: string, appid?: string | null) {
   let p = metaCache.get(title)
   if (!p) {
-    p = api.gameInfo(title, false).catch(() => null)
+    p = api.gameInfo(title, false, appid).catch(() => null)
     metaCache.set(title, p)
   }
   return p
@@ -127,9 +128,9 @@ export default function Discover({
     if (!hero) return
     let alive = true
     setHeroMeta(null)
-    void heroMeta(hero.title).then(m => alive && setHeroMeta(m))
+    void heroMeta(hero.title, hero.steam_appid).then(m => alive && setHeroMeta(m))
     // Warm the next ones so rotation shows art immediately.
-    featuredGames.forEach(g => void heroMeta(g.title))
+    featuredGames.forEach(g => void heroMeta(g.title, g.steam_appid))
     return () => {
       alive = false
     }
