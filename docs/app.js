@@ -30,11 +30,28 @@
       'nav.screens': 'Telas',
       'nav.features': 'Recursos',
       'nav.roadmap': 'Em estudo',
+      'nav.community': 'Comunidade',
+      'community.kicker': 'Comunidade',
+      'community.title': 'Jogos que mais ninguém instala.',
+      'community.lead': 'Receitas escritas pela comunidade para jogos que o piShop não prepara sozinho: um jogo de console com um wrapper, um port nativo feito da decompilação e do seu próprio cartucho. Um botão baixa as partes, confere, prepara a pasta e adiciona o jogo à Steam.',
+      'community.p1t': 'Revisado em público',
+      'community.p1': 'Cada receita é um pull request no GitHub, revisado pelo Copilot e pelos mantenedores antes de aparecer no app.',
+      'community.p2t': 'Roda num sandbox',
+      'community.p2': 'O script de instalação não acessa a rede nem seus arquivos: só a pasta do próprio jogo pode ser alterada.',
+      'community.p3t': 'Arquivos conferidos',
+      'community.p3': 'Downloads e os arquivos que você escolhe — uma ROM, um dump — são comparados com os checksums antes de qualquer coisa rodar.',
+      'community.listTitle': 'No catálogo agora',
+      'community.loading': 'Carregando o catálogo…',
+      'community.error': 'Não foi possível carregar o catálogo agora.',
+      'community.via': 'via {name}',
+      'community.rom': 'precisa da sua ROM',
+      'community.add': 'Adicionar um jogo',
+      'community.browse': 'Ver as receitas',
       'hero.pill': 'Versão estável',
       'hero.title1': 'Sua loja de jogos',
       'hero.title2': 'dentro do Modo de Jogo.',
       'hero.lead':
-        'Descubra lançamentos, busque, baixe, instale e cuide dos seus jogos pelo controle — com Proton, componentes, patches, arte oficial da Steam e VPN — sem sair do SteamOS e sem instalar nada no sistema.',
+        'Descubra lançamentos, instale jogos da comunidade, busque, baixe e cuide dos seus jogos pelo controle — com Proton, componentes, patches, arte oficial da Steam e VPN — sem sair do SteamOS e sem instalar nada no sistema.',
       'hero.hint': 'No <b>Modo Desktop</b>, abra o <b>Konsole</b>, cole e pressione <kbd>Enter</kbd>.',
       'hero.b1': 'Sem root nem senha',
       'hero.b2': 'Zero dependências',
@@ -87,6 +104,7 @@
         'O piShop não hospeda, indexa nem distribui conteúdo: ele se conecta a serviços que você mesmo configura. Use apenas com conteúdo que você tem o direito de baixar. Steam, Steam Deck e SteamOS são marcas da Valve Corporation; ROG Ally é marca da ASUS. Projeto independente, sem afiliação.',
       'footer.releases': 'Versões',
       'footer.issues': 'Reportar um problema',
+      'footer.contribute': 'Contribuir',
       'footer.script': 'Ver o script',
       'status.next': 'Próxima etapa',
       'status.wip': 'Em andamento',
@@ -101,11 +119,28 @@
       'nav.screens': 'Screens',
       'nav.features': 'Features',
       'nav.roadmap': 'Roadmap',
+      'nav.community': 'Community',
+      'community.kicker': 'Community',
+      'community.title': 'Games nobody else installs.',
+      'community.lead': "Recipes written by the community for games piShop can't set up by itself: a console game behind a wrapper, a native port built from the decompilation and your own cartridge. One button downloads the parts, checks them, prepares the folder and adds the game to Steam.",
+      'community.p1t': 'Reviewed in the open',
+      'community.p1': 'Every recipe is a pull request on GitHub, reviewed by Copilot and the maintainers before it shows up in the app.',
+      'community.p2t': 'Runs in a sandbox',
+      'community.p2': "The install script can't reach the network or your files: only the game's own folder can be changed.",
+      'community.p3t': 'Checked files',
+      'community.p3': 'Downloads and the files you pick — a ROM, a dump — are compared with their checksums before anything runs.',
+      'community.listTitle': 'In the catalog now',
+      'community.loading': 'Loading the catalog…',
+      'community.error': "Couldn't load the catalog right now.",
+      'community.via': 'via {name}',
+      'community.rom': 'needs your ROM',
+      'community.add': 'Add a game',
+      'community.browse': 'Browse the recipes',
       'hero.pill': 'Stable release',
       'hero.title1': 'Your game store',
       'hero.title2': 'inside Gaming Mode.',
       'hero.lead':
-        'Discover new releases, then search, download, install and manage your games with the controller — Proton, components, patches, official Steam art and a VPN included — without leaving SteamOS or installing anything on the system.',
+        'Discover new releases, install community games, then search, download and manage your games with the controller — Proton, components, patches, official Steam art and a VPN included — without leaving SteamOS or installing anything on the system.',
       'hero.hint': 'In <b>Desktop Mode</b>, open <b>Konsole</b>, paste and press <kbd>Enter</kbd>.',
       'hero.b1': 'No root, no password',
       'hero.b2': 'Zero dependencies',
@@ -159,6 +194,7 @@
         "piShop doesn't host, index or distribute any content: it connects to services you configure yourself. Only use it with content you have the right to download. Steam, Steam Deck and SteamOS are trademarks of Valve Corporation; ROG Ally is a trademark of ASUS. Independent project, not affiliated.",
       'footer.releases': 'Releases',
       'footer.issues': 'Report an issue',
+      'footer.contribute': 'Contribute',
       'footer.script': 'View the script',
       'status.next': 'Up next',
       'status.wip': 'In progress',
@@ -169,6 +205,7 @@
 
   // ---------------------------------------------------------------- content
   const ICONS = {
+    people: '<circle cx="9" cy="8" r="3.4"/><path d="M2.8 19.5c.8-3.5 3.3-5.4 6.2-5.4s5.4 1.9 6.2 5.4"/><circle cx="17" cy="9" r="2.6"/><path d="M15.9 14.3c2.6-.3 4.8 1.3 5.5 4.6"/>',
     sparkles: '<path d="M12 3.5l1.9 5 5 1.9-5 1.9-1.9 5-1.9-5-5-1.9 5-1.9z"/><path d="M19 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/>',
     card: '<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><rect x="6" y="8" width="5" height="7.5" rx="1"/><path d="M14 9h4M14 12.5h4M14 16h2.5"/>',
     play: '<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M10 9.2v5.6l4.8-2.8z"/>',
@@ -204,6 +241,19 @@
       en: [
         'Discover',
         "The latest releases in a Big Picture look: the 5 newest cracks in the spotlight (flip with L2/R2), search front and center and a “Recent cracks” grid that keeps loading to the very last game — with each crack's status and group, and covers cached on the device.",
+      ],
+    },
+    {
+      icon: 'people',
+      shot: 'community',
+      tags: ['GitHub', 'bubblewrap'],
+      pt: [
+        'Comunidade',
+        'Jogos que o piShop não prepara sozinho, instalados por receitas da comunidade: Forza Horizon 2 do Xbox One com o Azimuth, e os ports nativos da HarbourMasters — Mario Kart 64, Star Fox 64, Banjo-Kazooie, Ocarina of Time — feitos a partir do seu próprio cartucho. Um botão baixa cada parte (itch.io, versões do GitHub, archive.org, torrents), confere os checksums, roda o script num sandbox sem rede e adiciona o jogo à Steam com a arte. ROMs e arquivos podem vir do aparelho ou do seu armazenamento em rede, e a página de cada jogo mostra o script e os relatos de problemas do GitHub.',
+      ],
+      en: [
+        'Community',
+        "Games piShop can't set up by itself, installed by community recipes: Xbox One Forza Horizon 2 through Azimuth, and HarbourMasters' native ports — Mario Kart 64, Star Fox 64, Banjo-Kazooie, Ocarina of Time — built from your own cartridge. One button downloads every part (itch.io, GitHub releases, archive.org, torrents), checks the checksums, runs the script in a sandbox with no network and adds the game to Steam with its art. ROMs and files can come from the device or your network storage, and each game's page shows its script and the problem reports from GitHub.",
       ],
     },
     {
@@ -323,14 +373,14 @@
     },
     {
       icon: 'magnet',
-      tags: ['librqbit'],
+      tags: ['librqbit', 'HTTP'],
       pt: [
-        'BitTorrent nativo',
-        'Motor próprio com TCP, uTP e DHT, links magnet, retomada automática e limite de velocidade em Configurações → Downloads. Os downloads vão para Downloads ou para a pasta que você escolher.',
+        'Downloads nativos',
+        'BitTorrent próprio com TCP, uTP e DHT, links magnet e limite de velocidade — e downloads diretos de links da web: arquivos grandes vêm por várias conexões ao mesmo tempo, espalhadas pelos espelhos do servidor, e continuam de onde pararam (até de um .crdownload que veio de outro computador). Tudo vai para Downloads ou para a pasta que você escolher.',
       ],
       en: [
-        'Native BitTorrent',
-        'A built-in engine with TCP, uTP and DHT, magnet links, automatic resume and a speed cap in Settings → Downloads. Downloads go to Downloads or a folder you pick.',
+        'Native downloads',
+        "A built-in BitTorrent engine with TCP, uTP and DHT, magnet links and a speed cap — and direct downloads from web links: big files come over several connections at once, spread across the server's mirrors, and resume where they stopped (even from a .crdownload brought over from another computer). Everything goes to Downloads or a folder you pick.",
       ],
     },
     {
@@ -339,11 +389,11 @@
       tags: ['Steam', 'TheGamesDB'],
       pt: [
         'Transferências',
-        'Cada download aparece como o jogo: capa, anel de progresso e, embaixo, velocidade e tempo restante. Os dados vêm da Steam, do TheGamesDB, do SteamGridDB e do isitcracked, nessa ordem. Pause, pare ou exclua — com ou sem os arquivos; o jogo instalado continua em Jogos. As cópias da rede ficam na mesma tela.',
+        'Cada download aparece como o jogo: capa, anel de progresso e, embaixo, velocidade e tempo restante — as instalações da comunidade, os torrents e os downloads diretos em seções próprias. Os dados vêm da Steam, do TheGamesDB, do SteamGridDB e do isitcracked, nessa ordem. Pause, pare ou exclua — com ou sem os arquivos; o jogo instalado continua em Jogos. As cópias da rede ficam na mesma tela.',
       ],
       en: [
         'Transfers',
-        'Every download shows up as the game: cover, a progress ring and, below it, speed and time left. Game data comes from Steam, TheGamesDB, SteamGridDB and isitcracked, in that order. Pause, stop or delete — with or without the files; an installed game stays in Games. Network copies live on the same screen.',
+        'Every download shows up as the game: cover, a progress ring and, below it, speed and time left — community installs, torrents and direct downloads each in their own section. Game data comes from Steam, TheGamesDB, SteamGridDB and isitcracked, in that order. Pause, stop or delete — with or without the files; an installed game stays in Games. Network copies live on the same screen.',
       ],
     },
     {
@@ -467,6 +517,14 @@
         'Nada para começar: a Loja já busca no The Pirate Bay. O Prowlarr (endereço e chave de API) é opcional e soma os seus indexadores; o Descobrir usa a API do isitcracked e os detalhes dos jogos podem usar o TheGamesDB — sem eles, o piShop avisa e segue funcionando. Tudo fica em Configurações → Serviços — e dá para importar a configuração de alguém de um arquivo ou de um link (gist do GitHub, Pastebin). A loja da Steam e o SteamGridDB não pedem chave.',
       ],
       [
+        'O que é a aba Comunidade?',
+        'Receitas para jogos que o piShop não prepara sozinho — um jogo de console que roda por um wrapper, um port nativo feito da decompilação. Cada receita diz de onde vem cada parte, com os checksums, e traz um script que arruma a pasta do jogo. O script roda num sandbox, sem rede e só com a pasta do jogo liberada, e é revisado em público (Copilot e mantenedores) antes de aparecer no app. Jogos que precisam do seu cartucho pedem a sua ROM: o piShop confere e ela fica no seu aparelho.',
+      ],
+      [
+        'Como adiciono um jogo à Comunidade?',
+        'Escreva um <code>manifest.json</code> e um <code>install.sh</code> numa pasta em <code>community/</code> e abra um pull request — o <a href="https://github.com/anarqz/pishop/blob/main/CONTRIBUTING.md">guia de contribuição</a> mostra o passo a passo, com exemplos. Depois de aprovado, o jogo aparece na aba de todo mundo sem precisar atualizar o app.',
+      ],
+      [
         'Tem VPN?',
         'Tem: importe o arquivo WireGuard (.conf) ou OpenVPN (.ovpn) do seu provedor em Configurações → VPN e ligue pelo controle. Ela usa o NetworkManager do próprio SteamOS, sem root nem pacotes extras, e enquanto está ligada o aparelho inteiro — downloads, Steam e jogos online — passa por ela.',
       ],
@@ -513,6 +571,14 @@
         "Nothing to get started: the Store already searches The Pirate Bay. Prowlarr (address and API key) is optional and adds your indexers; Discover uses the isitcracked API and game details can use TheGamesDB — without them piShop says so and keeps working. It all lives in Settings → Services — and someone's setup can be imported from a file or a link (a GitHub gist, Pastebin). The Steam store and SteamGridDB don't need a key.",
       ],
       [
+        'What is the Community tab?',
+        "Recipes for games piShop can't set up by itself — a console game that runs through a wrapper, a native port built from a decompilation. Each recipe says where every part comes from, with checksums, and brings a script that arranges the game's folder. The script runs in a sandbox, with no network and only the game's folder writable, and is reviewed in the open (Copilot and maintainers) before it shows up in the app. Games that need your cartridge ask for your ROM: piShop checks it and it stays on your device.",
+      ],
+      [
+        'How do I add a game to Community?',
+        'Write a <code>manifest.json</code> and an <code>install.sh</code> in a folder under <code>community/</code> and open a pull request — the <a href="https://github.com/anarqz/pishop/blob/main/CONTRIBUTING.md">contributing guide</a> walks through it with examples. Once merged, the game shows up in everyone\'s tab without an app update.',
+      ],
+      [
         'Is there a VPN?',
         "Yes: import your provider's WireGuard (.conf) or OpenVPN (.ovpn) file in Settings → VPN and turn it on with the controller. It uses SteamOS's own NetworkManager, with no root or extra packages, and while it's on the whole device — downloads, Steam and online games — goes through it.",
       ],
@@ -556,6 +622,21 @@
       en: ['Game page', 'Synopsis, genres and dates from the Steam store, SteamGridDB art and the crack status.'],
     },
     {
+      id: 'community',
+      pt: ['Comunidade', 'Jogos instalados por receitas da comunidade — um jogo de Xbox One com o Azimuth, os ports nativos da HarbourMasters — com busca e destaques.'],
+      en: ['Community', "Games installed by community recipes — an Xbox One game through Azimuth, HarbourMasters' native ports — with search and a spotlight."],
+    },
+    {
+      id: 'community-game',
+      pt: ['Página da receita', 'O guia, as notas para o SteamOS, o que o piShop baixa, o script que vai rodar e os relatos de problemas do GitHub.'],
+      en: ['Recipe page', 'The guide, SteamOS notes, what piShop downloads, the script that will run and the problem reports from GitHub.'],
+    },
+    {
+      id: 'community-setup',
+      pt: ['Instalar', 'A sua ROM — do aparelho ou do armazenamento em rede —, a biblioteca com o espaço livre e o que vai ser baixado.'],
+      en: ['Install', 'Your ROM — from the device or your network storage —, the library with its free space and what will be downloaded.'],
+    },
+    {
       id: 'store',
       pt: ['Loja', 'Resultados do The Pirate Bay e do seu Prowlarr com tamanho, data, seeders e leechers — e o jogo no cabeçalho.'],
       en: ['Store', 'Results from The Pirate Bay and your Prowlarr with size, date, seeders and leechers — and the game in the header.'],
@@ -574,6 +655,11 @@
       id: 'transfers',
       pt: ['Transferências', 'Cada download com a capa do jogo, um anel de progresso, velocidade e tempo restante.'],
       en: ['Transfers', "Every download with the game's cover, a progress ring, speed and time left."],
+    },
+    {
+      id: 'community-progress',
+      pt: ['Instalação da comunidade', 'Cada parte com o seu progresso — o arquivo grande por quatro conexões —, depois extrair, preparar o jogo no sandbox e adicionar à Steam.'],
+      en: ['Community install', 'Each part with its progress — the big file over four connections — then extracting, preparing the game in the sandbox and adding it to Steam.'],
     },
     {
       id: 'install',
@@ -649,6 +735,7 @@
     $('#hero-ally').src = shotUrl('ally', 'discover')
     $('#hero-deck').src = shotUrl('deck', 'game')
     renderFeatures()
+    renderCommunity()
     renderRoadmap()
     renderFaq()
     renderTabs()
@@ -679,6 +766,37 @@
         : `<article class="card">${body}</article>`
     }).join('')
   }
+
+  // The community catalog, live from the repository: a game merged there
+  // shows up here (and in everyone's piShop) without touching the site.
+  const CATALOG = 'https://raw.githubusercontent.com/anarqz/pishop/main/community/index.json'
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+  let community = null
+  let communityFailed = false
+  function renderCommunity() {
+    const box = $('#community-list')
+    if (!box) return
+    if (communityFailed) return void (box.innerHTML = `<p class="cm-note">${tr('community.error')}</p>`)
+    if (!community) return void (box.innerHTML = `<p class="cm-note">${tr('community.loading')}</p>`)
+    box.innerHTML = community
+      .map(g => {
+        const rom = (g.parts ?? []).some(p => p.source?.type === 'user')
+        const via = g.wrapper ? ` · ${esc(tr('community.via').replace('{name}', g.wrapper.name))}` : ''
+        return `<a class="cm-game" href="https://github.com/anarqz/pishop/tree/main/community/${esc(g.id)}" target="_blank" rel="noopener">
+          <b>${esc(g.name)}</b><span>${esc(g.platform)}${via}</span>${rom ? `<small>${tr('community.rom')}</small>` : ''}</a>`
+      })
+      .join('')
+  }
+  fetch(CATALOG, { cache: 'no-cache' })
+    .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then(d => {
+      community = (d.games ?? []).slice().sort((a, b) => a.name.localeCompare(b.name))
+      renderCommunity()
+    })
+    .catch(() => {
+      communityFailed = true
+      renderCommunity()
+    })
 
   function renderRoadmap() {
     $('#roadmap-grid').innerHTML = ROADMAP.map(r => {

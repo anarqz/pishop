@@ -21,6 +21,9 @@ community/
   index.json        everything bundled (generated — don't edit)
 ```
 
+**New here? Start with the step-by-step guide in [CONTRIBUTING.md](../CONTRIBUTING.md);
+this page is the reference for every field.**
+
 After changing anything, run `node scripts/community.mjs` and commit
 `index.json` with your change. CI runs `--check`, ShellCheck and the policy
 below; Copilot reviews the pull request against

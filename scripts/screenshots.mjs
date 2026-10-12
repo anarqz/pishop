@@ -8,8 +8,12 @@
 //   SHOTS_REPLACE  {"from": "to", …} text rewrites before each shot (a stand-in
 //                  HOME back to /home/deck, a LAN address to a hostname).
 //   SHOTS_LANG     en | pt: the app's language for the captures (default: as set).
-//   SHOTS_DEMO=1   Transfers shows representative downloads of free, open-source
-//                  games (Steam art and data), two of them installed; Games
+//   SHOTS_DEMO=1   Community's install dialog answers as on a handheld (Steam
+//                  libraries, Proton, Steam's API, bubblewrap) and Transfers
+//                  shows a community install under way (Forza Horizon 2 over
+//                  four connections) next to representative downloads of
+//                  free, open-source games (Steam art and data), two of them
+//                  installed; Games
 //                  shows those and other non-Steam shortcuts (free games), one
 //                  game's page, its components and patches; Settings → VPN
 //                  shows demo connections; disks report a handheld's numbers
@@ -261,6 +265,65 @@ function demoInstall(row, downloadDir) {
 }
 
 /** Mocked engine + library responses for the Transfers screen. */
+/** A community install under way, as the launcher reports it (Transfers). */
+function demoCommunity(art) {
+  const game = 41410957919
+  const done = Math.round(game * 0.62)
+  const part = (id, name, role, kind, from, extra) => ({
+    id, name, description: '', role, kind, from, state: 'ready', paused: false, done: 0, total: 0, speed: 0, error: null,
+    path: null, provided: false, verify: 1, extract: null, extracted: false, hint: null, extensions: [], resumable: true,
+    torrent: null, connections: 0, copying_from: null, ...extra,
+  })
+  return [
+    {
+      id: 'azimuth-forza-horizon-2',
+      key: 'cm-azimuth-forza-horizon-2',
+      name: 'Forza Horizon 2',
+      platform: 'Xbox One',
+      wrapper: { name: 'Azimuth', version: '0.9.7' },
+      game: { name: 'Forza Horizon 2', platform: 'Xbox One', cover: art?.art?.cover ?? null, hero: art?.hero ?? null },
+      stage: 'downloading', failed_at: null, error: null, step: null, progress: null, paused: false,
+      done: done + 2744114 + 608582, total: game + 2744114 + 608582, speed: 2.31e6,
+      parts: [
+        part('azimuth', 'Azimuth', 'launcher', 'itch', 'itch.io', { done: 2744114, total: 2744114, extract: '' }),
+        part('game', 'Forza Horizon 2', 'game', 'direct', 'archive.org', { state: 'downloading', done, total: game, speed: 2.31e6, connections: 4, verify: 0, extract: 'Game' }),
+        part('extraoptions', 'Extra Options', 'other', 'github', 'github.com/RokkuDayo/ForzaHorizon2_ExtraOptions', { done: 608582, total: 608582, extract: 'Mods/ExtraOptions' }),
+      ],
+      game_dir: '/home/deck/.local/share/Steam/piShop/Forza Horizon 2',
+      downloads: '/home/deck/Downloads/piShop/Community/azimuth-forza-horizon-2',
+      library: '/home/deck/.local/share/Steam',
+      tool: 'proton_10', runtime: 'proton', appid: null, added: Math.floor(Date.now() / 1000) - 3600, finished: null,
+      script_running: false, log: [],
+    },
+  ]
+}
+
+/** Community's install dialog as a handheld answers it. */
+function demoSetup(game, en) {
+  const internal = en ? 'Internal storage' : 'Armazenamento interno'
+  return {
+    game,
+    folder: game.name.replace(/[<>:"/\\|?*]/g, ''),
+    libraries: [
+      { path: '/home/deck/.local/share/Steam', label: internal, free: 261e9, total: 1.9e12 },
+      { path: '/run/media/deck/SD', label: en ? 'SD card' : 'Cartão SD', free: 412e9, total: 1e12 },
+    ],
+    default_library: '/home/deck/.local/share/Steam',
+    tools: [
+      { name: 'proton_10', display: 'Proton 10.0-2', installed: true },
+      { name: 'proton_experimental', display: 'Proton Experimental', installed: true },
+    ],
+    default_tool: 'proton_10',
+    steam_api: true,
+    debugging_enabled: true,
+    bwrap: true,
+    downloads: { path: `/home/deck/Downloads/piShop/Community/${game.id}`, free: 261e9, total: 1.9e12, disk: internal },
+    download_size: game.parts.filter(p => p.kind !== 'user').reduce((s, p) => s + (p.size ?? 0), 0),
+    install_size: game.install?.disk ?? null,
+    status: { state: 'none' },
+  }
+}
+
 async function demoData(downloadDir) {
   const now = Math.floor(Date.now() / 1000)
   const rows = await Promise.all(
@@ -474,14 +537,59 @@ async function capture(device, port) {
   if (await val(`!!document.querySelector('.details-bg')`)) await key('Escape')
   await sleep(800)
 
+  // Community: the catalog (live, from the repository), a game's page and,
+  // with SHOTS_DEMO, a ROM-based game's install dialog as a handheld shows it.
+  await tab('/^(Community|Comunidade)/')
+  await waitFor(`document.querySelectorAll('.cm-card .cover img.in').length >= 4`, 20000)
+  await sleep(3000)
+  await shot('community')
+  const openCommunity = async name => {
+    await val(`[...document.querySelectorAll('.cm-card')].find(c => /${name}/.test(c.textContent))?.click()`)
+    await waitFor(`document.querySelector('.cmg .gd-cover img')`, 15000)
+    await sleep(3500)
+  }
+  await openCommunity('Forza')
+  await shot('community-game')
+  await key('Escape')
+  await sleep(1200)
+  if (process.env.SHOTS_DEMO) {
+    const catalog = await val(`fetch('/api/community').then(r => r.json())`)
+    const mk64 = catalog.games.find(g => /Mario Kart/.test(g.name))
+    mock = ({ requestId }) =>
+      void send('Fetch.fulfillRequest', {
+        requestId,
+        responseCode: 200,
+        responseHeaders: [{ name: 'content-type', value: 'application/json' }],
+        body: Buffer.from(JSON.stringify(demoSetup(mk64, LANG === 'en'))).toString('base64'),
+      })
+    await intercept({ urlPattern: '*/api/community/*/setup' })
+    await openCommunity('Mario Kart')
+    await val(`[...document.querySelectorAll('.gd-actions .btn')].find(b => /^(Install|Instalar)$/.test(b.textContent.trim()))?.click()`)
+    await waitFor(`document.querySelector('.cm-setup .scard')`, 10000)
+    await sleep(2500)
+    await shot('community-setup')
+    await key('Escape')
+    await sleep(800)
+    await key('Escape')
+    await sleep(800)
+    mock = null
+    await intercept()
+  }
+
   if (process.env.SHOTS_DEMO) {
     const info = await val(`fetch('/api/info').then(r => r.json())`)
     const demo = await demoData(info.download_dir)
     const h = demo.installed.hash
+    const fh2 = await val(`fetch('/api/game/info?name=' + encodeURIComponent('Forza Horizon 2')).then(r => r.json())`)
+    const community = demoCommunity(fh2)
     mock = ({ requestId, request }) => {
       const p = new URL(request.url).pathname
       const body =
-        p === '/api/games'
+        p === '/api/community/installs'
+          ? community
+          : p === '/api/direct'
+            ? []
+            : p === '/api/games'
           ? demo.games
           : /^\/api\/games\/\d+\/manage$/.test(p)
             ? { key: demo.keys[p.split('/')[3]] ?? h }
@@ -518,6 +626,8 @@ async function capture(device, port) {
     }
     await intercept(
       { urlPattern: `${info.torrent_api}/*` },
+      { urlPattern: '*/api/community/installs' },
+      { urlPattern: '*/api/direct' },
       { urlPattern: '*/api/library' },
       { urlPattern: '*/api/install/*' },
       { urlPattern: '*/api/archive/*' },
@@ -530,6 +640,20 @@ async function capture(device, port) {
   await waitFor(`document.querySelector('.dl-tile')`, 10000)
   await sleep(5000)
   await shot('transfers')
+  if (process.env.SHOTS_DEMO) {
+    // The community install: A opens its steps and parts.
+    await val(`document.querySelector('[data-community-id]')?.focus()`)
+    await sleep(600)
+    await key('Enter')
+    await waitFor(`document.querySelector('.cmi .cm-steps')`, 10000)
+    await sleep(2500)
+    // From the top: the game's name and what it runs with.
+    await val(`document.querySelector('.cmi .inst-content').scrollTop = 0`)
+    await sleep(300)
+    await shot('community-progress')
+    await key('Escape')
+    await sleep(800)
+  }
   if (process.env.SHOTS_DEMO) {
     // The installed demo game: A opens its page (installed: Games, the download).
     await val(`document.querySelector('[data-torrent-id="' + window.__demoInstalled + '"]')?.focus()`)

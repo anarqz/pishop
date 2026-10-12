@@ -45,13 +45,14 @@ Nada é instalado no sistema: tudo fica em `~/Applications/piShop` e `~/.local/s
 Um app nativo para SteamOS (Steam Deck, ROG Ally, Legion Go…) feito para o controle:
 
 - **Descobrir** — lançamentos e cracks recentes em visual Big Picture; página do jogo com sinopse (Steam / TheGamesDB), nota no ProtonDB e arte (SteamGridDB).
+- **Comunidade** — jogos que o piShop não prepara sozinho, instalados por receitas da comunidade: Forza Horizon 2 (Xbox One) com o Azimuth e os ports nativos da HarbourMasters (Mario Kart 64, Star Fox 64, Banjo-Kazooie, Ocarina of Time) feitos do seu próprio cartucho. Baixa e confere cada parte, roda o script num sandbox sem rede e adiciona o jogo à Steam; ROMs podem vir do aparelho ou do armazenamento em rede. Cada jogo mostra o script e os relatos de problemas do GitHub. **[Adicione um jogo](CONTRIBUTING.md).**
 - **Loja** — busca no The Pirate Bay sem configurar nada, e nos indexadores do seu Prowlarr, se você tiver um; baixa em Downloads ou na pasta que você escolher. Se o jogo encontrado estiver errado, escolha outro (Steam ou SteamGridDB) e o download leva os dados dele.
-- **Transferências** — cada download com a capa do jogo e um anel de progresso; dados da Steam, TheGamesDB, SteamGridDB e isitcracked, nessa ordem.
+- **Transferências** — cada download com a capa do jogo e um anel de progresso, em seções: instalações da comunidade, torrents e downloads diretos; dados da Steam, TheGamesDB, SteamGridDB e isitcracked, nessa ordem.
 - **Instalação pelo controle** — extrai o download, roda o instalador pela Steam no Modo de Jogo (a transferência para enquanto isso) e aponta o atalho para o executável certo; depois os arquivos baixados podem sair com um botão.
 - **Jogos** — todos os atalhos não-Steam, os instalados pelo piShop e os outros: Proton, componentes (Visual C++, DirectX, .NET… pelos instaladores da própria Steam ou pelo winetricks embutido), instaladores no prefixo, mover para outra biblioteca ou para dentro do prefixo, arte, patches (correções nas opções de inicialização) e remover o atalho, o prefixo ou os arquivos.
 - **Arte oficial da Steam** — capa, banner, fundo, logo e ícone na maior resolução; SteamGridDB só para o que faltar — ou escolhida à mão.
 - **VPN** — importe uma configuração WireGuard (.conf) ou OpenVPN (.ovpn) e ligue pelo controle (NetworkManager do SteamOS, sem root).
-- **BitTorrent nativo** — TCP/uTP, DHT, retomada e limite de velocidade.
+- **Downloads nativos** — BitTorrent (TCP/uTP, DHT, retomada e limite de velocidade) e downloads diretos por várias conexões ao mesmo tempo, espalhadas pelos espelhos, que continuam de onde pararam — até de um `.crdownload` trazido de outro computador.
 - **Explorar** — explorador de dois painéis: pastas e cartões, bibliotecas Steam, o prefixo de cada jogo e compartilhamentos de rede (SMB), com fila de cópias para o aparelho.
 - **Espaço em disco** — livre e total, com um anel, em todo lugar onde aparece uma pasta ou um disco.
 - **Interface SteamOS** — abas em L1/R1, legenda de botões, analógico direito para rolar, teclado da Steam sob demanda, escala automática (Deck / Ally / TV); ignora o controle enquanto um jogo está na tela.
@@ -75,6 +76,9 @@ DECK=deck@steamdeck.local DECK_PASS=… ./scripts/deploy.sh --install
 ```
 
 Releases: `git tag vX.Y.Z && git push --tags` (ou *Actions → Release → Run workflow*). Quem instalou pelo `install.sh` recebe a versão nova sozinho.
+
+**Contribuir · Contributing** — adicionar um jogo à aba Comunidade é um pull request com uma pasta em [`community/`](community/): veja o [guia de contribuição](CONTRIBUTING.md).
+*Adding a game to the Community tab is a pull request with a folder in [`community/`](community/): see the [contributing guide](CONTRIBUTING.md).*
 
 ## Aviso · Disclaimer
 

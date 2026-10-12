@@ -1526,6 +1526,104 @@ kbd {
   }
 }
 
+/* ---------------------------------------------------------------- community */
+.cm-points {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.cm-points > div {
+  padding: 22px 24px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, rgba(124, 240, 197, 0.07), var(--panel) 55%);
+}
+.cm-points b {
+  font: 600 1.06rem/1.3 var(--display);
+}
+.cm-points p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+.cm-list-title {
+  margin: 34px 0 14px;
+  font: 600 0.82rem/1 var(--font);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cm-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.cm-game {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.cm-game:hover {
+  border-color: var(--line-2);
+  transform: translateY(-2px);
+}
+.cm-game b {
+  font: 600 1rem/1.3 var(--display);
+}
+.cm-game span {
+  color: var(--muted);
+  font-size: 14px;
+}
+.cm-game small {
+  justify-self: start;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255, 196, 107, 0.12);
+  color: var(--amber);
+  font-size: 12px;
+}
+.cm-note {
+  color: var(--muted);
+}
+.cm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 22px;
+}
+.cm-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 11px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--line-2);
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+.cm-actions .btn:hover {
+  border-color: var(--cyan);
+}
+.cm-actions .btn.primary {
+  border-color: transparent;
+  background: var(--grad);
+  color: #04121a;
+}
+@media (max-width: 720px) {
+  .cm-points {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
