@@ -40,11 +40,6 @@
       'community.p2': 'O script de instalação não acessa a rede nem seus arquivos: só a pasta do próprio jogo pode ser alterada.',
       'community.p3t': 'Arquivos conferidos',
       'community.p3': 'Downloads e os arquivos que você escolhe — uma ROM, um dump — são comparados com os checksums antes de qualquer coisa rodar.',
-      'community.listTitle': 'No catálogo agora',
-      'community.loading': 'Carregando o catálogo…',
-      'community.error': 'Não foi possível carregar o catálogo agora.',
-      'community.via': 'via {name}',
-      'community.rom': 'precisa da sua ROM',
       'community.add': 'Adicionar um jogo',
       'community.browse': 'Ver as receitas',
       'hero.pill': 'Versão estável',
@@ -129,11 +124,6 @@
       'community.p2': "The install script can't reach the network or your files: only the game's own folder can be changed.",
       'community.p3t': 'Checked files',
       'community.p3': 'Downloads and the files you pick — a ROM, a dump — are compared with their checksums before anything runs.',
-      'community.listTitle': 'In the catalog now',
-      'community.loading': 'Loading the catalog…',
-      'community.error': "Couldn't load the catalog right now.",
-      'community.via': 'via {name}',
-      'community.rom': 'needs your ROM',
       'community.add': 'Add a game',
       'community.browse': 'Browse the recipes',
       'hero.pill': 'Stable release',
@@ -735,7 +725,6 @@
     $('#hero-ally').src = shotUrl('ally', 'discover')
     $('#hero-deck').src = shotUrl('deck', 'game')
     renderFeatures()
-    renderCommunity()
     renderRoadmap()
     renderFaq()
     renderTabs()
@@ -766,37 +755,6 @@
         : `<article class="card">${body}</article>`
     }).join('')
   }
-
-  // The community catalog, live from the repository: a game merged there
-  // shows up here (and in everyone's piShop) without touching the site.
-  const CATALOG = 'https://raw.githubusercontent.com/anarqz/pishop/main/community/index.json'
-  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
-  let community = null
-  let communityFailed = false
-  function renderCommunity() {
-    const box = $('#community-list')
-    if (!box) return
-    if (communityFailed) return void (box.innerHTML = `<p class="cm-note">${tr('community.error')}</p>`)
-    if (!community) return void (box.innerHTML = `<p class="cm-note">${tr('community.loading')}</p>`)
-    box.innerHTML = community
-      .map(g => {
-        const rom = (g.parts ?? []).some(p => p.source?.type === 'user')
-        const via = g.wrapper ? ` · ${esc(tr('community.via').replace('{name}', g.wrapper.name))}` : ''
-        return `<a class="cm-game" href="https://github.com/anarqz/pishop/tree/main/community/${esc(g.id)}" target="_blank" rel="noopener">
-          <b>${esc(g.name)}</b><span>${esc(g.platform)}${via}</span>${rom ? `<small>${tr('community.rom')}</small>` : ''}</a>`
-      })
-      .join('')
-  }
-  fetch(CATALOG, { cache: 'no-cache' })
-    .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
-    .then(d => {
-      community = (d.games ?? []).slice().sort((a, b) => a.name.localeCompare(b.name))
-      renderCommunity()
-    })
-    .catch(() => {
-      communityFailed = true
-      renderCommunity()
-    })
 
   function renderRoadmap() {
     $('#roadmap-grid').innerHTML = ROADMAP.map(r => {
