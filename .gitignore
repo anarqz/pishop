@@ -7,3 +7,6 @@
 /web/tsconfig.tsbuildinfo
 *.log
 .DS_Store
+# Claude Code: personal settings and notes stay local; the skills are shared
+/.claude/settings.local.json
+/CLAUDE.local.md

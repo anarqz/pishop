@@ -32,6 +32,16 @@ script never downloads anything and never touches Steam: piShop does.
 The full format is in [`community/README.md`](community/README.md); the
 examples below are the shortest path.
 
+> **Using an AI assistant?** The repository has guides written for it:
+> [`CLAUDE.md`](CLAUDE.md) (context and rules, also linked from
+> [`AGENTS.md`](AGENTS.md) for other tools) and two skills —
+> [`add-community-game`](.claude/skills/add-community-game/SKILL.md) for this
+> section, [`pishop-feature`](.claude/skills/pishop-feature/SKILL.md) for code.
+> Claude Code picks them up by itself (`/add-community-game`,
+> `/pishop-feature`); with other assistants, point them at `AGENTS.md`. You
+> still own the result: check the sources, checksums and the test before
+> opening the pull request.
+
 ### 1. Before you start
 
 - **A source you're allowed to point to.** The developer's own page (itch.io,
@@ -258,6 +268,10 @@ shows up in everyone's Community tab right away (no app update needed).
 - `scripts/build.sh` builds the SteamOS bundle (needs `zig` and
   `cargo-zigbuild`); `scripts/deploy.sh` copies it to a device over SSH.
 - Releases are tags (`vX.Y.Z`); installs update themselves.
+
+Working with an AI assistant: have it follow
+[`.claude/skills/pishop-feature/SKILL.md`](.claude/skills/pishop-feature/SKILL.md)
+(Claude Code: `/pishop-feature`).
 
 Open an issue before a big change, so we can agree on the approach first.
 

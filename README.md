@@ -80,6 +80,9 @@ Releases: `git tag vX.Y.Z && git push --tags` (ou *Actions → Release → Run w
 **Contribuir · Contributing** — adicionar um jogo à aba Comunidade é um pull request com uma pasta em [`community/`](community/): veja o [guia de contribuição](CONTRIBUTING.md).
 *Adding a game to the Community tab is a pull request with a folder in [`community/`](community/): see the [contributing guide](CONTRIBUTING.md).*
 
+**Com IA · With AI** — [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) dão o contexto do projeto, e as skills em [`.claude/skills/`](.claude/skills/) guiam o assistente para adicionar um jogo à Comunidade ou criar um recurso.
+*[`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) give an assistant the project's context, and the skills in [`.claude/skills/`](.claude/skills/) walk it through adding a Community game or building a feature.*
+
 ## Aviso · Disclaimer
 
 O piShop não hospeda, indexa nem distribui conteúdo. Ele se conecta a serviços que **você** configura (The Pirate Bay, Prowlarr, armazenamento de rede, APIs públicas). Use apenas com conteúdo que você tem o direito de baixar.
