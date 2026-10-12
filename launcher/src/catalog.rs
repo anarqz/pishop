@@ -61,6 +61,14 @@ pub struct Config {
     pub community_url: String,
 }
 
+/// isitcracked.com's public setup — its Supabase endpoint with the anon key
+/// the site itself ships, and its covers CDN — so Discover works out of the
+/// box. Settings → Services can point it elsewhere; while its address there is
+/// empty, these are used.
+pub const DEFAULT_IIC_URL: &str = "https://lhvknkrfhehcclzlabsl.supabase.co/rest/v1/rpc/list_games_paged";
+pub const DEFAULT_IIC_KEY: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxodmtua3JmaGVoY2NsemxhYnNsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4NzM0MTksImV4cCI6MjA5NDQ0OTQxOX0.B7YOW_hpn2zHxR-sfHgiNgqidpfESwJpixLrh-MevE8";
+pub const DEFAULT_IIC_CDN: &str = "https://cdn.isitcracked.com";
+
 /// The Pirate Bay's own public JSON API: the Store's source when nothing else
 /// is set up, so searching never needs configuration first.
 pub const DEFAULT_TPB: &str = "https://apibay.org";
@@ -77,8 +85,25 @@ fn config_path() -> PathBuf {
     data_dir().join("catalog.json")
 }
 
-pub fn config() -> Config {
+/// What Settings saved, as saved (empty fields included).
+pub fn stored_config() -> Config {
     std::fs::read(config_path()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+/// The setup in use: what Settings saved, with isitcracked's public setup
+/// when no isitcracked address was set.
+pub fn config() -> Config {
+    let mut c = stored_config();
+    if c.iic_url.trim().is_empty() {
+        c.iic_url = DEFAULT_IIC_URL.to_string();
+        if c.iic_key.trim().is_empty() {
+            c.iic_key = DEFAULT_IIC_KEY.to_string();
+        }
+        if c.iic_cdn.trim().is_empty() {
+            c.iic_cdn = DEFAULT_IIC_CDN.to_string();
+        }
+    }
+    c
 }
 
 /// Partial update from Settings: only fields sent are changed, and a blank
@@ -96,7 +121,7 @@ pub struct ConfigUpdate {
 }
 
 pub fn update_config(u: ConfigUpdate) -> anyhow::Result<Config> {
-    let mut c = config();
+    let mut c = stored_config();
     let secret = |new: Option<String>, old: String| new.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or(old);
     if let Some(url) = u.prowlarr_url {
         c.prowlarr_url = url;
@@ -116,16 +141,25 @@ pub fn update_config(u: ConfigUpdate) -> anyhow::Result<Config> {
     c.prowlarr_key = secret(u.prowlarr_key, c.prowlarr_key);
     c.tgdb_key = secret(u.tgdb_key, c.tgdb_key);
     c.iic_key = secret(u.iic_key, c.iic_key);
+    // No isitcracked address: its built-in setup, key and CDN included.
+    if c.iic_url.is_empty() {
+        c.iic_key.clear();
+        c.iic_cdn.clear();
+    }
     save_config(c)
 }
 
 /// Public view for Settings: URLs plus "has key" flags, never the secrets.
+/// isitcracked's fields are what was saved (empty: the built-in setup).
 pub fn public_config() -> Value {
-    let c = config();
+    let c = stored_config();
+    let used = config();
     json!({
         "prowlarr_url": c.prowlarr_url, "has_key": !c.prowlarr_key.is_empty(),
         "has_tgdb_key": !c.tgdb_key.is_empty(),
         "iic_url": c.iic_url, "iic_cdn": c.iic_cdn, "has_iic_key": !c.iic_key.is_empty(),
+        "iic_default_url": DEFAULT_IIC_URL, "iic_default_cdn": DEFAULT_IIC_CDN,
+        "iic_ready": !used.iic_url.trim().is_empty() && !used.iic_key.trim().is_empty(),
         "tpb_url": c.tpb_url,
         "tpb_default": DEFAULT_TPB,
         "community_url": c.community_url,

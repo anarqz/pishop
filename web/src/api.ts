@@ -435,9 +435,14 @@ export interface ServicesConfig {
   prowlarr_url: string
   has_key: boolean
   has_tgdb_key: boolean
+  /** isitcracked as saved; empty = the built-in setup (iic_default_*). */
   iic_url: string
   iic_cdn: string
   has_iic_key: boolean
+  iic_default_url: string
+  iic_default_cdn: string
+  /** Discover has what it needs (saved or built-in). */
+  iic_ready: boolean
   tpb_url: string
   /** The community catalog's address; empty = piShop's repository (community_default). */
   community_url?: string

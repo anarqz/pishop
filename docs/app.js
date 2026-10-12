@@ -504,7 +504,7 @@
       ],
       [
         'O que preciso configurar?',
-        'Nada para começar: a Loja já busca no The Pirate Bay. O Prowlarr (endereço e chave de API) é opcional e soma os seus indexadores; o Descobrir usa a API do isitcracked e os detalhes dos jogos podem usar o TheGamesDB — sem eles, o piShop avisa e segue funcionando. Tudo fica em Configurações → Serviços — e dá para importar a configuração de alguém de um arquivo ou de um link (gist do GitHub, Pastebin). A loja da Steam e o SteamGridDB não pedem chave.',
+        'Nada para começar: a Loja já busca no The Pirate Bay. O Prowlarr (endereço e chave de API) é opcional e soma os seus indexadores; o Descobrir já vem com a API pública do isitcracked (dá para trocar) e os detalhes dos jogos podem usar o TheGamesDB — sem ele, o piShop avisa e segue funcionando. Tudo fica em Configurações → Serviços — e dá para importar a configuração de alguém de um arquivo ou de um link (gist do GitHub, Pastebin). A loja da Steam e o SteamGridDB não pedem chave.',
       ],
       [
         'O que é a aba Comunidade?',
@@ -558,7 +558,7 @@
       ],
       [
         'What do I need to set up?',
-        "Nothing to get started: the Store already searches The Pirate Bay. Prowlarr (address and API key) is optional and adds your indexers; Discover uses the isitcracked API and game details can use TheGamesDB — without them piShop says so and keeps working. It all lives in Settings → Services — and someone's setup can be imported from a file or a link (a GitHub gist, Pastebin). The Steam store and SteamGridDB don't need a key.",
+        "Nothing to get started: the Store already searches The Pirate Bay. Prowlarr (address and API key) is optional and adds your indexers; Discover comes with isitcracked's public API built in (you can change it) and game details can use TheGamesDB — without it piShop says so and keeps working. It all lives in Settings → Services — and someone's setup can be imported from a file or a link (a GitHub gist, Pastebin). The Steam store and SteamGridDB don't need a key.",
       ],
       [
         'What is the Community tab?',

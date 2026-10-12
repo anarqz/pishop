@@ -438,26 +438,27 @@ function IndexersSection() {
       <div className="form-grid">
         <label>
           <span>Endpoint (RPC)</span>
-          <input data-nav className="field" placeholder="https://….supabase.co/rest/v1/rpc/list_games_paged" value={iicUrl} onChange={e => setIicUrl(e.target.value)} />
+          <input data-nav className="field" placeholder={cfg?.iic_default_url} value={iicUrl} onChange={e => setIicUrl(e.target.value)} />
         </label>
         <label>
           <span>{tr('API key')}</span>
-          <input data-nav className="field" type="password" placeholder={kept(cfg?.has_iic_key) || 'apikey'} value={iicKey} onChange={e => setIicKey(e.target.value)} />
+          <input data-nav className="field" type="password" placeholder={iicUrl ? kept(cfg?.has_iic_key) || 'apikey' : tr('Built-in key')} value={iicKey} onChange={e => setIicKey(e.target.value)} />
         </label>
         <label>
           <span>{tr('Covers CDN')}</span>
-          <input data-nav className="field" placeholder="https://cdn.example.com" value={iicCdn} onChange={e => setIicCdn(e.target.value)} />
+          <input data-nav className="field" placeholder={cfg?.iic_default_cdn} value={iicCdn} onChange={e => setIicCdn(e.target.value)} />
         </label>
       </div>
+      <p className="muted">{tr('Empty address: piShop’s built-in isitcracked setup.')}</p>
       <TestLine state={tests.iic ?? { s: 'idle' }} />
       <div className="row">
-        <button data-nav className="btn" disabled={!iicUrl} onClick={() => run('iic', async () => {
+        <button data-nav className="btn" onClick={() => run('iic', async () => {
           const r = await api.testService('iic', { url: iicUrl, key: iicKey, cdn: iicCdn })
           return trn(r.total ?? 0, 'Connected · {n} cracked game', 'Connected · {n} cracked games')
         })}>
           {tr('Test')}
         </button>
-        <button data-nav className="btn primary" disabled={!iicUrl} onClick={() => save({ iic_url: iicUrl, iic_key: iicKey, iic_cdn: iicCdn }, 'isitcracked')}>
+        <button data-nav className="btn primary" onClick={() => save({ iic_url: iicUrl, iic_key: iicKey, iic_cdn: iicCdn }, 'isitcracked')}>
           {tr('Save')}
         </button>
       </div>

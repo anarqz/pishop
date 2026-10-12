@@ -128,5 +128,7 @@
   "Couldn't import: {error}": "Não foi possível importar: {error}",
   "A Pastebin code, a GitHub gist or any link to the file": "Um código do Pastebin, um gist do GitHub ou qualquer link para o arquivo",
   "code": "código",
-  "Just the Pastebin code, or any link to the file (like a GitHub gist).": "Só o código do Pastebin, ou um link para o arquivo (como um gist do GitHub)."
+  "Just the Pastebin code, or any link to the file (like a GitHub gist).": "Só o código do Pastebin, ou um link para o arquivo (como um gist do GitHub).",
+  "Built-in key": "Chave embutida",
+  "Empty address: piShop’s built-in isitcracked setup.": "Endereço vazio: a configuração do isitcracked que vem com o piShop."
 }

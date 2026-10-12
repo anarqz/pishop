@@ -72,7 +72,8 @@ fn home() -> PathBuf {
 
 /// Writes the current services setup, secrets included, to ~/Downloads.
 pub fn export() -> anyhow::Result<PathBuf> {
-    let c = catalog::config();
+    // What was set up here: isitcracked's built-in setup isn't exported.
+    let c = catalog::stored_config();
     let file = ServicesFile {
         kind: MARK.into(),
         version: 1,

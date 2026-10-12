@@ -53,7 +53,7 @@ export default function Discover({
   useEffect(() => {
     api
       .catalogConfig()
-      .then(c => setIic(!!c.iic_url && c.has_iic_key))
+      .then(c => setIic(c.iic_ready))
       .catch(() => setIic(true))
   }, [])
   const [search, setSearch] = useState(memory.search)
