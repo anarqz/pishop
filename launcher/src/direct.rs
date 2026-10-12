@@ -330,6 +330,11 @@ pub fn remove(id: u64, delete: bool) {
 static HTTP: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(20))
+        // Nothing from the server for this long, headers included: the
+        // request fails and is made again. Without it a server that took
+        // the connection and went quiet (or Wi-Fi that dropped) held a
+        // connection forever.
+        .read_timeout(Duration::from_secs(30))
         .build()
         .expect("http client")
 });
@@ -616,6 +621,7 @@ async fn parallel(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>, 
     let mut window = (Instant::now(), total - left(&segs));
     let mut saved = Instant::now();
     let mut last_err: Option<anyhow::Error> = None;
+    let mut done_at_err = total - left(&segs);
     let mut stopped = false;
     loop {
         tokio::select! {
@@ -635,7 +641,17 @@ async fn parallel(id: u64, size: Option<u64>, stop: &mut watch::Receiver<bool>, 
                 if let Err(e) = result {
                     log!("direto: {id} conexão da fatia {i}: {e:#}");
                     last_err = Some(e);
-                    continue;
+                    // Its server counts as the slowest now, and its place is
+                    // taken again while the download as a whole still gets
+                    // somewhere; when nothing does, the connections run out
+                    // and the download retries from the top.
+                    speeds[lane] = 0.0;
+                    let done = total - left(&segs);
+                    let moving = done > done_at_err;
+                    done_at_err = done;
+                    if !moving {
+                        continue;
+                    }
                 }
                 if stopped || *stop.borrow() {
                     continue;
@@ -796,7 +812,11 @@ async fn fetch_slice(
     use tokio::io::AsyncSeekExt;
     let mut r = match first {
         Some(r) => r,
-        None => range_request(from, end, link, mirror, source).await?,
+        None => tokio::select! {
+            biased;
+            _ = stop.changed() => return Ok(()),
+            r = range_request(from, end, link, mirror, source) => r?,
+        },
     };
     if *stop.borrow() {
         return Ok(());
