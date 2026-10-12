@@ -225,6 +225,12 @@ export default function CommunityInstallPage({
             restore.current?.()
             void run(() => api.communityProvide(i.id, p.id, path), tr('File added'))
           }}
+          onPickSource={src => {
+            const p = pick
+            setPick(null)
+            restore.current?.()
+            void run(() => api.communityProvideSource(i.id, p.id, src), tr('Copying to this device'))
+          }}
         />
       )}
       {remove && (
@@ -263,6 +269,10 @@ function PartRow({ p, first, canChange, onPick }: { p: CommunityInstallPart; fir
     switch (p.state) {
       case 'waiting':
         return p.hint || tr('Pick your own copy')
+      case 'copying': {
+        const of = p.total ? tr('{done} of {total}', { done: formatBytes(p.done), total: formatBytes(p.total) }) : formatBytes(p.done)
+        return `${tr('Copying from {source}', { source: p.copying_from ?? '' })} · ${of}${p.speed > 0 ? ` · ${formatBytes(p.speed)}/s` : ''}`
+      }
       case 'verifying':
         return tr('Checking… {pct}%', { pct: pct(p.verify) })
       case 'ready':
@@ -287,7 +297,7 @@ function PartRow({ p, first, canChange, onPick }: { p: CommunityInstallPart; fir
         : null
   return (
     <div className={`cm-part ${p.state}`}>
-      <Icon name={p.kind === 'user' || p.provided ? 'sd' : p.kind === 'torrent' ? 'torrent' : 'download'} />
+      <Icon name={p.state === 'copying' ? 'network' : p.kind === 'user' || p.provided ? 'sd' : p.kind === 'torrent' ? 'torrent' : 'download'} />
       <span className="inst-row-main">
         <b>
           {p.name} <small className="cm-kind">{partKind(p)}</small>
@@ -296,8 +306,8 @@ function PartRow({ p, first, canChange, onPick }: { p: CommunityInstallPart; fir
           {p.state === 'waiting' && p.error ? p.error : status}
         </small>
         {p.provided && p.path && <small className="mono">{homePath(p.path)}</small>}
-        {(p.state === 'downloading' || p.state === 'verifying') && (
-          <Progress value={p.state === 'verifying' ? p.verify : frac} state={p.paused ? 'paused' : undefined} />
+        {(p.state === 'downloading' || p.state === 'verifying' || p.state === 'copying') && (
+          <Progress value={p.state === 'verifying' ? p.verify : frac} state={p.paused && p.state === 'downloading' ? 'paused' : undefined} />
         )}
       </span>
       {action ? (

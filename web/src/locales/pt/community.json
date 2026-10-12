@@ -120,5 +120,15 @@
   "continues from {size}": "continua a partir de {size}",
   "used as it is": "usado como está",
   "{n} connection": "{n} conexão",
-  "{n} connections": "{n} conexões"
+  "{n} connections": "{n} conexões",
+  "Drives": "Unidades",
+  "Network storage set up in Settings → Game sources": "Armazenamento em rede configurado em Configurações → Fontes de jogos",
+  "A file from here is copied to this device first (Transfers → Copies), then checked.": "Um arquivo daqui é copiado para este aparelho primeiro (Transferências → Cópias) e depois conferido.",
+  "All game sources": "Todas as fontes de jogos",
+  "No game sources yet: add your network storage in Settings → Game sources.": "Ainda não há fontes de jogos: adicione o seu armazenamento em rede em Configurações → Fontes de jogos.",
+  "This folder is empty.": "Esta pasta está vazia.",
+  "Copying to this device": "Copiando para este aparelho",
+  "Copying from {source}": "Copiando de {source}",
+  "this part takes a {types} file": "esta parte aceita um arquivo {types}",
+  "{source}: {path} · copied when the install starts": "{source}: {path} · copiado quando a instalação começar"
 }

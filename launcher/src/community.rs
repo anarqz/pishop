@@ -463,6 +463,8 @@ pub enum PartState {
     /// The user has to pick the file.
     Waiting,
     Downloading,
+    /// Being copied from a game source (network storage) to the device.
+    Copying,
     Verifying,
     Ready,
     Failed,
@@ -492,6 +494,9 @@ pub struct PartRec {
     /// Bytes, when known (GitHub assets resolve it at start).
     #[serde(default)]
     pub size: Option<u64>,
+    /// The copy job bringing it from a game source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -714,6 +719,7 @@ async fn adopt_newer(r: &Record) {
                 verify: 0.0,
                 extracted: false,
                 size: x.size,
+                copy: None,
             });
         }
         rec.manifest = m;
@@ -723,6 +729,11 @@ async fn adopt_newer(r: &Record) {
 /// Downloading: start what hasn't started, follow what runs, check what finished.
 async fn downloads(r: &Record) -> anyhow::Result<()> {
     adopt_newer(r).await;
+    let Some(r) = record(&r.id) else { return Ok(()) };
+    let r = &r;
+    for p in r.parts.iter().filter(|p| p.state == PartState::Copying) {
+        copied(r, p);
+    }
     let Some(r) = record(&r.id) else { return Ok(()) };
     let r = &r;
     for p in &r.parts {
@@ -1359,6 +1370,9 @@ struct InstallReq {
     /// Files the user already picked, by part id.
     #[serde(default)]
     files: BTreeMap<String, String>,
+    /// Files picked on game sources (copied first), by part id.
+    #[serde(default)]
+    sources: BTreeMap<String, SourcePick>,
 }
 
 async fn begin_install(id: &str, req: InstallReq) -> anyhow::Result<Value> {
@@ -1455,6 +1469,7 @@ async fn begin_install(id: &str, req: InstallReq) -> anyhow::Result<Value> {
             verify: 0.0,
             extracted: false,
             size: p.size,
+            copy: None,
         })
         .collect();
     let rec = Record {
@@ -1488,6 +1503,11 @@ async fn begin_install(id: &str, req: InstallReq) -> anyhow::Result<Value> {
             change_part(id, &part, |p| p.error = Some(format!("{e:#}")));
         }
     }
+    for (part, pick) in req.sources {
+        if let Err(e) = provide_from_source(id, &part, &pick) {
+            change_part(id, &part, |p| p.error = Some(format!("{e:#}")));
+        }
+    }
     Ok(view(&record(id).ok_or_else(|| anyhow!("gone"))?))
 }
 
@@ -1510,6 +1530,11 @@ fn looks_partial(s: &Part, file: &Path) -> bool {
 /// partial one smaller than the part (moved next to the download and
 /// continued from where it stopped).
 fn provide(id: &str, part: &str, path: &str) -> anyhow::Result<()> {
+    provide_file(id, part, path, false)
+}
+
+/// `ours`: a copy piShop made (from a game source), deleted with the downloads.
+fn provide_file(id: &str, part: &str, path: &str, ours: bool) -> anyhow::Result<()> {
     let r = record(id).ok_or_else(|| anyhow!(tr!("no such install", "instalação não encontrada")))?;
     let s = spec(&r, part).ok_or_else(|| anyhow!(tr!("no such part", "parte não encontrada")))?.clone();
     let p = r.parts.iter().find(|p| p.id == part).cloned().ok_or_else(|| anyhow!(tr!("no such part", "parte não encontrada")))?;
@@ -1607,8 +1632,106 @@ fn provide(id: &str, part: &str, path: &str) -> anyhow::Result<()> {
         }
     });
     log!("comunidade: {id}/{part} ← arquivo do usuário {}", file.display());
-    verify_then_ready(id, part, file, true);
+    verify_then_ready(id, part, file, !ours);
     Ok(())
+}
+
+/// A file on a game source (network storage) for a part: copied to the
+/// device first (Transfers → Copies), then taken like a file picked here.
+/// The part's own download waits meanwhile.
+#[derive(Deserialize, Clone, Debug)]
+pub struct SourcePick {
+    pub source_id: String,
+    /// Relative to the share's root.
+    pub path: String,
+    pub name: String,
+    #[serde(default)]
+    pub size: Option<u64>,
+}
+
+fn provide_from_source(id: &str, part: &str, pick: &SourcePick) -> anyhow::Result<()> {
+    let r = record(id).ok_or_else(|| anyhow!(tr!("no such install", "instalação não encontrada")))?;
+    let s = spec(&r, part).ok_or_else(|| anyhow!(tr!("no such part", "parte não encontrada")))?.clone();
+    let p = r.parts.iter().find(|p| p.id == part).cloned().ok_or_else(|| anyhow!(tr!("no such part", "parte não encontrada")))?;
+    if !matches!(r.stage, Stage::Downloading | Stage::Failed) || matches!(p.state, PartState::Ready | PartState::Verifying | PartState::Copying) && !p.provided {
+        bail!(tr!("the parts can't change now", "as partes não podem mudar agora"));
+    }
+    let name = direct::safe_name(&pick.name);
+    if name.is_empty() {
+        bail!(tr!("pick a file", "escolha um arquivo"));
+    }
+    if let PartSource::User { extensions, .. } = &s.source {
+        let low = name.to_lowercase();
+        if !extensions.is_empty() && !extensions.iter().any(|x| low.ends_with(&x.to_lowercase())) {
+            bail!(tr!("this part takes a {} file", "esta parte aceita um arquivo {}", extensions.join(" / ")));
+        }
+    }
+    let resumable = matches!(s.source, PartSource::Http { .. } | PartSource::Itch { .. } | PartSource::Github { .. });
+    if let (Some(want), Some(have)) = (p.size.or(s.size), pick.size) {
+        if have > want {
+            bail!(tr!("this file is bigger than the part", "este arquivo é maior que a parte"));
+        }
+        if have < want && !(resumable && looks_partial(&s, Path::new(&name))) {
+            bail!(tr!("this file is smaller than the part", "este arquivo é menor que a parte"));
+        }
+    }
+    let dest = PathBuf::from(&r.downloads).join(part).join("copy");
+    std::fs::create_dir_all(&dest)?;
+    let job = crate::jobs::enqueue(&pick.source_id, &dest.display().to_string(), vec![crate::jobs::NewItem { path: pick.path.clone(), name: name.clone(), dir: false }])?
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!(tr!("couldn't start the copy", "não foi possível começar a cópia")))?;
+    if let Some(did) = p.direct {
+        direct::pause(did);
+    }
+    change_part(id, part, |p| {
+        p.state = PartState::Copying;
+        p.copy = Some(job);
+        p.error = None;
+    });
+    change(id, |r| {
+        if r.stage == Stage::Failed && r.failed_at == Some(Stage::Downloading) {
+            r.stage = Stage::Downloading;
+            r.error = None;
+            r.failed_at = None;
+        }
+    });
+    log!("comunidade: {id}/{part} copiando {} de {} → {}", pick.path, pick.source_id, dest.display());
+    Ok(())
+}
+
+/// A part's copy from a game source: once it's on the device it's taken
+/// like a file picked here; if it failed, the part goes back to what it was.
+fn copied(r: &Record, p: &PartRec) {
+    let user = spec(r, &p.id).is_some_and(|s| matches!(s.source, PartSource::User { .. }));
+    let job = p.copy.and_then(|j| crate::jobs::list().into_iter().find(|x| x.id == j));
+    let back = |error: Option<String>| {
+        change_part(&r.id, &p.id, |x| {
+            x.state = if user { PartState::Waiting } else { PartState::Downloading };
+            x.copy = None;
+            x.error = error;
+        });
+        if let Some(did) = p.direct {
+            direct::resume(did);
+        }
+    };
+    match job {
+        Some(j) if j.status == crate::jobs::Status::Done => {
+            let file = Path::new(&j.dest_dir).join(&j.name);
+            change_part(&r.id, &p.id, |x| {
+                x.state = if user { PartState::Waiting } else { PartState::Downloading };
+                x.copy = None;
+            });
+            if let Err(e) = provide_file(&r.id, &p.id, &file.display().to_string(), true) {
+                back(Some(format!("{e:#}")));
+            }
+        }
+        Some(j) if matches!(j.status, crate::jobs::Status::Failed | crate::jobs::Status::Canceled) => {
+            back(Some(j.error.unwrap_or_else(|| tr!("the copy stopped", "a cópia parou"))));
+        }
+        Some(_) => {}
+        None => back(Some(tr!("the copy isn't in Transfers anymore", "a cópia não está mais em Transferências"))),
+    }
 }
 
 async fn set_paused(id: &str, paused: bool) -> anyhow::Result<()> {
@@ -1676,6 +1799,9 @@ async fn remove(id: &str, delete: bool) -> anyhow::Result<Value> {
     EXTRACTS.lock().unwrap().retain(|(g, _), _| g != id);
     let mut freed = 0u64;
     for p in &r.parts {
+        if let Some(j) = p.copy {
+            crate::jobs::cancel(j);
+        }
         if let Some(d) = p.direct {
             if delete {
                 freed += direct::get(d).map(|d| d.done).unwrap_or(0);
@@ -1689,6 +1815,9 @@ async fn remove(id: &str, delete: bool) -> anyhow::Result<Value> {
         }
     }
     if delete {
+        // Everything downloaded or copied for it (counted before it goes).
+        let dir = PathBuf::from(&r.downloads);
+        freed = freed.max(tokio::task::spawn_blocking(move || crate::relocate::dir_size(&dir)).await.unwrap_or(0));
         let _ = std::fs::remove_dir_all(&r.downloads);
     }
     let installed = r.stage == Stage::Installed || library::get(&library::community_key(id)).is_some_and(|e| e.install.is_some_and(|s| s.appid.is_some()));
@@ -1780,7 +1909,12 @@ fn view(r: &Record) -> Value {
             let (mut done, mut total, mut speed) = (0u64, p.size.or(s.and_then(|s| s.size)).unwrap_or(0), 0f64);
             let mut paused = false;
             let mut connections = 0usize;
-            if let Some(d) = p.direct.and_then(direct::get) {
+            let copy = p.copy.and_then(|j| crate::jobs::list().into_iter().find(|x| x.id == j));
+            if let Some(j) = copy.as_ref().filter(|_| p.state == PartState::Copying) {
+                done = j.done_bytes;
+                total = if j.total_bytes > 0 { j.total_bytes } else { total };
+                speed = j.speed;
+            } else if let Some(d) = p.direct.and_then(direct::get) {
                 done = d.done;
                 total = if d.total > 0 { d.total } else { total };
                 speed = d.speed;
@@ -1824,6 +1958,7 @@ fn view(r: &Record) -> Value {
                 "resumable": s.is_some_and(|s| matches!(s.source, PartSource::Http { .. } | PartSource::Itch { .. })),
                 "torrent": p.torrent,
                 "connections": connections,
+                "copying_from": copy.map(|j| j.source_name),
             })
         })
         .collect();
@@ -2109,6 +2244,12 @@ pub fn router() -> Router {
             "/api/community/installs/{id}/parts/{part}",
             post(|UrlPath((id, part)): UrlPath<(String, String)>, Json(r): Json<FileReq>| async move {
                 reply(provide(&id, &part, &r.path).map(|_| json!({})))
+            }),
+        )
+        .route(
+            "/api/community/installs/{id}/parts/{part}/source",
+            post(|UrlPath((id, part)): UrlPath<(String, String)>, Json(pick): Json<SourcePick>| async move {
+                reply(provide_from_source(&id, &part, &pick).map(|_| json!({})))
             }),
         )
         .route(

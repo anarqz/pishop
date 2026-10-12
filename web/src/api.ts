@@ -523,7 +523,7 @@ export interface CommunitySetup {
   status: CommunityStatus
 }
 export type CommunityStage = 'downloading' | 'extracting' | 'preparing' | 'shortcut' | 'installed' | 'failed'
-export type CommunityPartState = 'waiting' | 'downloading' | 'verifying' | 'ready' | 'failed'
+export type CommunityPartState = 'waiting' | 'downloading' | 'copying' | 'verifying' | 'ready' | 'failed'
 export interface CommunityInstallPart {
   id: string
   name: string
@@ -551,6 +551,8 @@ export interface CommunityInstallPart {
   torrent: string | null
   /** Connections fetching it in parallel right now. */
   connections: number
+  /** The game source it's being copied from. */
+  copying_from: string | null
 }
 /** A community install as Transfers shows it. */
 export interface CommunityInstall {
@@ -756,11 +758,17 @@ export const api = {
   communityScript: (id: string) => call<{ name: string; source: string; sha256: string; revision: number }>(`/api/community/${id}/script`),
   communityCheck: (id: string, part: string, path: string) =>
     post<{ size: number; verified: boolean; partial: boolean }>(`/api/community/${id}/check/${part}`, { path }),
-  communityInstall: (id: string, r: { library: string; tool: string; files: Record<string, string> }) =>
+  communityInstall: (
+    id: string,
+    r: { library: string; tool: string; files: Record<string, string>; sources: Record<string, { source_id: string; path: string; name: string; size: number }> },
+  ) =>
     post<CommunityInstall>(`/api/community/${id}/install`, r),
   communityInstalls: () => call<CommunityInstall[]>('/api/community/installs'),
   communityAction: (id: string, action: 'pause' | 'resume' | 'retry') => post<CommunityInstall | null>(`/api/community/installs/${id}/${action}`),
   communityProvide: (id: string, part: string, path: string) => post<object>(`/api/community/installs/${id}/parts/${part}`, { path }),
+  /** A file on a game source for a part: copied to the device, then checked. */
+  communityProvideSource: (id: string, part: string, pick: { source_id: string; path: string; name: string; size: number }) =>
+    post<object>(`/api/community/installs/${id}/parts/${part}/source`, pick),
   communityRemove: (id: string, deleteFiles: boolean) => post<{ freed: number }>(`/api/community/installs/${id}/remove`, { delete: deleteFiles }),
   communityIssues: (id: string) => call<{ issues: CommunityIssue[]; new_issue: string; label: string | null }>(`/api/community/${id}/issues`),
   communityComments: (n: number) => call<Array<{ user: string; created: string; body: string }>>(`/api/community/issues/${n}/comments`),

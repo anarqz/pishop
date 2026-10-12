@@ -1088,3 +1088,8 @@ button.scard:focus .sring small { color: #39414b; }
 .cmt-issue-view h3 { margin: 0; font-size: 20px; color: var(--text-strong); }
 .cmt-text { margin: 0; font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cmt-comment { display: grid; gap: 4px; padding: 10px 12px; border-radius: 8px; background: rgba(255,255,255,.04); }
+
+/* file picker: drives / game sources */
+.fp-modes { flex: none; }
+.fp-places { flex: none; margin-top: -4px; }
+.fp-places .chip { font-size: 13px; }

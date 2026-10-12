@@ -14,7 +14,7 @@ import { focusFirst, input, keepFocus } from '../input'
 import { StorageCard, homePath } from '../storage'
 import { Dialog, Glyph, Icon, Spinner, toast, useHints } from '../ui'
 import CommunityInstallPage, { pickStart } from './CommunityInstall'
-import FilePicker from './FilePicker'
+import FilePicker, { type SourcePick } from './FilePicker'
 import { ChooseDialog, Choice } from './GameSetup'
 
 const ROTATE_MS = 9000
@@ -588,7 +588,7 @@ function fmtDate(iso: string) {
 
 // ---------- installing: where, which Proton, the user's files ----------
 
-type FileCheck = { path: string; state: 'checking' | 'ok' | 'error'; msg?: string; partial?: boolean; size?: number }
+type FileCheck = { path: string; state: 'checking' | 'ok' | 'error'; msg?: string; partial?: boolean; size?: number; source?: SourcePick }
 
 function SetupFlow({ game: g, onClose, onStarted }: { game: CommunityGame; onClose: () => void; onStarted: (i: CommunityInstall) => void }) {
   const [setup, setSetup] = useState<CommunitySetup | null>(null)
@@ -635,8 +635,12 @@ function SetupFlow({ game: g, onClose, onStarted }: { game: CommunityGame; onClo
   const start = async () => {
     setBusy(true)
     try {
-      const paths = Object.fromEntries(Object.entries(files).filter(([, c]) => c.state === 'ok').map(([k, c]) => [k, c.path]))
-      const i = await api.communityInstall(g.id, { library, tool, files: paths })
+      const ok = Object.entries(files).filter(([, c]) => c.state === 'ok')
+      const paths = Object.fromEntries(ok.filter(([, c]) => !c.source).map(([k, c]) => [k, c.path]))
+      const sources = Object.fromEntries(
+        ok.filter(([, c]) => c.source).map(([k, c]) => [k, { source_id: c.source!.source_id, path: c.source!.path, name: c.source!.name, size: c.source!.size }]),
+      )
+      const i = await api.communityInstall(g.id, { library, tool, files: paths, sources })
       toast(tr('Installing {name}', { name: g.name }), tr('Follow it here or in Transfers.'), 'ok')
       onStarted(i)
     } catch (e) {
@@ -696,6 +700,17 @@ function SetupFlow({ game: g, onClose, onStarted }: { game: CommunityGame; onClo
           setView('setup')
           pickFor(p.id, path)
         }}
+        onPickSource={src => {
+          setView('setup')
+          const exts = p.source.extensions ?? []
+          const bad = p.kind === 'user' && exts.length > 0 && !exts.some(x => src.name.toLowerCase().endsWith(x))
+          setFiles(f => ({
+            ...f,
+            [p.id]: bad
+              ? { path: src.path, state: 'error', msg: tr('this part takes a {types} file', { types: exts.join(' / ') }) }
+              : { path: src.path, state: 'ok', size: src.size, source: src },
+          }))
+        }}
       />
     )
   }
@@ -742,7 +757,9 @@ function SetupFlow({ game: g, onClose, onStarted }: { game: CommunityGame; onClo
                             : c?.state === 'error'
                               ? c.msg
                               : c?.state === 'ok'
-                                ? homePath(c.path)
+                                ? c.source
+                                  ? tr('{source}: {path} · copied when the install starts', { source: c.source.source_name, path: c.source.path })
+                                  : homePath(c.path)
                                 : p.source.hint || tr('Your own copy')}
                         </small>
                       </span>
@@ -774,7 +791,9 @@ function SetupFlow({ game: g, onClose, onStarted }: { game: CommunityGame; onClo
                             : c?.state === 'error'
                               ? c.msg
                               : c?.state === 'ok'
-                                ? `${homePath(c.path)} · ${c.partial ? tr('continues from {size}', { size: formatBytes(c.size ?? 0) }) : tr('used as it is')}`
+                                ? c.source
+                                  ? tr('{source}: {path} · copied when the install starts', { source: c.source.source_name, path: c.source.path })
+                                  : `${homePath(c.path)} · ${c.partial ? tr('continues from {size}', { size: formatBytes(c.size ?? 0) }) : tr('used as it is')}`
                                 : [partKind({ kind: p.kind, provided: false }), p.size ? formatBytes(p.size) : null].filter(Boolean).join(' · ')}
                         </small>
                       </span>
