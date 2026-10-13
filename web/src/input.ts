@@ -375,8 +375,10 @@ function inView(el: HTMLElement, c: HTMLElement) {
 
 /**
  * Scrolls `el` into its container with a margin. At the extremes (nothing
- * focusable above/below it) the container goes all the way to the top/bottom,
- * so non-focusable content (headers, "load more" markers) shows up too.
+ * focusable above/below it) the container goes as far toward its top/bottom
+ * as `el` allows, so non-focusable content (headers, "load more" markers)
+ * shows up too — but `el` never leaves the view: a page's last buttons sit
+ * above a long text, and going all the way down hid them.
  */
 export function ensureVisible(el: HTMLElement) {
   ensureVisibleX(el)
@@ -386,19 +388,18 @@ export function ensureVisible(el: HTMLElement) {
   const others = [...c.querySelectorAll<HTMLElement>('[data-nav]')].filter(o => o !== el && o.offsetParent !== null)
   const noneAbove = !others.some(o => o.getBoundingClientRect().bottom <= r.top + 1)
   const noneBelow = !others.some(o => o.getBoundingClientRect().top >= r.bottom - 1)
-  if (noneAbove) {
-    c.scrollTop = 0
-    return
-  }
-  if (noneBelow) {
-    c.scrollTop = c.scrollHeight
-    return
-  }
   const cr = c.getBoundingClientRect()
   const z = zoomOf(c)
-  const margin = 24 * z
-  if (r.top < cr.top + margin) c.scrollTop -= (cr.top + margin - r.top) / z
-  else if (r.bottom > cr.bottom - margin) c.scrollTop += (r.bottom - (cr.bottom - margin)) / z
+  const margin = 24
+  // The scroll positions (content pixels) that keep `el` in view with the
+  // margin; an element taller than the view shows its top.
+  const top = c.scrollTop + (r.top - cr.top) / z
+  const bottom = c.scrollTop + (r.bottom - cr.top) / z
+  const latest = top - margin
+  const earliest = Math.min(latest, bottom + margin - c.clientHeight)
+  const end = c.scrollHeight - c.clientHeight
+  const want = noneAbove ? 0 : noneBelow ? end : c.scrollTop
+  c.scrollTop = Math.max(0, Math.min(end, Math.max(earliest, Math.min(latest, want))))
 }
 
 /** Returns true when focus moved (or was placed for the first time). */
