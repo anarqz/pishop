@@ -20,8 +20,10 @@ pub fn router() -> Router {
         .route("/api/sources/test", post(test_source))
         .route("/api/sources/{id}", delete(delete_source))
         .route("/api/sources/{id}/list", get(list_remote))
+        .route("/api/sources/{id}/read", get(read_remote))
         .route("/api/local/places", get(|| async { Json(localfs::places()) }))
         .route("/api/local/list", get(list_local))
+        .route("/api/local/read", get(read_local))
         .route("/api/local/mkdir", post(mkdir))
         .route("/api/local/space", get(local_space))
         .route("/api/jobs", get(|| async { Json(jobs::list()) }).post(create_jobs))
@@ -131,6 +133,74 @@ async fn list_remote(Path(id): Path<String>, Query(q): Query<PathQuery>) -> Resp
             crate::log!("smb: {} entradas em {:?} ({} ms)", entries.len(), q.path, started.elapsed().as_millis());
             Json(json!({ "path": q.path.trim_matches('/'), "entries": entries })).into_response()
         }
+        Err(e) => err(StatusCode::BAD_GATEWAY, format!("{e:#}")),
+    }
+}
+
+/// The explorer's viewer reads at most this much of a file.
+const PREVIEW_MAX: u64 = 1024 * 1024;
+
+/// A text file's start for the explorer's viewer (README.md, a .txt, an
+/// .ini…): UTF-8, or UTF-16 with its byte-order mark (Windows programs).
+fn text_reply(bytes: Vec<u8>, size: u64) -> Response {
+    let utf16 = |b: &[u8], le: bool| {
+        let units: Vec<u16> = b.chunks_exact(2).map(|c| if le { u16::from_le_bytes([c[0], c[1]]) } else { u16::from_be_bytes([c[0], c[1]]) }).collect();
+        String::from_utf16_lossy(&units)
+    };
+    let text = if let Some(b) = bytes.strip_prefix(&[0xFF, 0xFE]) {
+        utf16(b, true)
+    } else if let Some(b) = bytes.strip_prefix(&[0xFE, 0xFF]) {
+        utf16(b, false)
+    } else {
+        let b = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(&bytes);
+        if b.iter().take(8192).any(|c| *c == 0) {
+            return err(StatusCode::UNSUPPORTED_MEDIA_TYPE, tr!("this isn't a text file", "este não é um arquivo de texto"));
+        }
+        String::from_utf8_lossy(b).into_owned()
+    };
+    Json(json!({ "text": text, "size": size, "truncated": (bytes.len() as u64) < size })).into_response()
+}
+
+async fn read_local(Query(q): Query<PathQuery>) -> Response {
+    let path = PathBuf::from(&q.path);
+    if !path.is_absolute() {
+        return err(StatusCode::BAD_REQUEST, tr!("invalid path", "caminho inválido"));
+    }
+    let read = tokio::task::spawn_blocking(move || -> std::io::Result<(Vec<u8>, u64)> {
+        use std::io::Read;
+        let f = std::fs::File::open(&path)?;
+        let size = f.metadata()?.len();
+        let mut buf = Vec::new();
+        f.take(PREVIEW_MAX).read_to_end(&mut buf)?;
+        Ok((buf, size))
+    });
+    match read.await {
+        Ok(Ok((bytes, size))) => text_reply(bytes, size),
+        Ok(Err(e)) => err(StatusCode::BAD_REQUEST, tr!("couldn't open {}: {e}", "não foi possível abrir {}: {e}", q.path)),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+async fn read_remote(Path(id): Path<String>, Query(q): Query<PathQuery>) -> Response {
+    use smb::ReadAt;
+    let Some(s) = sources::get(&id) else { return err(StatusCode::NOT_FOUND, tr!("source not found", "fonte não encontrada")) };
+    let read = async {
+        let (file, len) = smbfs::open_read(&s, &q.path).await?;
+        let want = len.min(PREVIEW_MAX) as usize;
+        let mut buf = vec![0u8; want];
+        let mut got = 0;
+        while got < want {
+            let n = file.read_at(&mut buf[got..], got as u64).await?;
+            if n == 0 {
+                break;
+            }
+            got += n;
+        }
+        buf.truncate(got);
+        anyhow::Ok((buf, len))
+    };
+    match read.await {
+        Ok((bytes, size)) => text_reply(bytes, size),
         Err(e) => err(StatusCode::BAD_GATEWAY, format!("{e:#}")),
     }
 }

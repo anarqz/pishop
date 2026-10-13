@@ -13,6 +13,7 @@ import { guessSystem } from '../systems'
 import { tr, trn } from '../i18n'
 import { StorageCard, StorageStatus, homePath } from '../storage'
 import { Dialog, type Hint, Icon, Spinner, TextPrompt, toast, useHints } from '../ui'
+import FileViewer, { previewable } from './FileViewer'
 
 const ROW_H = 46
 
@@ -154,7 +155,9 @@ export default function Explorer({
   const [panes, setPanes] = useState<[PaneMem, PaneMem]>(memory.panes ?? [start, start])
   const [filters, setFilters] = useState<[string, string]>(['', ''])
   const [marked, setMarked] = useState<{ side: 0 | 1; names: Set<string> }>({ side: 0, names: new Set() })
-  const [dialog, setDialog] = useState<null | 'copy' | 'filter' | 'mkdir' | 'goto' | 'menu'>(null)
+  const [dialog, setDialog] = useState<null | 'copy' | 'filter' | 'mkdir' | 'goto' | 'menu' | 'view'>(null)
+  // A text file open in the viewer (A on a README.md, a .txt…).
+  const [viewing, setViewing] = useState<{ name: string; path: string; source: string | null } | null>(null)
 
   const setPane = useCallback((side: 0 | 1, f: (p: PaneMem) => PaneMem) => {
     setPanes(ps => (side === 0 ? [f(ps[0]), ps[1]] : [ps[0], f(ps[1])]))
@@ -224,7 +227,10 @@ export default function Explorer({
     const e = row.entry!
     const p = panes[side]
     if (e.dir) goTo(side, p.where, joinPath(p.path, e.name))
-    else toggleMark(side, e.name)
+    else if (previewable(e.name)) {
+      setViewing({ name: e.name, path: joinPath(p.path, e.name), source: p.where.kind === 'smb' ? p.where.id : null })
+      setDialog('view')
+    } else toggleMark(side, e.name)
   }
 
   const goUp = (side: 0 | 1) => {
@@ -410,6 +416,7 @@ export default function Explorer({
   }, [dialog])
 
   const markedHere = marked.side === active ? marked.names.size : 0
+  const focusedRow = rows[active][panes[active].cursor]
   const hints: Hint[] = head[active]
     ? [
         { glyph: 'A', label: tr('Go to…') },
@@ -417,7 +424,8 @@ export default function Explorer({
         { glyph: 'B', label: tr('List') },
       ]
     : [
-        { glyph: 'A', label: tr('Open') },
+        // A opens folders and text files; on any other file it marks it.
+        { glyph: 'A', label: focusedRow?.kind === 'entry' && !focusedRow.entry!.dir && !previewable(focusedRow.entry!.name) ? tr('Mark') : tr('Open') },
         { glyph: 'X', label: tr('Mark') },
         { glyph: 'Y', label: markedHere ? tr('Copy {n}', { n: markedHere }) : tr('Copy') },
         { glyph: ['L2', 'R2'], label: tr('Location') },
@@ -476,6 +484,15 @@ export default function Explorer({
       {pane(0)}
       {pane(1)}
 
+      {dialog === 'view' && viewing && (
+        <FileViewer
+          {...viewing}
+          onClose={() => {
+            setDialog(null)
+            setViewing(null)
+          }}
+        />
+      )}
       {dialog === 'copy' && to.where.kind === 'local' && (
         <CopyDialog
           sourceId={from.where.kind === 'local' ? 'local' : from.where.id}

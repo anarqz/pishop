@@ -478,6 +478,13 @@ export interface CommunityPart {
   /** Newer versions from its source can replace it (GitHub, itch.io). */
   updatable?: boolean
 }
+export interface TextFile {
+  text: string
+  size: number
+  /** Only the start of a bigger file. */
+  truncated: boolean
+}
+
 /** "Check for updates": one updatable part. */
 export interface CommunityPartUpdate {
   id: string
@@ -790,6 +797,10 @@ export const api = {
   ) =>
     post<CommunityInstall>(`/api/community/${id}/install`, r),
   communityInstalls: () => call<CommunityInstall[]>('/api/community/installs'),
+  /** A text file's start (at most 1 MB), for Explore's viewer. */
+  readLocal: (path: string) => call<TextFile>(`/api/local/read?path=${encodeURIComponent(path)}`),
+  readRemote: (source: string, path: string) =>
+    call<TextFile>(`/api/sources/${encodeURIComponent(source)}/read?path=${encodeURIComponent(path)}`),
   communityUpdates: (id: string) => call<CommunityUpdates>(`/api/community/${encodeURIComponent(id)}/updates`),
   communityUpdate: (id: string, parts: string[]) => post<CommunityInstall>(`/api/community/${encodeURIComponent(id)}/update`, { parts }),
   communityAction: (id: string, action: 'pause' | 'resume' | 'retry') => post<CommunityInstall | null>(`/api/community/installs/${id}/${action}`),
