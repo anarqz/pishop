@@ -417,6 +417,12 @@ function nearest(current: HTMLElement, dir: 'up' | 'down' | 'left' | 'right', el
     const primary = dir === 'left' ? -dx : dir === 'right' ? dx : dir === 'up' ? -dy : dy
     const secondary = dir === 'left' || dir === 'right' ? Math.abs(dy) : Math.abs(dx)
     if (primary <= 1) continue
+    // Left/right keep to the row: something on another row only counts when
+    // it lies wholly to that side. A wrapped row's last button sits under the
+    // first, its center a little to the left, and isn't "left" of it.
+    if ((dir === 'left' || dir === 'right') && (o.bottom <= r.top || o.top >= r.bottom)) {
+      if (dir === 'left' ? o.right > r.left : o.left < r.right) continue
+    }
     const score = primary + secondary * 2
     if (score < bestScore) {
       bestScore = score
