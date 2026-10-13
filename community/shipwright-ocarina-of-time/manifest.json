@@ -3,7 +3,7 @@
   "id": "shipwright-ocarina-of-time",
   "name": "The Legend of Zelda: Ocarina of Time",
   "platform": "Nintendo 64",
-  "revision": 1,
+  "revision": 2,
   "updated": "2026-10-12",
   "authors": ["anarqz"],
   "summary": "Ocarina of Time as a native Linux game: HarbourMasters' Ship of Harkinian, built from your own copy of the game.",
@@ -35,7 +35,8 @@
       "size": 32113856,
       "checksums": {
         "sha256": "8507bb70413e130e452ebaf5f156bfd78013ee0144364b7968680e8cf064a0fa"
-      }
+      },
+      "updatable": true
     },
     {
       "id": "rom",

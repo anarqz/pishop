@@ -3,7 +3,7 @@
   "id": "starship-star-fox-64",
   "name": "Star Fox 64",
   "platform": "Nintendo 64",
-  "revision": 1,
+  "revision": 2,
   "updated": "2026-10-12",
   "authors": ["anarqz"],
   "summary": "Star Fox 64 as a native Linux game: HarbourMasters' Starship, built from your own cartridge dump.",
@@ -36,7 +36,8 @@
       "checksums": {
         "sha256": "85dd03d3ad8abd881aa3aa2b49ded336627b44b8ac8333e3c41b5bf7c4336289"
       },
-      "extract": ""
+      "extract": "",
+      "updatable": true
     },
     {
       "id": "rom",

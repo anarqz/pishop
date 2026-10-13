@@ -8,12 +8,13 @@
 #   ./Mods/ExtraOptions/     ← RokkuDayo's Extra Options mod
 #
 # This finds the game's package folder (the one holding Mount/AppxManifest.xml)
-# and points Azimuth at it in azimuth.ini, so the launcher doesn't ask for the
-# folder at the first start. The path is relative to azimuth.exe, so the game
-# keeps working when piShop moves the whole folder to another library.
+# and points Azimuth at it in data/azimuth.ini — where Azimuth keeps its
+# settings — so the launcher doesn't ask for the folder at the first start.
+# The path is relative to azimuth.exe, as Azimuth itself writes it, so the
+# game keeps working when piShop moves the whole folder to another library.
 #
-# Safe to run again: an azimuth.ini already there keeps the player's settings
-# and only gets its game_folder line updated.
+# Safe to run again (an update runs it again too): a data/azimuth.ini already
+# there is the player's, and only its game_folder line changes.
 set -euo pipefail
 
 echo "::step Checking Azimuth"
@@ -57,8 +58,12 @@ done
 echo "::step Pointing Azimuth at the game"
 # Windows separators, relative to azimuth.exe: Game\Anthem_1.0.0.64_x64__…
 folder=${package//\//\\}
-
-if [[ -f azimuth.ini ]]; then
+# Azimuth is a Windows program: data/azimuth.ini is UTF-16 with a byte-order
+# mark and Windows line ends. Edited as UTF-8 in /tmp, written back the same way.
+ini=data/azimuth.ini
+edit=/tmp/azimuth.ini
+if [[ -f $ini ]]; then
+  iconv -f UTF-16 -t UTF-8 "$ini" | tr -d '\r' > "$edit.old"
   found=0
   while IFS= read -r line || [[ -n $line ]]; do
     if [[ $line == game_folder=* ]]; then
@@ -67,14 +72,14 @@ if [[ -f azimuth.ini ]]; then
     else
       printf '%s\n' "$line"
     fi
-  done < azimuth.ini > azimuth.ini.new
+  done < "$edit.old" > "$edit"
   if (( ! found )); then
-    printf '[launcher]\ngame_folder=%s\n' "$folder" >> azimuth.ini.new
+    printf '[launcher]\ngame_folder=%s\n' "$folder" >> "$edit"
   fi
-  mv azimuth.ini.new azimuth.ini
 else
-  # Azimuth's own template (0.9.7) with its defaults; only game_folder is set.
-  cat > azimuth.ini <<INI
+  # Azimuth's own template (0.9.7) with its defaults, but 60 fps (fine on a
+  # ROG Ally and a Steam Deck OLED); only game_folder is set.
+  cat > "$edit" <<INI
 # Azimuth's settings, as key=value lines, which the launcher writes as the
 # player changes them. Lines that start with # are not read.
 [launcher]
@@ -94,7 +99,7 @@ graphics=default
 # system mixes down for an output with fewer).
 audio=system
 # 30 or 60.
-frame_rate=30
+frame_rate=60
 # fixed (the console's): each frame advances the game a fixed step, so it
 # slows down while frames run late; real-time: each frame advances the time
 # it took, so the game keeps its speed and late frames stutter.
@@ -111,5 +116,10 @@ language=
 player_name=Player 1
 INI
 fi
+{ printf '\xff\xfe'; awk '{ printf "%s\r\n", $0 }' "$edit" | iconv -f UTF-8 -t UTF-16LE; } > "$ini.new"
+mv -f "$ini.new" "$ini"
+# Earlier revisions of this recipe wrote the settings beside azimuth.exe,
+# where Azimuth doesn't look.
+rm -f azimuth.ini
 echo "game_folder=$folder"
 echo "::progress 100 Ready to play"

@@ -3,14 +3,14 @@
   "id": "azimuth-forza-horizon-2",
   "name": "Forza Horizon 2",
   "platform": "Xbox One",
-  "revision": 3,
+  "revision": 4,
   "updated": "2026-10-12",
   "authors": ["anarqz"],
   "summary": "The Xbox One edition of Forza Horizon 2 on SteamOS, through the Azimuth launcher.",
   "description": "Azimuth is a wrapper that runs the Xbox One version of Forza Horizon 2 on Windows (and on SteamOS through Proton). It translates the Xbox WinRT calls to Win32 and Xbox DirectX 11.X to desktop DirectX 12. The supported version of the game is 1.0.0.64.\n\nAzimuth is lightweight and reaches 720p60 or 1080p30 on a Steam Deck, so hardware on par or faster with 16 GB of RAM should be good to go.\n\nMain features:\n• Resolutions from 720p up to whatever your display uses\n• 30 or 60 fps\n• Three graphics modes: Low (lower than Xbox One, close to the game's split-screen profile), Default (Xbox One level) and High (shadows and reflections twice as detailed, shadows drawn three times as far, car models from photo mode, 16× anisotropic filtering)\n• Anti-aliasing: off, MSAA ×2 or MSAA ×4\n\npiShop points Azimuth at the game's files for you, so the launcher doesn't ask for the folder at the first start. Its settings live in azimuth.ini, in the game's folder.\n\nIncludes Extra Options by RokkuDayo: intro skip, change car anywhere, Autodrive (D-Pad Down; any driving input takes control back), all DLC packs and VIP unlocked, independent text and audio languages, 4K liveries, unrestricted photo mode and custom gamerpics. Toggle each one in data/bin/FH2_ExtraOptions.ini (read at game start).",
   "steamos": [
     "Controller ignored at “Press A”: on Linux/Proton, Azimuth 0.9.7 only reads the first controller slot. An always-connected generic USB receiver (DragonRise) takes it and your controller is ignored. Turn on “Ignore a generic USB receiver” in Games → Patches.",
-    "Stutters or slowdowns: keep the frame rate locked at 30 fps (frame_rate=30 in azimuth.ini, Azimuth's default).",
+    "Runs at 60 fps on a ROG Ally; if it stutters or slows down, pick 30 fps in Azimuth's launcher (frame_rate=30 in data/azimuth.ini).",
     "Extra Options: Autodrive is D-Pad Down. The treasure map unlock is off by default: set UnlockTreasureMap=1 in data/bin/FH2_ExtraOptions.ini."
   ],
   "wrapper": {
@@ -37,7 +37,8 @@
         "upload_id": 19662858,
         "file": "azimuth-windows.zip"
       },
-      "extract": ""
+      "extract": "",
+      "updatable": true
     },
     {
       "id": "game",
@@ -76,7 +77,8 @@
       "checksums": {
         "sha256": "c3a39dcbd1c42cb26d31727513097baa2e8344feb92b317a6be31837bf5be6b9"
       },
-      "extract": "Mods/ExtraOptions"
+      "extract": "Mods/ExtraOptions",
+      "updatable": true
     }
   ],
   "install": {

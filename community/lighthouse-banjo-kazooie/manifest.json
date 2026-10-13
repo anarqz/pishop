@@ -3,7 +3,7 @@
   "id": "lighthouse-banjo-kazooie",
   "name": "Banjo-Kazooie",
   "platform": "Nintendo 64",
-  "revision": 1,
+  "revision": 2,
   "updated": "2026-10-12",
   "authors": ["anarqz"],
   "summary": "Banjo-Kazooie as a native Linux game: HarbourMasters' Lighthouse, built from your own cartridge dump.",
@@ -35,7 +35,8 @@
       "checksums": {
         "sha256": "0ed81123ab142e711854c95921c1e37b2e75dd4a3966fa0382f65da7c775986d"
       },
-      "extract": ""
+      "extract": "",
+      "updatable": true
     },
     {
       "id": "rom",

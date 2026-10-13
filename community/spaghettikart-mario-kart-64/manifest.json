@@ -3,7 +3,7 @@
   "id": "spaghettikart-mario-kart-64",
   "name": "Mario Kart 64",
   "platform": "Nintendo 64",
-  "revision": 1,
+  "revision": 2,
   "updated": "2026-10-12",
   "authors": ["anarqz"],
   "summary": "Mario Kart 64 as a native Linux game: HarbourMasters' SpaghettiKart, built from your own cartridge dump.",
@@ -36,7 +36,8 @@
       "checksums": {
         "sha256": "54e249bd4aa71e55c63239c9c1c0eb522b07497d85f2ede193907059e4de250c"
       },
-      "extract": ""
+      "extract": "",
+      "updatable": true
     },
     {
       "id": "rom",
