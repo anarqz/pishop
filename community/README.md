@@ -112,6 +112,17 @@ it needs into the game's folder. For example:
 Archives in `extract` are extracted by piShop (zip, 7z, rar, iso, tar) with
 progress; the script doesn't need to.
 
+**`updatable: true`** (GitHub and itch.io parts only) lets players update that
+part from the game's page (**Check for updates**). piShop reads its versions
+itself: a GitHub part's newest stable release with an asset matching `asset`
+(the release's tag, or its name when the tag isn't a version), an itch.io
+part's "Version …" next to the file on the page, or its exact size. An update
+downloads the newer file, checks it against GitHub's own SHA-256 when there is
+one (the manifest's checksums belong to the reviewed version), extracts it
+over the old files, and runs `install.sh` again — so the script must cope with
+a newer file of the same kind (find it by pattern, not by an exact version
+name). Mark the wrapper, port or mod a recipe is built on, never the game data.
+
 ## install.sh
 
 Runs after every part is there and extracted, inside the game's folder.

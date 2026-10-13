@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  type CommunityGame, type CommunityInstall, type CommunityIssue, type CommunitySetup, type GameMeta, api, formatBytes, imgUrl,
+  type CommunityGame, type CommunityInstall, type CommunityIssue, type CommunitySetup, type CommunityUpdates, type GameMeta, api, formatBytes, imgUrl,
 } from '../api'
 import { partKind } from '../community'
 import { locale, tr, trn } from '../i18n'
@@ -432,9 +432,28 @@ function CommunityGamePage({
   onGoTransfers: () => void
 }) {
   const art = useArt(g)
-  const [panel, setPanel] = useState<null | 'setup' | 'script' | 'help' | 'progress'>(null)
+  const [panel, setPanel] = useState<null | 'setup' | 'script' | 'help' | 'progress' | 'update'>(null)
   const [install, setInstall] = useState<CommunityInstall | null>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
+
+  // Updates: checked when an installed game with updatable parts opens.
+  const updatable = g.parts.some(p => p.updatable)
+  const [updates, setUpdates] = useState<CommunityUpdates | null>(null)
+  const [checking, setChecking] = useState(false)
+  const checkUpdates = useCallback(async () => {
+    setChecking(true)
+    try {
+      setUpdates(await api.communityUpdates(g.id))
+    } catch (e) {
+      toast(tr("Couldn't check for updates"), (e as Error).message, 'error')
+    } finally {
+      setChecking(false)
+    }
+  }, [g.id])
+  useEffect(() => {
+    if (g.status.state === 'installed' && updatable) void checkUpdates()
+  }, [g.status.state, updatable, checkUpdates])
+  const partUpdate = (id: string) => updates?.parts.find(u => u.id === id)
 
   // The install's progress while it's on screen.
   const watching = panel === 'progress' || g.status.state === 'installing'
@@ -554,6 +573,16 @@ function CommunityGamePage({
                       <Icon name="pad" /> {tr('Open in Games')}
                     </button>
                   )}
+                  {updatable &&
+                    (updates?.available ? (
+                      <button data-nav className="btn big cmg-update-btn" onClick={() => show('update')}>
+                        <Icon name="download" /> {trn(updates.available, 'Update · {n} part', 'Update · {n} parts')}
+                      </button>
+                    ) : (
+                      <button data-nav className="btn big" disabled={checking} onClick={() => void checkUpdates()}>
+                        {checking ? <Spinner /> : <Icon name="refresh" />} {checking ? tr('Checking…') : updates ? tr('Up to date') : tr('Check for updates')}
+                      </button>
+                    ))}
                 </>
               ) : state === 'installing' ? (
                 <button data-nav data-nav-default className="btn primary big" onClick={() => show('progress')}>
@@ -603,7 +632,21 @@ function CommunityGamePage({
                           : [...new Set([partKind({ kind: p.kind, provided: false }), p.from].filter(Boolean))].join(' · ')}
                       </small>
                     </span>
-                    <span className="inst-row-side">{p.kind === 'user' ? tr('You pick it') : p.size ? formatBytes(p.size) : ''}</span>
+                    <span className="inst-row-side">
+                      {partUpdate(p.id)?.update ? (
+                        <span className="cmg-version new">
+                          {partUpdate(p.id)?.installed ?? '?'} → {partUpdate(p.id)?.latest ?? '?'}
+                        </span>
+                      ) : partUpdate(p.id)?.installed ? (
+                        <span className="cmg-version">{partUpdate(p.id)?.installed}</span>
+                      ) : p.kind === 'user' ? (
+                        tr('You pick it')
+                      ) : p.size ? (
+                        formatBytes(p.size)
+                      ) : (
+                        ''
+                      )}
+                    </span>
                   </div>
                 ))}
                 <p className="muted small">
@@ -652,6 +695,19 @@ function CommunityGamePage({
             </button>
           </div>
         </Dialog>
+      )}
+      {panel === 'update' && updates && (
+        <UpdateDialog
+          game={g}
+          updates={updates}
+          onClose={() => (hide(), restore.current?.())}
+          onStarted={i => {
+            setInstall(i)
+            setUpdates(null)
+            setPanel('progress')
+            onChanged()
+          }}
+        />
       )}
       {panel === 'script' && <ScriptDialog game={g} onClose={() => (hide(), restore.current?.())} />}
       {panel === 'help' && <TroubleshootPanel game={g} onClose={() => (hide(), restore.current?.())} />}
@@ -918,6 +974,71 @@ function SetupFlow({ game: g, onClose, onStarted }: { game: CommunityGame; onClo
         </button>
         <button data-nav className="btn primary" disabled={!ready} onClick={() => void start()}>
           {busy ? <Spinner /> : <Icon name="download" size={18} />} {tr('Start installation')}
+        </button>
+      </div>
+    </Dialog>
+  )
+}
+
+// ---------- updates ----------
+
+/**
+ * Update: the parts with a newer version, from where, and that the new files
+ * weren't reviewed with the recipe. Keeps the dialog open with the reason if
+ * starting fails.
+ */
+function UpdateDialog({
+  game: g,
+  updates,
+  onClose,
+  onStarted,
+}: {
+  game: CommunityGame
+  updates: CommunityUpdates
+  onClose: () => void
+  onStarted: (i: CommunityInstall) => void
+}) {
+  const newer = updates.parts.filter(u => u.update)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const go = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      onStarted(await api.communityUpdate(g.id, newer.map(u => u.id)))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Dialog title={tr('Update {name}', { name: g.name })} onClose={onClose}>
+      <div className="menu-list">
+        {newer.map(u => (
+          <div key={u.id} className="cmg-part">
+            <Icon name="download" />
+            <span className="inst-row-main">
+              <b>{u.name}</b>
+              <small>{u.from}</small>
+            </span>
+            <span className="inst-row-side cmg-version new">
+              {u.installed ?? '?'} → {u.latest ?? '?'}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="muted small">
+        {tr('The new files come straight from their source and weren’t reviewed with this recipe. piShop downloads them, puts them over the old ones and runs the install script again; your settings and saves stay.')}
+      </p>
+      {!updates.tracked && <p className="error small">{tr('This game was removed from Transfers: install it again from this page to update it.')}</p>}
+      {error && <p className="error small">{error}</p>}
+      <div className="row">
+        <button data-nav data-nav-default className="btn primary" disabled={busy || !updates.can_update} onClick={() => void go()}>
+          {busy ? <Spinner /> : <Icon name="download" />} {trn(newer.length, 'Update · {n} part', 'Update · {n} parts')}
+        </button>
+        <button data-nav className="btn" onClick={onClose}>
+          {tr('Cancel')}
         </button>
       </div>
     </Dialog>

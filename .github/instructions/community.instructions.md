@@ -39,6 +39,9 @@ review is the first. Be strict and specific; quote the line.
 - An `http` part without `size` and a checksum, or a `user` part without
   checksums of the accepted dumps (piShop verifies them before the script runs).
 - `launch.exe` or `extract` points outside the game's folder.
+- `updatable: true` on anything but the port, wrapper or mod the recipe runs
+  (never game data), or on a part whose script names its files by exact
+  version (an update brings a newer name: find them by pattern).
 - `patches` set environment variables unrelated to a documented workaround,
   or `launch.options` that run a command other than the game
   (`… ; something`, `bash -c`, a wrapper that isn't a known tool).

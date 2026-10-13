@@ -1079,6 +1079,10 @@ button.scard:focus .sring small { color: #39414b; }
 .cmg-part:last-of-type { border-bottom: 0; }
 .cmg-part.user .icon { stroke: var(--amber); }
 .cmg-parts > p { margin: 6px 4px 0; }
+/* Updates on a community game's page */
+.btn.cmg-update-btn { background: linear-gradient(120deg, #1a9fff, #3fb4ff); color: #fff; }
+.cmg-version { font-variant-numeric: tabular-nums; color: var(--muted); }
+.cmg-version.new { color: #7cc3ff; font-weight: 700; }
 
 .cm-setup { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .cm-setup .sstatus-text small { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

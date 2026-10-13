@@ -64,6 +64,8 @@ function checkPart(id, p, seen) {
   if (!p.name) fail(id, `${at}: no name`)
   if (p.role && !['launcher', 'game', 'data', 'other'].includes(p.role)) fail(id, `${at}: role is launcher, game, data or other`)
   if (p.extract !== undefined && !inside(p.extract)) fail(id, `${at}: extract must stay inside the game folder`)
+  if (p.updatable !== undefined && typeof p.updatable !== 'boolean') fail(id, `${at}: updatable is true or false`)
+  if (p.updatable && !['github', 'itch'].includes(p.source?.type)) fail(id, `${at}: only GitHub and itch.io parts can be updatable (piShop reads their versions)`)
   if (p.size !== undefined && !(Number.isInteger(p.size) && p.size > 0)) fail(id, `${at}: size is a byte count`)
   const c = p.checksums ?? {}
   if (c.sha1 && !hex(c.sha1, 40)) fail(id, `${at}: sha1 must be 40 hex digits`)

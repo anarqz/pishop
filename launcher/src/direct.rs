@@ -1033,28 +1033,115 @@ async fn itch_file(page: &str, upload: u64, csrf: &str, jar: &[String]) -> anyho
 
 // ---------- GitHub releases ----------
 
-/// The download URL and size of a release asset whose name matches `pattern`.
-pub async fn github_asset(repo: &str, tag: &str, pattern: &str) -> anyhow::Result<(String, u64, String)> {
-    let re = regex::RegexBuilder::new(pattern).case_insensitive(true).build().with_context(|| tr!("bad file pattern {pattern}", "padrão de arquivo inválido {pattern}"))?;
-    let path = if tag.is_empty() || tag == "latest" { "releases/latest".to_string() } else { format!("releases/tags/{tag}") };
-    let v: Value = HTTP
-        .get(format!("https://api.github.com/repos/{repo}/{path}"))
+/// A GitHub release's asset, and what the release is called.
+pub struct Release {
+    pub tag: String,
+    /// What people call it: the tag when it reads like a version ("1.2.0"),
+    /// else the release's name ("v0.2.34" for a rolling "Release" tag).
+    pub version: String,
+    pub url: String,
+    pub size: u64,
+    pub name: String,
+    /// GitHub's SHA-256 of the asset, when it has one.
+    pub sha256: Option<String>,
+}
+
+fn asset_pattern(pattern: &str) -> anyhow::Result<regex::Regex> {
+    regex::RegexBuilder::new(pattern).case_insensitive(true).build().with_context(|| tr!("bad file pattern {pattern}", "padrão de arquivo inválido {pattern}"))
+}
+
+async fn github(path: &str) -> anyhow::Result<Value> {
+    Ok(HTTP
+        .get(format!("https://api.github.com/repos/{path}"))
         .header(USER_AGENT, "piShop")
         .header("Accept", "application/vnd.github+json")
         .timeout(Duration::from_secs(20))
         .send()
         .await?
-        .error_for_status()
-        .with_context(|| tr!("GitHub: release {tag} of {repo} not found", "GitHub: versão {tag} de {repo} não encontrada"))?
+        .error_for_status()?
         .json()
-        .await?;
-    v["assets"]
-        .as_array()
+        .await?)
+}
+
+/// What a release is called: a tag with digits, else the release's name,
+/// else a version in the asset's name, else the tag.
+pub fn version_label(tag: &str, name: &str, asset: &str) -> String {
+    let digits = |s: &str| s.chars().any(|c| c.is_ascii_digit());
+    if digits(tag) {
+        return tag.trim().to_string();
+    }
+    if digits(name) {
+        return name.trim().to_string();
+    }
+    static VERSION: LazyLock<regex::Regex> = LazyLock::new(|| regex::Regex::new(r"\d+(?:\.\d+)+").unwrap());
+    VERSION.find(asset).map(|m| m.as_str().to_string()).unwrap_or_else(|| tag.trim().to_string())
+}
+
+fn release_of(r: &Value, re: &regex::Regex) -> Option<Release> {
+    let a = r["assets"].as_array()?.iter().find(|a| a["name"].as_str().is_some_and(|n| re.is_match(n)))?;
+    let tag = r["tag_name"].as_str().unwrap_or_default().to_string();
+    let name = a["name"].as_str()?.to_string();
+    Some(Release {
+        version: version_label(&tag, r["name"].as_str().unwrap_or_default(), &name),
+        tag,
+        url: a["browser_download_url"].as_str()?.to_string(),
+        size: a["size"].as_u64().unwrap_or(0),
+        sha256: a["digest"].as_str().and_then(|d| d.strip_prefix("sha256:")).map(str::to_lowercase),
+        name,
+    })
+}
+
+/// The asset matching `pattern` in the release tagged `tag` ("latest": the newest).
+pub async fn github_release(repo: &str, tag: &str, pattern: &str) -> anyhow::Result<Release> {
+    let re = asset_pattern(pattern)?;
+    let path = if tag.is_empty() || tag == "latest" { format!("{repo}/releases/latest") } else { format!("{repo}/releases/tags/{tag}") };
+    let v = github(&path).await.with_context(|| tr!("GitHub: release {tag} of {repo} not found", "GitHub: versão {tag} de {repo} não encontrada"))?;
+    release_of(&v, &re).ok_or_else(|| anyhow!(tr!("no file matching {pattern} in {repo}'s release", "nenhum arquivo como {pattern} na versão de {repo}")))
+}
+
+/// The newest stable release that has an asset matching `pattern`: what a
+/// community part marked updatable can move to.
+pub async fn github_latest(repo: &str, pattern: &str) -> anyhow::Result<Release> {
+    let re = asset_pattern(pattern)?;
+    let v = github(&format!("{repo}/releases?per_page=15")).await.with_context(|| tr!("GitHub: {repo}'s releases", "GitHub: versões de {repo}"))?;
+    v.as_array()
         .into_iter()
         .flatten()
-        .find(|a| a["name"].as_str().is_some_and(|n| re.is_match(n)))
-        .and_then(|a| Some((a["browser_download_url"].as_str()?.to_string(), a["size"].as_u64().unwrap_or(0), a["name"].as_str()?.to_string())))
-        .ok_or_else(|| anyhow!(tr!("no file matching {pattern} in {repo}'s release", "nenhum arquivo como {pattern} na versão de {repo}")))
+        .filter(|r| !r["draft"].as_bool().unwrap_or(false) && !r["prerelease"].as_bool().unwrap_or(false))
+        .find_map(|r| release_of(r, &re))
+        .ok_or_else(|| anyhow!(tr!("no release of {repo} has a file matching {pattern}", "nenhuma versão de {repo} tem um arquivo como {pattern}")))
+}
+
+/// The download URL and size of a release asset whose name matches `pattern`.
+pub async fn github_asset(repo: &str, tag: &str, pattern: &str) -> anyhow::Result<(String, u64, String)> {
+    let r = github_release(repo, tag, pattern).await?;
+    Ok((r.url, r.size, r.name))
+}
+
+// ---------- itch.io versions ----------
+
+/// The version itch.io shows next to an upload on the game's page ("Version
+/// 0.9.7", for uploads pushed with butler), found by the file's name.
+pub async fn itch_version(page: &str, file: &str) -> anyhow::Result<Option<String>> {
+    let html = HTTP.get(page.trim()).header(USER_AGENT, BROWSER).timeout(Duration::from_secs(20)).send().await?.error_for_status()?.text().await?;
+    Ok(itch_version_in(&html, file))
+}
+
+fn itch_version_in(html: &str, file: &str) -> Option<String> {
+    let at = html.find(&format!("title=\"{file}\""))?;
+    let rest = &html[at..];
+    // Only inside this upload's block.
+    let block = &rest[..rest.find("class=\"upload\"").unwrap_or(rest.len())];
+    let text = between(block, "class=\"version_name\">", "<")?;
+    Some(text.trim().trim_start_matches("Version").trim().to_string()).filter(|v| !v.is_empty())
+}
+
+/// The exact size of an itch.io upload now (what tells a new build apart
+/// when the page shows no version): the first byte of it, asked for.
+pub async fn itch_size(page: &str, upload_id: Option<u64>, file: &str) -> anyhow::Result<u64> {
+    let url = itch_url(page, upload_id, Some(file)).await?;
+    let r = HTTP.get(&url).header(USER_AGENT, BROWSER).header(RANGE, "bytes=0-0").timeout(Duration::from_secs(20)).send().await?.error_for_status()?;
+    total_of(&r, 0).ok_or_else(|| anyhow!(tr!("itch.io didn't say the file's size", "o itch.io não informou o tamanho do arquivo")))
 }
 
 // ---------- routes ----------
@@ -1124,6 +1211,18 @@ async fn action_route(UrlPath((id, action)): UrlPath<(u64, String)>) -> axum::re
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn versions_from_releases_and_itch_pages() {
+        assert_eq!(version_label("1.0.0", "SpaghettiKart Alfa", "spaghetti-linux.zip"), "1.0.0");
+        assert_eq!(version_label("Release", "v0.2.34", "FH2_Extra_Options_0.2.34-release.zip"), "v0.2.34");
+        assert_eq!(version_label("Release", "", "FH2_Extra_Options_0.2.34-release.zip"), "0.2.34");
+        let page = r#"<div class="upload"><div class="info_column"><div class="upload_name"><strong title="azimuth-windows.zip" class="name">azimuth-windows.zip</strong> <span class="file_size"><span>2.6 MB</span></span></div><div class="build_row"><span class="version_name">Version 0.9.7</span></div></div></div><div class="upload"><strong title="other.zip" class="name">other.zip</strong></div>"#;
+        assert_eq!(itch_version_in(page, "azimuth-windows.zip").as_deref(), Some("0.9.7"));
+        assert_eq!(itch_version_in(page, "other.zip"), None);
+        assert_eq!(itch_version_in(page, "missing.zip"), None);
+    }
+
 
     #[test]
     fn itch_uploads_from_a_download_page() {

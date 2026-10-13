@@ -118,6 +118,14 @@ Each part:
 | `torrent` | `urls` of the .torrent or a `magnet`, `files` (regex choosing files inside) |
 | `user` | `hint` (what to pick), `extensions` — checksums of every accepted dump are required |
 
+`"updatable": true` (GitHub and itch.io parts only) lets players update that
+part from the game's page: piShop reads the newer version itself (newest
+release matching `asset`; itch.io's "Version …" or the file's size), downloads
+it, extracts it over the old files and runs `install.sh` again. Use it for the
+port, wrapper or mod the recipe is built on — not game data — and make the
+script find that part's files by pattern (`*.appimage`), never by an exact
+version name.
+
 Pin `size` and a checksum for every downloaded part: a file that changes
 upstream then fails its check instead of running something nobody reviewed.
 

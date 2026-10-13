@@ -136,6 +136,10 @@ through `$schema`. The fields that matter most:
   launch options; `proton` names a preferred Proton.
 - **`patches`** — optional toggles players can switch in Games → Patches
   (environment variables for workarounds only some players need).
+- **`updatable`** — `true` on a GitHub or itch.io part (the port, the wrapper,
+  a mod) lets players update it from the game's page: piShop finds the newer
+  release by itself, downloads it, extracts it over the old files and runs
+  your script again. Write the script so it finds that part's files by pattern.
 - **`revision`** — start at 1 and bump it on every change.
 
 **Getting sizes and checksums:**

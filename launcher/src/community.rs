@@ -142,6 +142,10 @@ pub struct Part {
     /// Extract this archive into the game's folder, under this subfolder ("" = its root).
     #[serde(default)]
     pub extract: Option<String>,
+    /// Newer versions from the same source (a GitHub repository's releases,
+    /// the itch.io page) may replace it: "Check for updates" on the game's page.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub updatable: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -298,6 +302,9 @@ pub fn validate(m: &Manifest) -> anyhow::Result<()> {
             && !inside(x)
         {
             bail!("{}: part {} extracts outside the game's folder", m.id, p.id);
+        }
+        if p.updatable && !matches!(p.source, PartSource::Github { .. } | PartSource::Itch { .. }) {
+            bail!("{}: part {}: only GitHub and itch.io parts can be updatable", m.id, p.id);
         }
         let https = |u: &str| u.starts_with("https://");
         match &p.source {
@@ -497,6 +504,36 @@ pub struct PartRec {
     /// The copy job bringing it from a game source.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copy: Option<u64>,
+    /// The version installed (GitHub and itch.io parts), for updates.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed: Option<Version>,
+    /// A newer version being installed by an update.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update: Option<Version>,
+}
+
+/// A version of a GitHub or itch.io part.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct Version {
+    /// What it's called ("1.0.1", "v0.2.34"); empty when the source doesn't say.
+    #[serde(default)]
+    pub label: String,
+    /// What tells two versions apart: GitHub "tag|asset|size", itch.io the
+    /// exact size; empty when unknown.
+    #[serde(default)]
+    pub key: String,
+    /// GitHub: the release's tag (an update downloads that release).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+    /// GitHub's SHA-256 of the asset: an update is checked against it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+}
+
+fn github_key(tag: &str, name: &str, size: u64) -> String {
+    format!("{tag}|{}|{size}", direct::safe_name(name))
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -720,6 +757,8 @@ async fn adopt_newer(r: &Record) {
                 extracted: false,
                 size: x.size,
                 copy: None,
+                installed: None,
+                update: None,
             });
         }
         rec.manifest = m;
@@ -780,9 +819,9 @@ fn start_part(r: &Record, p: &PartRec, s: &Part) {
     if !BUSY.lock().unwrap().insert(key.clone()) {
         return;
     }
-    let (id, part, spec, folder) = (r.id.clone(), p.id.clone(), s.clone(), PathBuf::from(&r.downloads).join(&p.id));
+    let (id, part, spec, folder, update) = (r.id.clone(), p.id.clone(), s.clone(), PathBuf::from(&r.downloads).join(&p.id), p.update.clone());
     tokio::spawn(async move {
-        let result = begin(&id, &part, &spec, &folder).await;
+        let result = begin(&id, &part, &spec, &folder, update.as_ref()).await;
         BUSY.lock().unwrap().remove(&key);
         match result {
             Ok(Some(done)) => verify_then_ready(&id, &part, done, false),
@@ -796,17 +835,31 @@ fn start_part(r: &Record, p: &PartRec, s: &Part) {
 }
 
 /// Some(file): it was already downloaded (an install started over), to check.
-async fn begin(id: &str, part: &str, s: &Part, folder: &Path) -> anyhow::Result<Option<PathBuf>> {
+/// `update`: the newer version an update installs instead of the manifest's.
+async fn begin(id: &str, part: &str, s: &Part, folder: &Path, update: Option<&Version>) -> anyhow::Result<Option<PathBuf>> {
     let owner = owner(id, part);
     let (source, file, size) = match &s.source {
         PartSource::Http { urls, file } => (direct::Source::Http { urls: urls.clone() }, file.clone(), s.size),
         PartSource::Itch { page, upload_id, file } => {
-            (direct::Source::Itch { page: page.clone(), upload_id: *upload_id, file: Some(file.clone()) }, file.clone(), s.size)
+            // What the page calls this upload, kept for "Check for updates".
+            if update.is_none() {
+                let label = direct::itch_version(page, file).await.ok().flatten().unwrap_or_default();
+                change_part(id, part, |p| p.installed = Some(Version { label, ..Version::default() }));
+            }
+            let size = update.and_then(|u| u.size).or(s.size);
+            (direct::Source::Itch { page: page.clone(), upload_id: *upload_id, file: Some(file.clone()) }, file.clone(), size)
         }
         PartSource::Github { repo, tag, asset } => {
-            let (_, size, name) = direct::github_asset(repo, tag, asset).await?;
-            change_part(id, part, |p| p.size = Some(size));
-            (direct::Source::Github { repo: repo.clone(), tag: tag.clone(), asset: asset.clone() }, direct::safe_name(&name), Some(size).filter(|s| *s > 0))
+            let tag = update.and_then(|u| u.tag.clone()).unwrap_or_else(|| tag.clone());
+            let r = direct::github_release(repo, &tag, asset).await?;
+            let installed = Version { label: r.version.clone(), key: github_key(&r.tag, &r.name, r.size), tag: Some(r.tag.clone()), size: Some(r.size), sha256: r.sha256.clone() };
+            change_part(id, part, |p| {
+                p.size = Some(r.size);
+                if update.is_none() {
+                    p.installed = Some(installed);
+                }
+            });
+            (direct::Source::Github { repo: repo.clone(), tag: r.tag, asset: asset.clone() }, direct::safe_name(&r.name), Some(r.size).filter(|s| *s > 0))
         }
         PartSource::Torrent { urls, magnet, files } => {
             let hash = add_torrent(urls, magnet.as_deref(), files.as_deref(), folder).await?;
@@ -947,9 +1000,15 @@ fn verify_then_ready(id: &str, part: &str, path: PathBuf, provided: bool) {
         p.verify = 0.0;
         p.error = None;
     });
+    // An update's file is newer than the one reviewed: GitHub's own SHA-256
+    // checks it when there is one, the manifest's pins can't.
+    let update = r.parts.iter().find(|p| p.id == part).and_then(|p| p.update.clone());
+    let sums = match &update {
+        Some(u) => Checksums { sha256: u.sha256.clone().into_iter().collect(), ..Checksums::default() },
+        None => s.checksums.clone(),
+    };
     let (id, part) = (id.to_string(), part.to_string());
     tokio::spawn(async move {
-        let sums = s.checksums.clone();
         let (pid, ppart, ppath) = (id.clone(), part.clone(), path.clone());
         let result = tokio::task::spawn_blocking(move || {
             check(&ppath, &sums, |f| {
@@ -965,10 +1024,17 @@ fn verify_then_ready(id: &str, part: &str, path: PathBuf, provided: bool) {
             .and_then(|r| r);
         BUSY.lock().unwrap().remove(&key);
         let user = matches!(s.source, PartSource::User { .. });
+        let len = std::fs::metadata(&path).map(|m| m.len()).ok();
         match result {
             Ok(()) => change_part(&id, &part, |p| {
                 p.state = PartState::Ready;
                 p.verify = 1.0;
+                if p.size.is_none() {
+                    p.size = len;
+                }
+                if let Some(u) = p.update.take() {
+                    p.installed = Some(u);
+                }
             }),
             Err(e) => {
                 log!("comunidade: {id}/{part} não confere: {e:#}");
@@ -1470,6 +1536,8 @@ async fn begin_install(id: &str, req: InstallReq) -> anyhow::Result<Value> {
             extracted: false,
             size: p.size,
             copy: None,
+            installed: None,
+            update: None,
         })
         .collect();
     let rec = Record {
@@ -1838,6 +1906,176 @@ async fn remove(id: &str, delete: bool) -> anyhow::Result<Value> {
     let _ = std::fs::remove_dir_all(dir().join(id));
     log!("comunidade: {id} removido das transferências (apagar: {delete}, instalado: {installed})");
     Ok(json!({ "freed": freed }))
+}
+
+// ---------- updates ----------
+
+/// The newest version of an updatable part at its source.
+async fn latest_version(s: &Part) -> anyhow::Result<Version> {
+    match &s.source {
+        PartSource::Github { repo, asset, .. } => {
+            let r = direct::github_latest(repo, asset).await?;
+            Ok(Version { label: r.version, key: github_key(&r.tag, &r.name, r.size), tag: Some(r.tag), size: Some(r.size), sha256: r.sha256 })
+        }
+        PartSource::Itch { page, upload_id, file } => {
+            let label = direct::itch_version(page, file).await.ok().flatten().unwrap_or_default();
+            let size = direct::itch_size(page, *upload_id, file).await?;
+            Ok(Version { label, key: size.to_string(), size: Some(size), ..Version::default() })
+        }
+        _ => bail!(tr!("this part can't be updated", "esta parte não pode ser atualizada")),
+    }
+}
+
+/// What's installed of a part. An install from before versions were kept is
+/// told by what it has: the file's name and size, the manifest's tag.
+fn installed_version(p: &PartRec, s: &Part) -> Version {
+    let mut v = p.installed.clone().unwrap_or_default();
+    let size = p.size.or_else(|| p.path.as_ref().and_then(|f| std::fs::metadata(f).ok()).map(|m| m.len()));
+    match &s.source {
+        PartSource::Github { tag, .. } if v.key.is_empty() => {
+            let file = p.path.as_deref().and_then(|f| Path::new(f).file_name()).map(|n| n.to_string_lossy().to_string());
+            if let (Some(file), Some(size)) = (file, size) {
+                let tag = v.tag.clone().unwrap_or_else(|| tag.clone());
+                v.key = github_key(&tag, &file, size);
+                if v.label.is_empty() {
+                    v.label = direct::version_label(&tag, "", &file);
+                }
+            }
+        }
+        PartSource::Itch { .. } if v.key.is_empty() => {
+            if let Some(size) = size {
+                v.key = size.to_string();
+            }
+        }
+        _ => {}
+    }
+    v
+}
+
+/// Whether `latest` is another version than `installed`: GitHub by release
+/// and asset; itch.io by the version the page shows, or else by size. Not
+/// knowing what's installed counts as another version.
+fn is_newer(s: &Part, installed: &Version, latest: &Version) -> bool {
+    let plain = |l: &str| l.trim().trim_start_matches(['v', 'V']).to_string();
+    if matches!(s.source, PartSource::Itch { .. }) && !installed.label.is_empty() && !latest.label.is_empty() {
+        return plain(&installed.label) != plain(&latest.label);
+    }
+    installed.key.is_empty() || installed.key != latest.key
+}
+
+/// "Check for updates": each updatable part, what's installed and what's newest.
+async fn updates(id: &str) -> anyhow::Result<Value> {
+    let m = manifest(id).await.or_else(|e| saved_manifest(id).ok_or(e))?;
+    let r = record(id);
+    let mut list = Vec::new();
+    for s in m.parts.iter().filter(|p| p.updatable) {
+        let installed = r.as_ref().and_then(|r| r.parts.iter().find(|p| p.id == s.id)).map(|p| installed_version(p, s)).unwrap_or_default();
+        let (kind, from) = source_label(&s.source);
+        let label = |l: &str| Some(l.to_string()).filter(|l| !l.is_empty());
+        match latest_version(s).await {
+            Ok(latest) => {
+                let update = is_newer(s, &installed, &latest);
+                // The same file, from an install that didn't keep its name.
+                let shown = if !update && installed.label.is_empty() { latest.label.clone() } else { installed.label.clone() };
+                list.push(json!({ "id": s.id, "name": s.name, "kind": kind, "from": from, "installed": label(&shown), "latest": label(&latest.label), "update": update, "error": null }));
+            }
+            Err(e) => list.push(json!({ "id": s.id, "name": s.name, "kind": kind, "from": from, "installed": label(&installed.label), "latest": null, "update": false, "error": format!("{e:#}") })),
+        }
+    }
+    let available = list.iter().filter(|x| x["update"] == true).count();
+    let state = r.as_ref().map(|r| r.stage.clone());
+    Ok(json!({
+        "parts": list,
+        "available": available,
+        // An update goes through the install's record (the game's parts and folder).
+        "can_update": matches!(state, Some(Stage::Installed | Stage::Failed)),
+        "tracked": r.is_some(),
+    }))
+}
+
+/// Installs the newest version of the parts asked for: their new files
+/// download, are checked and extracted over the old ones, the script runs
+/// again (scripts are safe to run again) and the shortcut stays. The other
+/// parts aren't downloaded or extracted again.
+async fn begin_update(id: &str, ids: &[String]) -> anyhow::Result<Value> {
+    let r = record(id).ok_or_else(|| {
+        anyhow!(tr!(
+            "this game isn't in Transfers anymore: install it again from its page to update it",
+            "este jogo não está mais em Transferências: instale de novo pela página dele para atualizar"
+        ))
+    })?;
+    if !matches!(r.stage, Stage::Installed | Stage::Failed) {
+        bail!(tr!("this game is being installed (see Transfers)", "este jogo está sendo instalado (veja Transferências)"));
+    }
+    let m = manifest(id).await?;
+    let mut picked = Vec::new();
+    for pid in ids {
+        let s = m.parts.iter().find(|p| &p.id == pid && p.updatable).ok_or_else(|| anyhow!(tr!("{pid} can't be updated", "{pid} não pode ser atualizado")))?;
+        picked.push((pid.clone(), latest_version(s).await?));
+    }
+    if picked.is_empty() {
+        bail!(tr!("nothing to update", "nada para atualizar"));
+    }
+    // Where the game is now: piShop may have moved it since.
+    let game_dir = library::get(&library::community_key(id)).and_then(|e| e.install).and_then(|i| i.game_dir).unwrap_or_else(|| r.game_dir.clone());
+    // The old download goes first: a file of the same name would pass for the new one.
+    for (pid, _) in &picked {
+        let Some(p) = r.parts.iter().find(|p| &p.id == pid) else { continue };
+        if let Some(d) = p.direct {
+            direct::remove(d, true);
+        } else if !p.provided
+            && let Some(f) = &p.path
+        {
+            let _ = std::fs::remove_file(f);
+        }
+    }
+    change(id, |rec| {
+        let fresh = |pid: &str, user: bool| PartRec {
+            id: pid.to_string(),
+            state: if user { PartState::Waiting } else { PartState::Downloading },
+            path: None,
+            direct: None,
+            torrent: None,
+            provided: false,
+            error: None,
+            verify: 0.0,
+            extracted: false,
+            size: None,
+            copy: None,
+            installed: None,
+            update: None,
+        };
+        for (pid, latest) in &picked {
+            if !rec.parts.iter().any(|p| &p.id == pid) {
+                rec.parts.push(fresh(pid, false));
+            }
+            if let Some(p) = rec.parts.iter_mut().find(|p| &p.id == pid) {
+                let installed = p.installed.take();
+                *p = PartRec { size: latest.size, installed, update: Some(latest.clone()), ..fresh(pid, false) };
+            }
+        }
+        // Parts a newer revision added come along; the user's own files that
+        // are gone are asked for again (the script reads them).
+        for s in &m.parts {
+            let user = matches!(s.source, PartSource::User { .. });
+            match rec.parts.iter_mut().find(|p| p.id == s.id) {
+                None => rec.parts.push(fresh(&s.id, user)),
+                Some(p) if user && p.path.as_ref().is_none_or(|f| !Path::new(f).exists()) => *p = fresh(&s.id, true),
+                Some(_) => {}
+            }
+        }
+        rec.manifest = m.clone();
+        rec.game_dir = game_dir.clone();
+        rec.stage = Stage::Downloading;
+        rec.failed_at = None;
+        rec.error = None;
+        rec.step = None;
+        rec.progress = None;
+        rec.paused = false;
+        rec.finished = None;
+    });
+    log!("comunidade: atualizando {id}: {}", picked.iter().map(|(p, v)| format!("{p} → {}", if v.label.is_empty() { "?" } else { &v.label })).collect::<Vec<_>>().join(", "));
+    Ok(view(&record(id).ok_or_else(|| anyhow!("gone"))?))
 }
 
 // ---------- views ----------
@@ -2217,6 +2455,11 @@ struct RemoveReq {
 }
 
 #[derive(Deserialize)]
+struct UpdateReq {
+    parts: Vec<String>,
+}
+
+#[derive(Deserialize)]
 struct UrlReq {
     url: String,
 }
@@ -2230,6 +2473,8 @@ pub fn router() -> Router {
         .route("/api/community/{id}/script", get(script_route))
         .route("/api/community/{id}/setup", get(|UrlPath(id): UrlPath<String>| async move { reply(setup(&id).await) }))
         .route("/api/community/{id}/issues", get(|UrlPath(id): UrlPath<String>| async move { reply(issues(&id).await) }))
+        .route("/api/community/{id}/updates", get(|UrlPath(id): UrlPath<String>| async move { reply(updates(&id).await) }))
+        .route("/api/community/{id}/update", post(|UrlPath(id): UrlPath<String>, Json(r): Json<UpdateReq>| async move { reply(begin_update(&id, &r.parts).await) }))
         .route(
             "/api/community/{id}/check/{part}",
             post(|UrlPath((id, part)): UrlPath<(String, String)>, Json(r): Json<FileReq>| async move {
@@ -2271,6 +2516,40 @@ async fn action_route(UrlPath((id, action)): UrlPath<(String, String)>) -> Respo
 
 #[cfg(test)]
 mod tests {
+
+    fn part(source: PartSource) -> Part {
+        Part { id: "p".into(), name: "P".into(), description: String::new(), role: String::new(), source, size: None, checksums: Checksums::default(), extract: None, updatable: true }
+    }
+
+    fn rec(path: &str, size: u64) -> PartRec {
+        PartRec {
+            id: "p".into(), state: PartState::Ready, path: Some(path.into()), direct: None, torrent: None, provided: false, error: None,
+            verify: 1.0, extracted: true, size: Some(size), copy: None, installed: None, update: None,
+        }
+    }
+
+    #[test]
+    fn updates_know_older_installs_and_newer_versions() {
+        // Forza's Extra Options, installed before versions were kept: a rolling "Release" tag.
+        let s = part(PartSource::Github { repo: "RokkuDayo/ForzaHorizon2_ExtraOptions".into(), tag: "Release".into(), asset: "^FH2_Extra_Options_.*-release\\.zip$".into() });
+        let old = installed_version(&rec("/d/extraoptions/FH2_Extra_Options_0.2.34-release.zip", 608582), &s);
+        assert_eq!(old.label, "0.2.34");
+        let same = Version { label: "v0.2.34".into(), key: github_key("Release", "FH2_Extra_Options_0.2.34-release.zip", 608582), ..Version::default() };
+        let next = Version { label: "v0.2.35".into(), key: github_key("Release", "FH2_Extra_Options_0.2.35-release.zip", 611000), ..Version::default() };
+        assert!(!is_newer(&s, &old, &same));
+        assert!(is_newer(&s, &old, &next));
+
+        // itch.io: by the page's version when both have one, else by size.
+        let s = part(PartSource::Itch { page: "https://a.itch.io/azimuth".into(), upload_id: None, file: "azimuth-windows.zip".into() });
+        let old = installed_version(&rec("/d/azimuth/azimuth-windows.zip", 2744114), &s);
+        assert!(!is_newer(&s, &old, &Version { label: "0.9.7".into(), key: "2744114".into(), ..Version::default() }));
+        assert!(is_newer(&s, &old, &Version { label: "0.9.8".into(), key: "2750000".into(), ..Version::default() }));
+        let labelled = Version { label: "0.9.7".into(), key: "2744114".into(), ..Version::default() };
+        assert!(is_newer(&s, &labelled, &Version { label: "0.9.8".into(), key: "2744114".into(), ..Version::default() }));
+        // Nothing known about what's installed: offered as an update.
+        assert!(is_newer(&s, &Version::default(), &labelled));
+    }
+
     use super::*;
 
     fn sample() -> Manifest {

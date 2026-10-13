@@ -475,6 +475,27 @@ export interface CommunityPart {
   extract?: string | null
   checksums?: { sha1?: string[]; sha256?: string[]; md5?: string[] }
   source: { type: string; hint?: string; extensions?: string[] }
+  /** Newer versions from its source can replace it (GitHub, itch.io). */
+  updatable?: boolean
+}
+/** "Check for updates": one updatable part. */
+export interface CommunityPartUpdate {
+  id: string
+  name: string
+  kind: CommunityPartKind
+  from: string
+  installed: string | null
+  latest: string | null
+  update: boolean
+  error: string | null
+}
+export interface CommunityUpdates {
+  parts: CommunityPartUpdate[]
+  available: number
+  /** The install can take an update now (installed, not installing). */
+  can_update: boolean
+  /** piShop still has the install (not removed from Transfers). */
+  tracked: boolean
 }
 export interface CommunityStatus {
   state: 'none' | 'installing' | 'installed'
@@ -769,6 +790,8 @@ export const api = {
   ) =>
     post<CommunityInstall>(`/api/community/${id}/install`, r),
   communityInstalls: () => call<CommunityInstall[]>('/api/community/installs'),
+  communityUpdates: (id: string) => call<CommunityUpdates>(`/api/community/${encodeURIComponent(id)}/updates`),
+  communityUpdate: (id: string, parts: string[]) => post<CommunityInstall>(`/api/community/${encodeURIComponent(id)}/update`, { parts }),
   communityAction: (id: string, action: 'pause' | 'resume' | 'retry') => post<CommunityInstall | null>(`/api/community/installs/${id}/${action}`),
   communityProvide: (id: string, part: string, path: string) => post<object>(`/api/community/installs/${id}/parts/${part}`, { path }),
   /** A file on a game source for a part: copied to the device, then checked. */

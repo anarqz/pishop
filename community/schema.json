@@ -99,6 +99,7 @@
           }
         },
         "extract": { "type": "string", "description": "Extract into this folder of the game (\"\" = its root)." },
+        "updatable": { "type": "boolean", "description": "Newer versions from the same source may replace it (GitHub releases, the itch.io page): \"Check for updates\" on the game's page. GitHub and itch.io parts only." },
         "source": {
           "oneOf": [
             {

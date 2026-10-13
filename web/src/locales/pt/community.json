@@ -130,5 +130,12 @@
   "{source}: {path} · copied when the install starts": "{source}: {path} · copiado quando a instalação começar",
   "Search community games…": "Buscar jogos da comunidade…",
   "Search community games": "Buscar jogos da comunidade",
-  "Game, console or port": "Jogo, console ou port"
+  "Game, console or port": "Jogo, console ou port",
+  "Couldn't check for updates": "Não foi possível procurar atualizações",
+  "Up to date": "Atualizado",
+  "Update {name}": "Atualizar {name}",
+  "The new files come straight from their source and weren’t reviewed with this recipe. piShop downloads them, puts them over the old ones and runs the install script again; your settings and saves stay.": "Os arquivos novos vêm direto da fonte e não foram revisados com esta receita. O piShop baixa, coloca por cima dos antigos e roda o script de instalação de novo; suas configurações e saves ficam.",
+  "This game was removed from Transfers: install it again from this page to update it.": "Este jogo foi removido das Transferências: instale de novo por esta página para atualizar.",
+  "Update · {n} part": "Atualizar · {n} parte",
+  "Update · {n} parts": "Atualizar · {n} partes"
 }
