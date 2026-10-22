@@ -411,12 +411,13 @@ async fn set_icon_from(appid: u32, candidates: &[(String, &'static str)]) -> Opt
 }
 
 /// Puts a game's whole artwork set on its shortcut, at the best sizes there
-/// are: cover, wide capsule (banner), hero, logo and icon. Steam's own
+/// are: cover, wide capsule (banner), hero, logo and icon. A community
+/// recipe's own images come first; then Steam's own
 /// library art comes first when the game has an appid (2× sizes, the hashed
 /// logo and Steam's placement for it, the client .ico); SteamGridDB fills
 /// what Steam lacks, only for that exact game; then the art piShop already
 /// had. `fresh` asks Steam's app info again. Returns where each piece came
-/// from ("steam", "steamgriddb", "piShop" or null).
+/// from ("community", "steam", "steamgriddb", "piShop" or null).
 pub async fn apply_artwork(appid: u32, game: &library::Game, fresh: bool) -> Value {
     // A SteamGridDB game picked by hand wins over the Steam appid.
     let by_hand = game.art_source.as_deref() == Some("sgdb") && game.sgdb_id.is_some();
@@ -453,8 +454,18 @@ pub async fn apply_artwork(appid: u32, game: &library::Game, fresh: bool) -> Val
         (Art::Hero, "hero", steam(&[store.hero_2x.clone(), store.hero.clone()])),
         (Art::Logo, "logo", logos),
     ];
+    let recipe = game.recipe_art.clone().unwrap_or_default();
     for (slot, key, urls) in slots {
-        let mut source = put(appid, slot, &urls).await.map(|_| "steam");
+        let own = match slot {
+            Art::Cover => recipe.cover.clone(),
+            Art::Wide => recipe.wide.clone(),
+            Art::Hero => recipe.hero.clone(),
+            Art::Logo => recipe.logo.clone(),
+        };
+        let mut source = put(appid, slot, &own.into_iter().collect::<Vec<_>>()).await.map(|_| "community");
+        if source.is_none() {
+            source = put(appid, slot, &urls).await.map(|_| "steam");
+        }
         if source.is_none() {
             if sgdb.is_none() {
                 sgdb = Some(crate::catalog::sgdb_pack(&sgdb_name, sgdb_id).await);

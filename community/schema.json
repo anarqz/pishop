@@ -30,8 +30,10 @@
       "properties": {
         "sgdb_id": { "type": "integer", "description": "The game on SteamGridDB: artwork, and the label of its troubleshooting issues (sgdb:<id>)." },
         "steam_appid": { "type": ["string", "integer"] },
-        "cover": { "type": "string", "format": "uri" },
-        "hero": { "type": "string", "format": "uri" }
+        "cover": { "type": "string", "format": "uri", "description": "Portrait library cover, 2:3 (600x900)." },
+        "wide": { "type": "string", "format": "uri", "description": "Wide capsule, 920x430." },
+        "hero": { "type": "string", "format": "uri", "description": "Banner at the top of the game's page, 1920x620." },
+        "logo": { "type": "string", "format": "uri", "description": "Logo over the hero, transparent PNG." }
       }
     },
     "requirements": {

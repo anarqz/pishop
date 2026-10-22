@@ -201,7 +201,7 @@ export interface MoveTarget {
   blocked: string | null
 }
 /** Where each piece of a shortcut's artwork came from. */
-export type ArtSource = 'steam' | 'steamgriddb' | 'piShop' | null
+export type ArtSource = 'community' | 'steam' | 'steamgriddb' | 'piShop' | null
 export interface ArtResult {
   cover: ArtSource
   wide: ArtSource
@@ -523,7 +523,7 @@ export interface CommunityGame {
   steamos: string[]
   authors: string[]
   wrapper: { name: string; version?: string; url?: string } | null
-  art: { sgdb_id?: number | null; steam_appid?: string | null; cover?: string | null; hero?: string | null }
+  art: { sgdb_id?: number | null; steam_appid?: string | null; cover?: string | null; wide?: string | null; hero?: string | null; logo?: string | null }
   requirements: { ram_gb?: number | null; note?: string }
   parts: CommunityPart[]
   install: { script: string; sha256: string; disk?: number | null }

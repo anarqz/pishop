@@ -51,6 +51,7 @@ export function artSummary(r: ArtResult): string {
   const keys = Object.keys(names) as Array<keyof ArtResult>
   const of = (src: ArtResult[keyof ArtResult]) => keys.filter(k => r[k] === src).map(k => names[k])
   return [
+    [tr('Community'), of('community')],
     [tr('Steam'), of('steam')],
     ['SteamGridDB', of('steamgriddb')],
     ['piShop', of('piShop')],

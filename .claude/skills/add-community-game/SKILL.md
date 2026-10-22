@@ -91,7 +91,7 @@ community/<id>/          id: lowercase a-z 0-9 - _, usually <port-or-wrapper>-<g
 Required: `id` (= folder name), `name`, `platform`, `revision` (1, bumped on
 every change), `authors` (GitHub users), `summary` (one line), `description`
 (the guide: what it is, which version, what to expect on a Deck), `art`
-(`sgdb_id`; optional `steam_appid`, `cover`, `hero`), `parts`, `install`,
+(`sgdb_id`; optional `steam_appid`, `cover`, `wide`, `hero`, `logo`), `parts`, `install`,
 `launch`. Optional: `updated` (YYYY-MM-DD), `steamos` (known issues + fixes),
 `wrapper` (`name`, `version`, `url`), `requirements` (`ram_gb`, `note`),
 `patches`. Keep `"$schema": "../schema.json"` at the top.

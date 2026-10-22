@@ -112,7 +112,19 @@ pub struct Art {
     #[serde(default)]
     pub cover: Option<String>,
     #[serde(default)]
+    pub wide: Option<String>,
+    #[serde(default)]
     pub hero: Option<String>,
+    #[serde(default)]
+    pub logo: Option<String>,
+}
+
+impl Art {
+    /// The images the recipe ships, if any.
+    fn recipe(&self) -> Option<library::RecipeArt> {
+        let a = library::RecipeArt { cover: self.cover.clone(), wide: self.wide.clone(), hero: self.hero.clone(), logo: self.logo.clone() };
+        (a.cover.is_some() || a.wide.is_some() || a.hero.is_some() || a.logo.is_some()).then_some(a)
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -1472,6 +1484,7 @@ async fn begin_install(id: &str, req: InstallReq) -> anyhow::Result<Value> {
     let platform = Some(m.platform.clone()).filter(|p| !p.is_empty());
     let mut game = library::quick(&hint, &m.name, platform.clone());
     game.overview = Some(m.summary.clone()).filter(|s| !s.is_empty());
+    game.recipe_art = m.art.recipe();
     let previous = library::get(&key);
     if let Some(p) = &previous {
         game.sgdb_id = p.game.sgdb_id;
@@ -1493,7 +1506,8 @@ async fn begin_install(id: &str, req: InstallReq) -> anyhow::Result<Value> {
         install: previous.and_then(|p| p.install),
     });
     {
-        let (hint, name, sgdb_id, summary, key) = (hint.clone(), m.name.clone(), m.art.sgdb_id, m.summary.clone(), key.clone());
+        let (hint, name, sgdb_id, summary, key, recipe_art) =
+            (hint.clone(), m.name.clone(), m.art.sgdb_id, m.summary.clone(), key.clone(), m.art.recipe());
         tokio::spawn(async move {
             let mut hint = hint;
             if hint.sgdb.as_ref().is_some_and(|s| s.cover.is_none())
@@ -1504,6 +1518,7 @@ async fn begin_install(id: &str, req: InstallReq) -> anyhow::Result<Value> {
             }
             let mut game = library::resolve(&hint, &name, platform, false).await;
             game.name = name;
+            game.recipe_art = recipe_art;
             if game.overview.is_none() {
                 game.overview = Some(summary).filter(|s| !s.is_empty());
             }

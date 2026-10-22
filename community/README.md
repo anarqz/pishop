@@ -57,7 +57,10 @@ a maintainer merges.
 - **`art.sgdb_id`** — the game's id on [SteamGridDB](https://www.steamgriddb.com)
   (the number in `steamgriddb.com/game/<id>`). piShop takes the artwork from it,
   and it is how troubleshooting issues find the game (see below).
-  Optional: `steam_appid`, `cover`, `hero` (image URLs).
+  Optional: `steam_appid`, and the recipe's own images as URLs: `cover` (2:3,
+  600×900), `wide` (920×430), `hero` (1920×620) and `logo` (transparent PNG).
+  Each one given wins over Steam's and SteamGridDB's on the shortcut; keep them
+  in the game's folder here and link their `raw.githubusercontent.com` URL.
 - **`install.disk`** — about how much the installed game takes (bytes), for the
   space check. The downloads count separately (they go to `~/Downloads/piShop/Community`).
 - **`launch.exe`** — the file Steam runs, relative to the game's folder.

@@ -64,6 +64,21 @@ pub struct Game {
     /// (the appid above) or "sgdb" (the SteamGridDB game above).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub art_source: Option<String>,
+    /// Artwork a community recipe ships: wins over Steam and SteamGridDB on the shortcut.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recipe_art: Option<RecipeArt>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct RecipeArt {
+    #[serde(default)]
+    pub cover: Option<String>,
+    #[serde(default)]
+    pub wide: Option<String>,
+    #[serde(default)]
+    pub hero: Option<String>,
+    #[serde(default)]
+    pub logo: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -399,6 +414,7 @@ fn merge(
         sgdb_id: None,
         sgdb_name: None,
         art_source: None,
+        recipe_art: None,
     }
 }
 
