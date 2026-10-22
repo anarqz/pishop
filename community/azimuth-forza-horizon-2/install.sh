@@ -3,12 +3,12 @@
 #
 # piShop has already extracted, into this game's folder (the current folder,
 # $PISHOP_GAME_DIR):
-#   ./azimuth.exe, ./data/   ← Azimuth (azimuth-windows.zip)
-#   ./Game/                  ← the game's RAR
+#   ./Azimuth/               ← Azimuth (azimuth-windows.zip)
+#   ./GameFiles/             ← the game's RAR
 #   ./Mods/ExtraOptions/     ← RokkuDayo's Extra Options mod
 #
 # This finds the game's package folder (the one holding Mount/AppxManifest.xml)
-# and points Azimuth at it in data/azimuth.ini — where Azimuth keeps its
+# and points Azimuth at it in Azimuth/data/azimuth.ini — where Azimuth keeps its
 # settings — so the launcher doesn't ask for the folder at the first start.
 # The path is relative to azimuth.exe, as Azimuth itself writes it, so the
 # game keeps working when piShop moves the whole folder to another library.
@@ -17,14 +17,52 @@
 # there is the player's, and only its game_folder line changes.
 set -euo pipefail
 
+echo "::step Arranging the folders"
+# Revisions before 5 kept Azimuth in the game's folder itself and the game in
+# Game/. Everything moves by renaming; nothing of the player's is overwritten.
+if [[ -d Game && ! -e GameFiles ]]; then
+  mv Game GameFiles
+  echo "Game → GameFiles"
+fi
+if [[ -f azimuth.exe ]]; then
+  mkdir -p Azimuth
+  if [[ -e Azimuth/azimuth.exe ]]; then
+    rm -f azimuth.exe
+  else
+    mv azimuth.exe Azimuth/
+  fi
+  if [[ -d data && ! -e Azimuth/data ]]; then
+    mv data Azimuth/data
+  elif [[ -d data ]]; then
+    # A newer Azimuth is already in Azimuth/: the player's saves, settings and
+    # caches move over, its own program files stay.
+    for item in data/*; do
+      name=${item##*/}
+      if [[ $name != bin && ! -e Azimuth/data/$name ]]; then
+        mv "$item" "Azimuth/data/$name"
+      fi
+    done
+    for ini in data/bin/*.ini; do
+      if [[ -f $ini && ! -e Azimuth/data/bin/${ini##*/} ]]; then
+        mv "$ini" "Azimuth/data/bin/"
+      fi
+    done
+    echo "Left the old data/ in place: compare it with Azimuth/data before removing it."
+  fi
+  echo "Azimuth → Azimuth/"
+fi
+# Earlier revisions of this recipe wrote the settings beside azimuth.exe,
+# where Azimuth doesn't look.
+rm -f azimuth.ini
+
 echo "::step Checking Azimuth"
-if [[ ! -f azimuth.exe || ! -d data/bin ]]; then
-  echo "Azimuth isn't complete in $PWD (azimuth.exe and data/bin are needed)." >&2
+if [[ ! -f Azimuth/azimuth.exe || ! -d Azimuth/data/bin ]]; then
+  echo "Azimuth isn't complete in $PWD/Azimuth (azimuth.exe and data/bin are needed)." >&2
   exit 1
 fi
 
 echo "::step Adding Extra Options"
-# Its Azimuth build goes into data/bin, replacing Azimuth's azimuth-tls.dll.
+# Its Azimuth build goes into Azimuth/data/bin, replacing Azimuth's azimuth-tls.dll.
 mod=Mods/ExtraOptions/Azimuth
 if [[ ! -f $mod/azimuth-tls.dll ]]; then
   echo "Extra Options isn't complete in $PWD/$mod." >&2
@@ -33,18 +71,18 @@ fi
 for f in "$mod"/*; do
   name=${f##*/}
   # The player's own settings stay when this runs again.
-  if [[ $name == *.ini && -f data/bin/$name ]]; then
-    echo "Keeping data/bin/$name"
+  if [[ $name == *.ini && -f Azimuth/data/bin/$name ]]; then
+    echo "Keeping Azimuth/data/bin/$name"
     continue
   fi
-  cp -f "$f" "data/bin/$name"
-  echo "data/bin/$name"
+  cp -f "$f" "Azimuth/data/bin/$name"
+  echo "Azimuth/data/bin/$name"
 done
 
 echo "::step Finding the game's files"
-manifest=$(find Game -maxdepth 4 -type f -path '*/Mount/AppxManifest.xml' -print -quit)
+manifest=$(find GameFiles -maxdepth 4 -type f -path '*/Mount/AppxManifest.xml' -print -quit)
 if [[ -z "$manifest" ]]; then
-  echo "No Mount/AppxManifest.xml under Game/: the archive isn't Forza Horizon 2's package." >&2
+  echo "No Mount/AppxManifest.xml under GameFiles/: the archive isn't Forza Horizon 2's package." >&2
   exit 1
 fi
 package=$(dirname "$(dirname "$manifest")")
@@ -56,11 +94,11 @@ for need in era.vbi EmbeddedXvd; do
 done
 
 echo "::step Pointing Azimuth at the game"
-# Windows separators, relative to azimuth.exe: Game\Anthem_1.0.0.64_x64__…
-folder=${package//\//\\}
+# Windows separators, relative to azimuth.exe: ..\GameFiles\Anthem_1.0.0.64_x64__…
+folder=..\\${package//\//\\}
 # Azimuth is a Windows program: data/azimuth.ini is UTF-16 with a byte-order
 # mark and Windows line ends. Edited as UTF-8 in /tmp, written back the same way.
-ini=data/azimuth.ini
+ini=Azimuth/data/azimuth.ini
 edit=/tmp/azimuth.ini
 if [[ -f $ini ]]; then
   iconv -f UTF-16 -t UTF-8 "$ini" | tr -d '\r' > "$edit.old"
@@ -118,8 +156,5 @@ INI
 fi
 { printf '\xff\xfe'; awk '{ printf "%s\r\n", $0 }' "$edit" | iconv -f UTF-8 -t UTF-16LE; } > "$ini.new"
 mv -f "$ini.new" "$ini"
-# Earlier revisions of this recipe wrote the settings beside azimuth.exe,
-# where Azimuth doesn't look.
-rm -f azimuth.ini
 echo "game_folder=$folder"
 echo "::progress 100 Ready to play"

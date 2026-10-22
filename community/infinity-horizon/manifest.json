@@ -3,13 +3,13 @@
   "id": "infinity-horizon",
   "name": "Infinity Horizon",
   "platform": "Xbox One",
-  "revision": 1,
+  "revision": 2,
   "updated": "2026-10-22",
   "authors": [
     "anarqz"
   ],
   "summary": "Online play for Forza Horizon 2 on SteamOS: the Infinity launcher, through Proton.",
-  "description": "Infinity Horizon brings Forza Horizon 2's online services back: an account, cloud saves, free roam and online races with other players. Its launcher signs you in, finds your Azimuth copy of the game and starts it online.\n\nInstall Forza Horizon 2 (Azimuth) from piShop first, then open Infinity Horizon from Steam. At the first start it looks for the game; if it doesn't find it, pick the folder that holds azimuth.exe.\n\nThe launcher updates itself; Check for updates here does the same.",
+  "description": "Infinity Horizon brings Forza Horizon 2's online services back: an account, cloud saves, free roam and online races with other players. Its launcher signs you in, finds your Azimuth copy of the game and starts it online.\n\nInstall Forza Horizon 2 (Azimuth) from piShop first, then open Infinity Horizon from Steam. It finds the game installed by that recipe by itself; at the first start, install the Infinity hook when the launcher asks.\n\nThe launcher updates itself; Check for updates here does the same.",
   "steamos": [
     "Needs Proton 11.0 or Proton Experimental, which bring the Steam Linux Runtime 4.0 (Steam → Library → Tools).",
     "Start the game from Infinity Horizon, not from the Forza Horizon 2 shortcut, to play online."
@@ -55,6 +55,7 @@
   },
   "launch": {
     "exe": "infinity.exe",
-    "runtime": "proton"
+    "runtime": "proton",
+    "options": "\"./infinity-steamos.sh\" %command%"
   }
 }
