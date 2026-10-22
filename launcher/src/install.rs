@@ -235,8 +235,16 @@ pub(crate) async fn tools() -> anyhow::Result<Vec<Tool>> {
     for e in std::fs::read_dir(steam_root().join("compatibilitytools.d")).into_iter().flatten().flatten() {
         on_disk.push(norm(&e.file_name().to_string_lossy()));
     }
-    let mut out: Vec<Tool> = steamclient::compat_tools()
-        .await?
+    // Newer Steam clients dropped GetAvailableCompatTools: list what's on disk instead.
+    let listed = match steamclient::compat_tools().await {
+        Ok(l) if !l.is_empty() => l,
+        Ok(_) => disk_tools(),
+        Err(e) => {
+            log!("ferramentas: {e:#}; lendo do disco");
+            disk_tools()
+        }
+    };
+    let mut out: Vec<Tool> = listed
         .into_iter()
         .filter(|t| t.display.to_lowercase().contains("proton"))
         .map(|t| {
@@ -248,6 +256,43 @@ pub(crate) async fn tools() -> anyhow::Result<Vec<Tool>> {
         .collect();
     out.sort_by_key(|t| !t.installed);
     Ok(out)
+}
+
+/// Proton builds installed on disk, with the internal names Steam uses:
+/// Valve's from the folder ("Proton 11.0" → proton_11, "Proton 6.3" →
+/// proton_63), custom ones (GE-Proton…) from their compatibilitytool.vdf.
+fn disk_tools() -> Vec<steamclient::CompatTool> {
+    let mut out = Vec::new();
+    for lib in libraries() {
+        for e in std::fs::read_dir(Path::new(&lib.path).join("steamapps/common")).into_iter().flatten().flatten() {
+            let folder = e.file_name().to_string_lossy().into_owned();
+            if !folder.starts_with("Proton") || !e.path().join("proton").is_file() {
+                continue;
+            }
+            let rest = folder.trim_start_matches("Proton").trim_start_matches([' ', '-']).trim();
+            let name = match rest.split_whitespace().next().unwrap_or("") {
+                "Experimental" => "proton_experimental".to_string(),
+                "Hotfix" => "proton_hotfix".to_string(),
+                v => match v.split_once('.') {
+                    Some((major, "0")) if major.chars().all(|c| c.is_ascii_digit()) => format!("proton_{major}"),
+                    Some((major, minor)) if (major.to_string() + minor).chars().all(|c| c.is_ascii_digit()) => format!("proton_{major}{minor}"),
+                    _ => continue,
+                },
+            };
+            let display = if rest.starts_with(|c: char| c.is_ascii_digit()) { folder.clone() } else { format!("Proton {rest}") };
+            if !out.iter().any(|t: &steamclient::CompatTool| t.name == name) {
+                out.push(steamclient::CompatTool { name, display });
+            }
+        }
+    }
+    let vdf = regex::Regex::new(r#""([^"]+)"\s*(?://[^\n]*)?\s*\{[^{}]*?"display_name"\s*"([^"]+)""#).expect("regex");
+    for e in std::fs::read_dir(steam_root().join("compatibilitytools.d")).into_iter().flatten().flatten() {
+        let Ok(text) = std::fs::read_to_string(e.path().join("compatibilitytool.vdf")) else { continue };
+        for c in vdf.captures_iter(&text) {
+            out.push(steamclient::CompatTool { name: c[1].to_string(), display: c[2].to_string() });
+        }
+    }
+    out
 }
 
 /// Newest installed numbered Proton, else Experimental, else the first one.

@@ -864,6 +864,8 @@ pub async fn image(url: &str) -> anyhow::Result<(Vec<u8>, String)> {
         || url.starts_with("https://shared.fastly.steamstatic.com/")
         || url.starts_with("https://cdn.akamai.steamstatic.com/")
         || url.starts_with("https://store.akamai.steamstatic.com/")
+        // Community recipes' own artwork, kept beside their manifest.
+        || url.starts_with("https://raw.githubusercontent.com/anarqz/pishop/")
         || (!iic_cdn.is_empty() && url.starts_with(&format!("{}/", iic_cdn)));
     if !allowed {
         bail!(tr!("image source not allowed", "origem de imagem não permitida"));
