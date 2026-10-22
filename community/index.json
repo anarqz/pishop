@@ -183,7 +183,7 @@
       "id": "infinity-horizon",
       "name": "Infinity Horizon",
       "platform": "Xbox One",
-      "revision": 2,
+      "revision": 3,
       "updated": "2026-10-22",
       "authors": [
         "anarqz"
@@ -213,17 +213,13 @@
         {
           "id": "launcher",
           "name": "Infinity Horizon",
-          "description": "The launcher, its hook and overlay (Windows x64, runs through Proton).",
+          "description": "The latest release of the launcher, its hook and overlay (Windows x64, runs through Proton).",
           "role": "launcher",
           "source": {
             "type": "github",
             "repo": "anarqz/InfinityHorizon",
             "tag": "latest",
             "asset": "^infinity-horizon-.*-windows-x64\\.zip$"
-          },
-          "size": 125911841,
-          "checksums": {
-            "sha256": "493cf8b63ed6edc54a6616def5372750475417c44fe58f88d292d589164cc85a"
           },
           "extract": "",
           "updatable": true
